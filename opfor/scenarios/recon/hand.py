@@ -34,11 +34,14 @@ from opfor.model import (
     Technology,
 )
 from opfor.plugins.base import Hand
-from opfor.scenarios.recon.sources import SUBDOMAIN_SOURCES
+from opfor.scenarios.recon.sources import (
+    SUBDOMAIN_SOURCES,
+    root_keyword,
+    root_san_pivot,
+)
 
 _BODY_CAP = 2048
 _GET_TIMEOUT = 8
-_ROOT_TIMEOUT = 30
 
 # Response headers that name a server-side or framework technology.
 _TECH_HEADERS = ("Server", "X-Powered-By", "X-AspNet-Version", "X-Generator")
@@ -65,44 +68,6 @@ def _http_get(url: str, body_cap: int = 0) -> dict:
         return {"url": url, "status": None, "error": str(exc.reason)}
 
 
-# Two-label suffixes where the registrable domain needs three labels.
-_TWO_LABEL_TLDS = {
-    "co.uk", "com.cn", "com.hk", "com.sg", "com.tw", "co.jp", "com.au", "co.in"
-}
-
-
-def _apex(name: str) -> str:
-    """Best-effort registrable domain from a hostname."""
-    name = name.strip().lstrip("*.").lower()
-    parts = name.split(".")
-    if len(parts) >= 3 and ".".join(parts[-2:]) in _TWO_LABEL_TLDS:
-        return ".".join(parts[-3:])
-    return ".".join(parts[-2:]) if len(parts) >= 2 else name
-
-
-def _real_root_search(keyword: str) -> list[str]:
-    """Best-effort candidate root domains for a keyword, from crt.sh.
-
-    This is deliberately just a lead generator. Name based search is noisy, it
-    misses owned domains that do not contain the keyword and it picks up
-    unrelated holders of the same string. The operator confirms which candidates
-    are really in scope, the tool never asserts ownership.
-    """
-    url = f"https://crt.sh/?q={urllib.parse.quote(keyword)}&output=json"
-    req = urllib.request.Request(url, headers={"User-Agent": "opfor-recon"})
-    with urllib.request.urlopen(req, timeout=_ROOT_TIMEOUT) as resp:
-        rows = json.loads(resp.read().decode("utf-8", "replace"))
-    roots: set[str] = set()
-    for row in rows:
-        for raw in str(row.get("name_value", "")).splitlines():
-            name = raw.strip().lstrip("*.").lower()
-            apex = _apex(name)
-            # Keep only apexes that look like a domain and carry the keyword.
-            if "." in apex and keyword.lower() in apex:
-                roots.add(apex)
-    return sorted(roots)
-
-
 class ReconHand(Hand):
     name = "recon"
 
@@ -111,12 +76,14 @@ class ReconHand(Hand):
         subdomain_sources: list[tuple[str, Callable[[str], list[str]]]] | None = None,
         resolve_fn: Callable[[str], list[str]] | None = None,
         root_search: Callable[[str], list[str]] | None = None,
+        san_pivot: Callable[[str], list[str]] | None = None,
         checks: list[dict] | None = None,
     ) -> None:
         # All injectable so the hand is unit-testable without network access.
         self._sources = subdomain_sources if subdomain_sources is not None else SUBDOMAIN_SOURCES
         self._resolve_fn = resolve_fn or _real_resolve
-        self._root_search = root_search or _real_root_search
+        self._root_search = root_search or root_keyword
+        self._san_pivot = san_pivot or root_san_pivot
         # Security checks are data the scenario wires in, the hand stays a
         # generic matcher engine that applies whatever it is given (nuclei model).
         self._checks = checks or []
@@ -128,10 +95,11 @@ class ReconHand(Hand):
         # From an org seed, look for candidate root domains. Passive OSINT.
         if target.kind == "org":
             eps.append(self._discover_ep(target.id))
-        # One passive sweep per confirmed seed root. The sources return every
-        # depth, so we do not recurse, which keeps the surface bounded.
+        # Per confirmed seed root: sweep its subdomains, and pivot off its
+        # certificates to find sibling roots the same owner may hold.
         if target.kind == "domain":
             eps.append(self._subdomains_ep(target.id))
+            eps.append(self._pivot_ep(target.id))
         hosts = graph.entities("host")
         attempted = {h.props.get("domain") for h in hosts}  # type: ignore[attr-defined]
         live = {h.props.get("domain") for h in hosts if h.props.get("live")}  # type: ignore[attr-defined]
@@ -179,6 +147,21 @@ class ReconHand(Hand):
                 "osint": True,
                 "scope_host": org,
                 "action_tiers": {"discover_roots": "recon"},
+            },
+        )
+
+    def _pivot_ep(self, root: str) -> Entrypoint:
+        return Entrypoint(
+            id=f"pivot::{root}",
+            target_id=root,
+            kind="cert-pivot",
+            ref=root,
+            actions=("pivot_roots",),
+            props={
+                "root": root,
+                "osint": True,
+                "scope_host": root,
+                "action_tiers": {"pivot_roots": "recon"},
             },
         )
 
@@ -289,6 +272,8 @@ class ReconHand(Hand):
     def act(self, entrypoint: Entrypoint, action: str, params: dict) -> Observation:
         if action == "discover_roots":
             return self._act_discover(entrypoint)
+        if action == "pivot_roots":
+            return self._act_pivot(entrypoint)
         if action == "subdomains":
             return self._act_subdomains(entrypoint)
         if action == "resolve_all":
@@ -359,10 +344,19 @@ class ReconHand(Hand):
         org = entrypoint.props["org"]
         try:
             roots = self._root_search(org)
-            raw = {"org": org, "roots": roots}
+            raw = {"org": org, "roots": roots, "source": "keyword", "confidence": "low"}
         except (urllib.error.URLError, json.JSONDecodeError, TimeoutError) as exc:
             raw = {"org": org, "error": str(exc)}
         return Observation(entrypoint_id=entrypoint.id, action="discover_roots", raw=raw)
+
+    def _act_pivot(self, entrypoint: Entrypoint) -> Observation:
+        root = entrypoint.props["root"]
+        try:
+            roots = self._san_pivot(root)
+            raw = {"org": root, "roots": roots, "source": "cert-san", "confidence": "medium"}
+        except (urllib.error.URLError, json.JSONDecodeError, TimeoutError) as exc:
+            raw = {"org": root, "error": str(exc)}
+        return Observation(entrypoint_id=entrypoint.id, action="pivot_roots", raw=raw)
 
     def _act_resolve_all(self, entrypoint: Entrypoint) -> Observation:
         domains = entrypoint.props["domains"]
@@ -406,7 +400,7 @@ class ReconHand(Hand):
     # --- normalize --------------------------------------------------------
 
     def normalize(self, observation: Observation) -> list[Fact]:
-        if observation.action == "discover_roots":
+        if observation.action in ("discover_roots", "pivot_roots"):
             return self._norm_discover(observation)
         if observation.action == "subdomains":
             return self._norm_subdomains(observation)
@@ -491,16 +485,21 @@ class ReconHand(Hand):
         if raw.get("error"):
             return [Fact(kind="discover-failed", about=obs.entrypoint_id, data={"error": raw["error"]})]
         org = raw["org"]
+        source = raw.get("source", "keyword")
+        confidence = raw.get("confidence", "low")
         # Candidate roots only, flagged so they are recorded but not expanded.
         candidates = tuple(
-            Domain(id=root, props={"candidate": True, "org": org, "source": "crtsh-org"})
+            Domain(
+                id=root,
+                props={"candidate": True, "from": org, "source": source, "confidence": confidence},
+            )
             for root in raw.get("roots", [])
         )
         return [
             Fact(
                 kind="candidate-roots",
                 about=obs.entrypoint_id,
-                data={"org": org, "count": len(candidates)},
+                data={"from": org, "source": source, "count": len(candidates)},
                 yields=candidates,
             )
         ]

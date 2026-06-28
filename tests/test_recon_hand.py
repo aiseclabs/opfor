@@ -73,6 +73,22 @@ def test_discover_roots_yields_candidates_not_expanded():
     assert not any(e.startswith("resolve::") or e.startswith("get::") for e in eps)
 
 
+def test_san_pivot_yields_sibling_root_candidates():
+    # A confirmed root pivots off its certificates to sibling roots, higher
+    # confidence than a name match, still only candidates.
+    hand = ReconHand(san_pivot=lambda root: ["1example.com", "example.io"])
+    graph = SituationGraph()
+    seed = _seed("example.com")
+    graph.add_target(seed)
+
+    ep = next(e for e in hand.enumerate(seed, graph) if e.actions == ("pivot_roots",))
+    assert ep.props.get("osint") is True
+    facts = hand.normalize(hand.act(ep, "pivot_roots", {}))
+    cands = {c.id: c.props for c in (e for f in facts for e in f.yields)}
+    assert set(cands) == {"1example.com", "example.io"}
+    assert all(p["candidate"] and p["source"] == "cert-san" for p in cands.values())
+
+
 def test_osint_discovery_is_authorized_even_with_empty_scope():
     from opfor.engine.scope import Scope
 
@@ -194,6 +210,7 @@ def test_recon_loop_org_discovers_candidates_and_expands_confirmed(tmp_path):
 
     hand = ReconHand(
         root_search=lambda kw: ["example.cn", "1example.com"],
+        san_pivot=lambda r: [],
         subdomain_sources=[("stub", lambda d: ["api.confirmed.invalid"])],
         resolve_fn=resolver,
     )
@@ -237,7 +254,7 @@ def test_recon_loop_resolves_then_gates_probes_offline(tmp_path):
         raise OSError("nxdomain")
 
     loop = AttackLoop(
-        hand=ReconHand(subdomain_sources=sources, resolve_fn=resolver),
+        hand=ReconHand(subdomain_sources=sources, resolve_fn=resolver, san_pivot=lambda r: []),
         playbook="recon",
         scope=Scope(domain_suffixes=("test.invalid",), max_tier="probe"),
         brain=MockBrain(),

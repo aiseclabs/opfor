@@ -47,7 +47,9 @@ def render(
     if candidates:
         lines.append("## Candidate roots (confirm before expanding)")
         for d in sorted(candidates, key=lambda e: e.id):
-            lines.append(f"- {d.id} (via {d.props.get('source', '?')})")
+            src = d.props.get("source", "?")
+            conf = d.props.get("confidence", "?")
+            lines.append(f"- {d.id} (via {src}, confidence {conf})")
         lines.append("")
 
     if domains:

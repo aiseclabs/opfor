@@ -11,6 +11,7 @@ exposed, is left to the brain in a later slice.
 from __future__ import annotations
 
 import json
+import socket
 import time
 import urllib.error
 import urllib.parse
@@ -18,7 +19,16 @@ import urllib.request
 from typing import Callable
 
 from opfor.engine.graph import SituationGraph
-from opfor.model import Domain, Entrypoint, Fact, Observation, Service, Target, Technology
+from opfor.model import (
+    Domain,
+    Entrypoint,
+    Fact,
+    Host,
+    Observation,
+    Service,
+    Target,
+    Technology,
+)
 from opfor.plugins.base import Hand
 
 _BODY_CAP = 2048
@@ -61,12 +71,23 @@ def _real_crt_fetch(domain: str) -> list[str]:
     return sorted(names)
 
 
+def _real_resolve(domain: str) -> list[str]:
+    """Resolve a domain to its addresses. Empty list means it does not resolve."""
+    infos = socket.getaddrinfo(domain, 443, proto=socket.IPPROTO_TCP)
+    return sorted({ai[4][0] for ai in infos})
+
+
 class ReconHand(Hand):
     name = "recon"
 
-    def __init__(self, crt_fetch: Callable[[str], list[str]] | None = None) -> None:
-        # Injectable so the hand is unit-testable without hitting crt.sh.
+    def __init__(
+        self,
+        crt_fetch: Callable[[str], list[str]] | None = None,
+        resolve_fn: Callable[[str], list[str]] | None = None,
+    ) -> None:
+        # Both injectable so the hand is unit-testable without network access.
         self._crt_fetch = crt_fetch or _real_crt_fetch
+        self._resolve_fn = resolve_fn or _real_resolve
 
     # --- enumerate --------------------------------------------------------
 
@@ -76,9 +97,13 @@ class ReconHand(Hand):
         # not recurse, which keeps the surface bounded.
         if target.kind == "domain":
             eps.append(self._crt_ep(target.id))
-        # A root HTTP probe for every domain we know, seeds and discovered alike.
+        resolved = {h.props.get("domain") for h in graph.entities("host")}  # type: ignore[attr-defined]
         for name, url in self._known_domains(graph).items():
-            eps.append(self._get_ep(name, url))
+            # Resolve every domain first, it is cheap. Only spend an HTTP probe on
+            # domains that actually resolve, so dead names cost nothing.
+            eps.append(self._resolve_ep(name))
+            if name in resolved:
+                eps.append(self._get_ep(name, url))
         return eps
 
     def _known_domains(self, graph: SituationGraph) -> dict[str, str]:
@@ -89,6 +114,20 @@ class ReconHand(Hand):
         for d in graph.entities("domain"):
             domains[d.id] = d.props.get("url") or f"https://{d.id}/"  # type: ignore[attr-defined]
         return domains
+
+    def _resolve_ep(self, domain: str) -> Entrypoint:
+        return Entrypoint(
+            id=f"resolve::{domain}",
+            target_id=domain,
+            kind="dns-name",
+            ref=domain,
+            actions=("resolve",),
+            props={
+                "domain": domain,
+                "scope_host": domain,
+                "action_tiers": {"resolve": "recon"},
+            },
+        )
 
     def _crt_ep(self, domain: str) -> Entrypoint:
         return Entrypoint(
@@ -124,9 +163,20 @@ class ReconHand(Hand):
     def act(self, entrypoint: Entrypoint, action: str, params: dict) -> Observation:
         if action == "crtsh":
             return self._act_crtsh(entrypoint)
+        if action == "resolve":
+            return self._act_resolve(entrypoint)
         if action == "get":
             return self._act_get(entrypoint)
-        raise ValueError(f"recon hand supports crtsh and get, got: {action}")
+        raise ValueError(f"recon hand supports crtsh, resolve, get, got: {action}")
+
+    def _act_resolve(self, entrypoint: Entrypoint) -> Observation:
+        domain = entrypoint.props["domain"]
+        try:
+            ips = self._resolve_fn(domain)
+            raw = {"domain": domain, "ips": list(ips)}
+        except OSError as exc:
+            raw = {"domain": domain, "ips": [], "error": str(exc)}
+        return Observation(entrypoint_id=entrypoint.id, action="resolve", raw=raw)
 
     def _act_crtsh(self, entrypoint: Entrypoint) -> Observation:
         domain = entrypoint.props["domain"]
@@ -166,9 +216,33 @@ class ReconHand(Hand):
     def normalize(self, observation: Observation) -> list[Fact]:
         if observation.action == "crtsh":
             return self._norm_crtsh(observation)
+        if observation.action == "resolve":
+            return self._norm_resolve(observation)
         if observation.action == "get":
             return self._norm_get(observation)
         return []
+
+    def _norm_resolve(self, obs: Observation) -> list[Fact]:
+        raw = obs.raw
+        domain = raw["domain"]
+        ips = raw.get("ips") or []
+        if not ips:
+            return [
+                Fact(
+                    kind="dns-dead",
+                    about=obs.entrypoint_id,
+                    data={"domain": domain, "error": raw.get("error")},
+                )
+            ]
+        host = Host(id=f"host:{domain}", props={"domain": domain, "ips": ips})
+        return [
+            Fact(
+                kind="resolved",
+                about=obs.entrypoint_id,
+                data={"domain": domain, "ips": ips},
+                yields=(host,),
+            )
+        ]
 
     def _norm_crtsh(self, obs: Observation) -> list[Fact]:
         raw = obs.raw

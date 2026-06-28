@@ -22,7 +22,12 @@ from opfor.model import Entrypoint, Observation
 
 @dataclass(frozen=True, kw_only=True)
 class Move:
-    """One decision from the brain."""
+    """One decision from the brain.
+
+    findings are the brain's judgments about what it has seen, for example an
+    exposed admin panel or a leaked internal map. The engine records them but
+    never invents them, only the brain decides what is a finding.
+    """
 
     stop: bool = False
     judgment: str = ""
@@ -30,6 +35,7 @@ class Move:
     action: str | None = None
     params: dict[str, Any] = field(default_factory=dict)
     note: str = ""
+    findings: list[dict[str, Any]] = field(default_factory=list)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -95,7 +101,9 @@ class MockBrain(Brain):
 MOVE_SHAPE = (
     '{"stop": false, "judgment": "what the recent raw reactions mean", '
     '"entrypoint_id": "id or null", "action": "action name or null", '
-    '"params": {}, "note": "short reason"}'
+    '"params": {}, "note": "short reason", '
+    '"findings": [{"title": "...", "severity": "info|low|medium|high|critical", '
+    '"domain": "...", "evidence": "..."}]}'
 )
 
 
@@ -113,6 +121,7 @@ class ModelBrain(Brain):
         prompt = self._render(context)
         text = self._complete(prompt)
         obj = require_object(text, required_key="judgment")
+        findings = obj.get("findings") or []
         return Move(
             stop=bool(obj.get("stop", False)),
             judgment=str(obj.get("judgment", "")),
@@ -120,12 +129,13 @@ class ModelBrain(Brain):
             action=obj.get("action") or None,
             params=obj.get("params") or {},
             note=str(obj.get("note", "")),
+            findings=findings if isinstance(findings, list) else [],
         )
 
     def _render(self, context: BrainContext) -> str:
         live = "\n".join(
-            f"- {ep.id} {ep.ref} actions={list(ep.actions)}"
-            for ep in context.live_entrypoints
+            f'- entrypoint_id="{ep.id}" ref={ep.ref} actions={list(ep.actions)}'
+            for ep in context.live_entrypoints[:60]
         ) or "- none"
         recent = "\n".join(
             f"- {obs.action} on {obs.entrypoint_id} raw={obs.raw}"
@@ -134,8 +144,26 @@ class ModelBrain(Brain):
         return (
             f"{context.playbook}\n\n"
             "You are choosing the next offensive action. Judge the recent raw "
-            "reactions yourself, the engine will not.\n\n"
-            f"Live entrypoints:\n{live}\n\n"
+            "reactions yourself, the engine will not. Record anything notable as "
+            "a finding. Set entrypoint_id to the exact quoted value from the list "
+            "below, nothing more.\n\n"
+            f"What is known so far:\n{self._graph_summary(context.graph)}\n\n"
+            f"Live entrypoints (first 60):\n{live}\n\n"
             f"Recent raw observations:\n{recent}\n\n"
             f"Respond with exactly one JSON object like:\n{MOVE_SHAPE}"
         )
+
+    def _graph_summary(self, graph: SituationGraph) -> str:
+        domains = graph.entities("domain")
+        hosts = graph.entities("host")
+        services = graph.entities("service")
+        techs = graph.entities("technology")
+        lines = [
+            f"counts: domains={len(domains)} resolved_hosts={len(hosts)} "
+            f"services={len(services)} technologies={len(techs)}"
+        ]
+        for s in list(services)[:20]:
+            lines.append(f"service {s.id} status={s.props.get('status')}")
+        for t in list(techs)[:20]:
+            lines.append(f"tech {t.props.get('name')} on {t.props.get('on')}")
+        return "\n".join(lines)

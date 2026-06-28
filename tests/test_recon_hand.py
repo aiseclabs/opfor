@@ -29,13 +29,8 @@ def test_crtsh_yields_in_scope_subdomains_only():
 
 
 def test_get_fingerprints_service_and_technology(stub_server):
-    hand = ReconHand(crt_fetch=lambda d: [])
-    graph = SituationGraph()
-    graph.add_target(_seed())
-    # A discovered domain whose probe url points at the local stub server.
-    graph.add_entity(Domain(id="probe.example.com", props={"url": stub_server}))
-
-    get_ep = next(ep for ep in hand.enumerate(_seed(), graph) if ep.id == "get::probe.example.com")
+    hand = ReconHand()
+    get_ep = hand._get_ep("probe.example.com", stub_server)
     obs = hand.act(get_ep, "get", {})
     facts = hand.normalize(obs)
 
@@ -45,6 +40,21 @@ def test_get_fingerprints_service_and_technology(stub_server):
     assert services and services[0].props["status"] == 200
     # The stub server sends a Server header, so a technology is fingerprinted.
     assert techs
+
+
+def test_resolve_marks_live_and_dead():
+    live = ReconHand(resolve_fn=lambda d: ["1.2.3.4"])
+    facts = live.normalize(live.act(live._resolve_ep("live.example.com"), "resolve", {}))
+    hosts = [e for f in facts for e in f.yields]
+    assert hosts and hosts[0].props["ips"] == ["1.2.3.4"]
+
+    def dead(_):
+        raise OSError("nxdomain")
+
+    gone = ReconHand(resolve_fn=dead)
+    facts = gone.normalize(gone.act(gone._resolve_ep("gone.example.com"), "resolve", {}))
+    assert facts[0].kind == "dns-dead"
+    assert not [e for f in facts for e in f.yields]
 
 
 def test_scope_allows_suffix_denies_outsiders_and_high_tiers():
@@ -66,12 +76,17 @@ def test_scope_allows_suffix_denies_outsiders_and_high_tiers():
     assert not scope.authorize(graph, intrusive, "exploit").allowed
 
 
-def test_recon_loop_grows_surface_offline(tmp_path):
-    # Names under the seed root, on the reserved .invalid TLD so the probe GETs
-    # cannot reach any real host, they fail fast as NXDOMAIN.
-    fetch = lambda d: ["a.test.invalid", "b.test.invalid"]
+def test_recon_loop_resolves_then_gates_probes_offline(tmp_path):
+    # All names on the reserved .invalid TLD so nothing can touch a real host.
+    fetch = lambda d: ["up.test.invalid", "down.test.invalid"]
+
+    def resolver(domain):
+        if domain == "up.test.invalid":
+            return ["10.0.0.1"]
+        raise OSError("nxdomain")
+
     loop = AttackLoop(
-        hand=ReconHand(crt_fetch=fetch),
+        hand=ReconHand(crt_fetch=fetch, resolve_fn=resolver),
         playbook="recon",
         scope=Scope(domain_suffixes=("test.invalid",), max_tier="probe"),
         brain=MockBrain(),
@@ -83,13 +98,14 @@ def test_recon_loop_grows_surface_offline(tmp_path):
     result = loop.run(graph)
 
     discovered = {d.id for d in result.graph.entities("domain")}
-    assert discovered == {"a.test.invalid", "b.test.invalid"}
-    # The surface must actually grow: each discovered domain gets a probe
-    # entrypoint, and the loop re-enumerates and acts on it. This is what caught
-    # the missing generation bump, discovery alone is not enough.
+    assert {"up.test.invalid", "down.test.invalid"} <= discovered
+    # Both discovered domains were resolved, surface grew and re-enumerated.
+    assert result.graph.is_acted("resolve::up.test.invalid", "resolve")
+    assert result.graph.is_acted("resolve::down.test.invalid", "resolve")
+    # Only the resolvable one became a host and earned an HTTP probe entrypoint.
+    resolved = {h.props["domain"] for h in result.graph.entities("host")}
+    assert resolved == {"up.test.invalid"}
     entrypoint_ids = {ep.id for ep in result.graph.entrypoints()}
-    assert "get::a.test.invalid" in entrypoint_ids
-    assert "get::b.test.invalid" in entrypoint_ids
-    assert result.graph.is_acted("get::a.test.invalid", "get")
-    assert result.graph.is_acted("get::b.test.invalid", "get")
+    assert "get::up.test.invalid" in entrypoint_ids
+    assert "get::down.test.invalid" not in entrypoint_ids
     assert result.done

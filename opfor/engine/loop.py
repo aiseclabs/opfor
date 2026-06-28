@@ -14,6 +14,7 @@ route the raw result back into the inbox.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 
 from opfor.agent.brain import Brain, BrainContext
@@ -21,7 +22,7 @@ from opfor.engine.graph import SituationGraph
 from opfor.engine.ledger import Ledger
 from opfor.engine.scope import Scope
 from opfor.engine.state import Workspace
-from opfor.model import Entrypoint, Observation
+from opfor.model import Entrypoint, Finding, Observation
 from opfor.plugins.base import Hand
 
 
@@ -158,6 +159,8 @@ class AttackLoop:
                 entrypoint=move.entrypoint_id,
                 action=move.action,
             )
+            # The brain owns judgment, so any findings it asserts go in the graph.
+            self._record_findings(move.findings)
             if move.stop:
                 if self._pending:
                     # Nothing to do now, but results are still owed. Suspend so a
@@ -171,7 +174,7 @@ class AttackLoop:
                 reason = "brain returned no move"
                 break
 
-            ep = self._entrypoint(move.entrypoint_id)
+            ep = self._entrypoint(move.entrypoint_id.strip())
             if ep is None:
                 # Fail loud, a move against an unknown entrypoint is a bug.
                 raise ValueError(f"brain chose unknown entrypoint: {move.entrypoint_id}")
@@ -253,6 +256,17 @@ class AttackLoop:
         self.ledger.append(
             "enumerate", entrypoints=len(self._graph.entrypoints())
         )
+
+    def _record_findings(self, findings: list[dict]) -> None:
+        for i, f in enumerate(findings):
+            title = str(f.get("title", "finding"))
+            where = str(f.get("domain") or f.get("where") or "")
+            slug = re.sub(r"[^a-z0-9]+", "-", f"{title}-{where}".lower()).strip("-")[:60]
+            fid = f"finding:{slug or i}"
+            if self._graph.add_entity(Finding(id=fid, props=dict(f))):
+                self.ledger.append(
+                    "finding", id=fid, severity=f.get("severity"), title=title
+                )
 
     def _context(self) -> BrainContext:
         return BrainContext(

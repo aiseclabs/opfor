@@ -92,6 +92,24 @@ class Technology:
     props: dict[str, Any] = field(default_factory=dict)
 
 
+@dataclass(frozen=True, kw_only=True)
+class Host:
+    """A domain that resolves in DNS, with the addresses it points at."""
+
+    id: str
+    kind: str = "host"
+    props: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(frozen=True, kw_only=True)
+class Finding:
+    """A judgment recorded by the brain, for example an exposure or a weak spot."""
+
+    id: str
+    kind: str = "finding"
+    props: dict[str, Any] = field(default_factory=dict)
+
+
 # Union of entity types the graph can hold and that a Fact can yield.
 ENTITY_TYPES = {
     "target": Target,
@@ -102,6 +120,8 @@ ENTITY_TYPES = {
     "domain": Domain,
     "service": Service,
     "technology": Technology,
+    "host": Host,
+    "finding": Finding,
 }
 
 

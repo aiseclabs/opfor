@@ -23,12 +23,16 @@ def render(graph: SituationGraph, ledger: Ledger, *, stopped_reason: str) -> str
     lines.append(f"- credentials: {len(graph.credentials())}")
     lines.append(f"- artifacts: {len(graph.entities('artifact'))}")
     domains = graph.entities("domain")
+    hosts = graph.entities("host")
     services = graph.entities("service")
     technologies = graph.entities("technology")
+    findings = graph.entities("finding")
     if domains or services or technologies:
         lines.append(f"- domains: {len(domains)}")
+        lines.append(f"- resolved hosts: {len(hosts)}")
         lines.append(f"- services: {len(services)}")
         lines.append(f"- technologies: {len(technologies)}")
+        lines.append(f"- findings: {len(findings)}")
     lines.append("")
 
     if domains:
@@ -47,6 +51,20 @@ def render(graph: SituationGraph, ledger: Ledger, *, stopped_reason: str) -> str
         lines.append("## Technologies")
         for t in sorted(technologies, key=lambda e: e.id):
             lines.append(f"- {t.props.get('name', t.id)} on {t.props.get('on', '?')}")
+        lines.append("")
+
+    if findings:
+        lines.append("## Findings")
+        order = {"critical": 0, "high": 1, "medium": 2, "low": 3, "info": 4}
+        for f in sorted(
+            findings, key=lambda e: order.get(str(e.props.get("severity", "info")).lower(), 5)
+        ):
+            sev = str(f.props.get("severity", "info")).upper()
+            where = f.props.get("domain") or f.props.get("where", "")
+            lines.append(f"- [{sev}] {f.props.get('title', f.id)} ({where})")
+            evidence = f.props.get("evidence")
+            if evidence:
+                lines.append(f"  - {evidence}")
         lines.append("")
 
     lines.append("## Ledger activity")

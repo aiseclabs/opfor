@@ -18,6 +18,17 @@ def main(argv: list[str] | None = None) -> int:
     run.add_argument("--run-dir", default=None, help="where to write state, ledger, report")
     run.add_argument("--resume", action="store_true", help="resume from the last checkpoint")
     run.add_argument("--budget", type=int, default=50, help="max steps")
+    run.add_argument(
+        "--brain",
+        choices=("mock", "model"),
+        default="mock",
+        help="mock is the offline scripted policy, model asks a real model",
+    )
+    run.add_argument(
+        "--model",
+        default="claude-sonnet-4-6",
+        help="model id when --brain model (needs ANTHROPIC_API_KEY)",
+    )
 
     sub.add_parser("scenarios", help="list registered scenarios")
 
@@ -29,11 +40,18 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.command == "run":
+        brain = None
+        if args.brain == "model":
+            from opfor.agent.brain import ModelBrain
+            from opfor.agent.providers import anthropic_complete
+
+            brain = ModelBrain(anthropic_complete(args.model))
         result = run_campaign(
             args.campaign,
             run_dir=args.run_dir,
             resume=args.resume,
             budget=args.budget,
+            brain=brain,
         )
         print(f"stopped after {result.steps} steps: {result.stopped_reason}")
         print(f"report: {result.workspace.report_file}")

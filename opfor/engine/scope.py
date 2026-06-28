@@ -96,6 +96,27 @@ class Scope:
             host == s or host.endswith("." + s) for s in self.domain_suffixes
         )
 
+    def authorize_task(self, graph: SituationGraph, task) -> Decision:
+        """Authorize one task. Same rungs as authorize, on the task's own fields.
+
+        A passive OSINT task (recon tier, not touching the estate) is allowed.
+        Otherwise the task's scope_host must be in scope and its tier within the
+        ceiling. Deny-by-default.
+        """
+        tier = task.tier
+        if task.osint and tier_rank(tier) == 0:
+            return Decision(allowed=True, reason="passive osint", tier=tier)
+        host = task.scope_host
+        if host is None:
+            return Decision(allowed=False, reason=f"no host for task {task.id}", tier=tier)
+        if not self._in_scope(host):
+            return Decision(allowed=False, reason=f"host out of scope: {host!r}", tier=tier)
+        if tier_rank(tier) > tier_rank(self.max_tier):
+            return Decision(
+                allowed=False, reason=f"tier {tier} exceeds ceiling {self.max_tier}", tier=tier
+            )
+        return Decision(allowed=True, reason="in scope", tier=tier)
+
     def authorize(
         self, graph: SituationGraph, entrypoint: Entrypoint, action: str
     ) -> Decision:

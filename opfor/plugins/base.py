@@ -17,6 +17,27 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from opfor.engine.graph import SituationGraph
+    from opfor.engine.tasks import Task
+
+
+class Executor(ABC):
+    """An executor runs one task with one tool and reports raw, then structures it.
+
+    This is the PEP "Executor + Perceptor": run does the deed and returns the raw
+    observation, perceive turns that raw output into facts for the blackboard. An
+    executor handles exactly one capability, makes no attack decisions, and never
+    reads knowledge. One capability per executor keeps them thin and swappable.
+    """
+
+    capability: str
+
+    @abstractmethod
+    def run(self, task: "Task", graph: "SituationGraph") -> Observation:
+        """Carry out one task and return the raw observation. No judgment."""
+
+    @abstractmethod
+    def perceive(self, observation: Observation) -> list[Fact]:
+        """Turn a raw observation into structured facts for the situation graph."""
 
 
 class Hand(ABC):

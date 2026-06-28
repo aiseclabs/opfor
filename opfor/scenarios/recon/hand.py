@@ -457,6 +457,10 @@ class ReconHand(Hand):
                 "domain": raw.get("domain"),
                 "url": raw.get("url"),
                 "evidence": f"{cid} matched at {raw.get('url')} (status {raw.get('status')})",
+                # Evidence for the triage model to judge real vs false positive.
+                "status": raw.get("status"),
+                "content_type": headers_lower.get("content-type", ""),
+                "body_snippet": (raw.get("body") or "")[:240],
             },
         )
 

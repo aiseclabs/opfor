@@ -30,6 +30,16 @@ def main(argv: list[str] | None = None) -> int:
         default="claude-sonnet-4-6",
         help="model id when --brain model (needs ANTHROPIC_API_KEY)",
     )
+    run.add_argument(
+        "--no-triage",
+        action="store_true",
+        help="skip the model triage of findings (on by default with a model brain)",
+    )
+    run.add_argument(
+        "--triage",
+        action="store_true",
+        help="force model triage of findings even with the mock brain (needs ANTHROPIC_API_KEY)",
+    )
 
     sub.add_parser("scenarios", help="list registered scenarios")
 
@@ -42,18 +52,24 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "run":
         brain = None
+        triage_complete = None
+        wants_triage = args.triage or (args.brain in ("model", "hybrid") and not args.no_triage)
+        if args.brain in ("model", "hybrid") or wants_triage:
+            from opfor.agent.providers import anthropic_complete
         if args.brain in ("model", "hybrid"):
             from opfor.agent.brain import HybridBrain, ModelBrain
-            from opfor.agent.providers import anthropic_complete
 
             model_brain = ModelBrain(anthropic_complete(args.model))
             brain = model_brain if args.brain == "model" else HybridBrain(model_brain)
+        if wants_triage:
+            triage_complete = anthropic_complete(args.model, max_tokens=4096)
         result = run_campaign(
             args.campaign,
             run_dir=args.run_dir,
             resume=args.resume,
             budget=args.budget,
             brain=brain,
+            triage_complete=triage_complete,
         )
         print(f"stopped after {result.steps} steps: {result.stopped_reason}")
         print(f"report: {result.workspace.report_file}")

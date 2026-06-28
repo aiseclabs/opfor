@@ -8,7 +8,13 @@ from opfor.engine.graph import SituationGraph
 from opfor.engine.ledger import Ledger
 
 
-def render(graph: SituationGraph, ledger: Ledger, *, stopped_reason: str) -> str:
+def render(
+    graph: SituationGraph,
+    ledger: Ledger,
+    *,
+    stopped_reason: str,
+    verdicts: dict[str, dict] | None = None,
+) -> str:
     counts = Counter(e["kind"] for e in ledger.entries())
     lines: list[str] = []
     lines.append("# opfor run report")
@@ -63,18 +69,41 @@ def render(graph: SituationGraph, ledger: Ledger, *, stopped_reason: str) -> str
         lines.append("")
 
     if findings:
-        lines.append("## Findings")
         order = {"critical": 0, "high": 1, "medium": 2, "low": 3, "info": 4}
-        for f in sorted(
+        ranked = sorted(
             findings, key=lambda e: order.get(str(e.props.get("severity", "info")).lower(), 5)
-        ):
-            sev = str(f.props.get("severity", "info")).upper()
-            where = f.props.get("domain") or f.props.get("where", "")
-            lines.append(f"- [{sev}] {f.props.get('title', f.id)} ({where})")
-            evidence = f.props.get("evidence")
-            if evidence:
-                lines.append(f"  - {evidence}")
-        lines.append("")
+        )
+
+        def emit(group: list) -> None:
+            for f in group:
+                sev = str(f.props.get("severity", "info")).upper()
+                where = f.props.get("domain") or f.props.get("where", "")
+                lines.append(f"- [{sev}] {f.props.get('title', f.id)} ({where})")
+                if f.props.get("evidence"):
+                    lines.append(f"  - {f.props['evidence']}")
+                if verdicts and verdicts.get(f.id, {}).get("reason"):
+                    lines.append(f"  - triage: {verdicts[f.id]['reason']}")
+
+        if verdicts:
+            # Group by the triage verdict so confirmed issues lead.
+            def verdict_of(f):
+                return verdicts.get(f.id, {}).get("verdict", "uncertain")
+
+            for label, key in (("Confirmed", "confirmed"), ("Uncertain", "uncertain")):
+                group = [f for f in ranked if verdict_of(f) == key]
+                if group:
+                    lines.append(f"## Findings, {label.lower()}")
+                    emit(group)
+                    lines.append("")
+            fps = [f for f in ranked if verdict_of(f) == "false_positive"]
+            if fps:
+                lines.append(f"## Findings, ruled false positive ({len(fps)})")
+                emit(fps)
+                lines.append("")
+        else:
+            lines.append("## Findings")
+            emit(ranked)
+            lines.append("")
 
     lines.append("## Ledger activity")
     for kind in sorted(counts):

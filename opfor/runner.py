@@ -8,8 +8,10 @@ playbook, a scope, and a brain.
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Callable
 
 from opfor.agent.brain import Brain, MockBrain
+from opfor.agent.triage import triage_findings
 from opfor.campaign import Campaign
 from opfor.engine.graph import SituationGraph
 from opfor.engine.loop import AttackLoop, RunResult
@@ -25,6 +27,7 @@ def run_campaign(
     resume: bool = False,
     brain: Brain | None = None,
     budget: int = 50,
+    triage_complete: Callable[[str], str] | None = None,
 ) -> RunResult:
     campaign = Campaign.load(campaign_dir)
     scenario = get_scenario(campaign.scenario_name)
@@ -48,7 +51,23 @@ def run_campaign(
             graph.add_target(target)
         result = loop.run(graph)
 
+    # Verification stage: a model rules each finding real or a false positive.
+    verdicts = None
+    if triage_complete is not None:
+        findings = list(result.graph.entities("finding"))
+        verdicts = triage_findings(findings, triage_complete)
+        confirmed = sum(1 for v in verdicts.values() if v["verdict"] == "confirmed")
+        false_pos = sum(1 for v in verdicts.values() if v["verdict"] == "false_positive")
+        loop.ledger.append(
+            "triage", findings=len(findings), confirmed=confirmed, false_positive=false_pos
+        )
+
     workspace.report_file.write_text(
-        render(result.graph, loop.ledger, stopped_reason=result.stopped_reason)
+        render(
+            result.graph,
+            loop.ledger,
+            stopped_reason=result.stopped_reason,
+            verdicts=verdicts,
+        )
     )
     return result

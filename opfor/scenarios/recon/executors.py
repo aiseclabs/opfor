@@ -8,6 +8,7 @@ decides). Network-dependent deps are injectable so executors are testable offlin
 
 from __future__ import annotations
 
+import re
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -86,6 +87,8 @@ def _check_finding(raw: dict) -> Finding | None:
     if "status" in match and raw.get("status") != match["status"]:
         return None
     if "body_contains" in match and str(match["body_contains"]).lower() not in body:
+        return None
+    if "body_regex" in match and not re.search(match["body_regex"], raw.get("body") or ""):
         return None
     if "body_not_contains" in match:
         blocked = match["body_not_contains"]

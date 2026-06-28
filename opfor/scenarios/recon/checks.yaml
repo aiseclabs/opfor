@@ -57,6 +57,13 @@
     status: 200
     body_contains: "Index of /"
 
+- id: stack-trace-disclosure
+  path: /
+  severity: medium
+  title: Verbose error / stack trace disclosed
+  match:
+    body_regex: '(Traceback \(most recent call last\)|\.py", line \d|at java\.[a-z]|System\.Web\.|org\.springframework|goroutine \d+ \[)'
+
 - id: missing-hsts
   path: /
   severity: low

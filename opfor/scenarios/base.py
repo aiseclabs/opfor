@@ -8,10 +8,11 @@ tree, and crucially it is read here, for the agent, never by the hand.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
-from opfor.plugins.base import Hand
+from opfor.plugins.base import Executor, Hand
 from opfor.plugins.registry import get_hand
 
 
@@ -41,3 +42,17 @@ class Scenario:
         if not parts:
             raise FileNotFoundError(f"no knowledge under {self.knowledge_dir}")
         return "\n\n".join(parts)
+
+
+@dataclass(frozen=True, kw_only=True)
+class ControlScenario:
+    """A scenario that runs on the task-graph control shell (PEP).
+
+    It supplies the executors (one per capability) and a planner, instead of a
+    single hand and a brain. The engine stays scenario-blind.
+    """
+
+    name: str
+    content_root: Path
+    executors: dict[str, Executor]
+    planner: Any  # opfor.agent.planner.Planner

@@ -1,4 +1,9 @@
-"""The recon scenario, attack-surface discovery from a company's seed domains."""
+"""The recon scenario, on the task-graph control shell.
+
+A bundle of capability executors plus a deterministic planner. Security checks
+are data (`checks.yaml`) wired into the planner, which emits one check task per
+service per check. The executors stay thin and the engine stays generic.
+"""
 
 from __future__ import annotations
 
@@ -6,18 +11,15 @@ from pathlib import Path
 
 import yaml
 
-from opfor.plugins.registry import register_hand
-from opfor.scenarios.base import Scenario
-from opfor.scenarios.recon.hand import ReconHand
+from opfor.scenarios.base import ControlScenario
+from opfor.scenarios.recon.executors import default_executors
+from opfor.scenarios.recon.planner import ReconPlanner
 
-# Security checks are data. The scenario loads them and wires them into the hand,
-# so the hand never reads knowledge, it just applies the checks it is handed.
 _CHECKS = yaml.safe_load((Path(__file__).resolve().parent / "checks.yaml").read_text())
 
-register_hand(ReconHand(checks=_CHECKS))
-
-RECON = Scenario(
+RECON = ControlScenario(
     name="recon",
-    hand_name="recon",
     content_root=Path(__file__).resolve().parent,
+    executors=default_executors(),
+    planner=ReconPlanner(_CHECKS),
 )

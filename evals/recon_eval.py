@@ -15,13 +15,22 @@ import time
 import yaml
 
 from evals.targets import ANSWER_KEY, start_iap, start_vuln
-from opfor.agent.brain import MockBrain
+from opfor.engine.budget import Budget
+from opfor.engine.control import ControlShell
 from opfor.engine.graph import SituationGraph
-from opfor.engine.loop import AttackLoop
 from opfor.engine.scope import Scope
 from opfor.engine.state import Workspace
 from opfor.model import Target
-from opfor.scenarios.recon.hand import ReconHand
+from opfor.scenarios.recon.executors import (
+    DnsExecutor,
+    FaviconExecutor,
+    HttpCheckExecutor,
+    HttpProbeExecutor,
+    RootKeywordExecutor,
+    RootPivotExecutor,
+    SubdomainExecutor,
+)
+from opfor.scenarios.recon.planner import ReconPlanner
 
 _CHECKS_PATH = (
     pathlib.Path(__file__).resolve().parents[1]
@@ -42,27 +51,29 @@ def run_eval() -> dict:
     try:
         checks = yaml.safe_load(_CHECKS_PATH.read_text())
         # Offline recon: no CT discovery, no SAN pivot, resolve everything local.
-        hand = ReconHand(
-            subdomain_sources=[],
-            san_pivot=lambda r: [],
-            resolve_fn=lambda d: ["127.0.0.1"],
-            checks=checks,
-        )
+        executors = {
+            "root_keyword": RootKeywordExecutor(search=lambda o: []),
+            "root_pivot": RootPivotExecutor(pivot=lambda r: []),
+            "subdomains": SubdomainExecutor(sources=[]),
+            "dns_resolve": DnsExecutor(resolve_fn=lambda d: ["127.0.0.1"]),
+            "http_probe": HttpProbeExecutor(),
+            "http_check": HttpCheckExecutor(),
+            "favicon": FaviconExecutor(),
+        }
         scope = Scope(hosts=("vuln.local", "iap.local"), max_tier="probe")
         graph = SituationGraph()
         _seed(graph, "vuln", vuln_url)
         _seed(graph, "iap", iap_url)
         with tempfile.TemporaryDirectory() as d:
-            loop = AttackLoop(
-                hand=hand,
-                playbook="eval",
+            shell = ControlShell(
+                executors=executors,
+                planner=ReconPlanner(checks),
                 scope=scope,
-                brain=MockBrain(),
                 workspace=Workspace(d),
-                budget=200,
+                budget=Budget(500),
             )
             t0 = time.time()
-            result = loop.run(graph)
+            result = shell.run(graph)
             elapsed = time.time() - t0
     finally:
         s1.shutdown()

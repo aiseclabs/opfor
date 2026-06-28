@@ -28,6 +28,7 @@ class RunResult:
     steps: int
     stopped_reason: str
     tasks: dict
+    workspace: Workspace
 
 
 class ControlShell:
@@ -87,7 +88,11 @@ class ControlShell:
         self._checkpoint(graph, tg, done=True, reason=reason)
         self._ledger.append("run_end", reason=reason, steps=self._budget.steps)
         return RunResult(
-            graph=graph, steps=self._budget.steps, stopped_reason=reason, tasks=tg.counts()
+            graph=graph,
+            steps=self._budget.steps,
+            stopped_reason=reason,
+            tasks=tg.counts(),
+            workspace=self._workspace,
         )
 
     def _run_round(self, tasks, graph, tg) -> None:

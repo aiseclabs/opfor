@@ -16,7 +16,10 @@ import socket
 import urllib.error
 import urllib.parse
 import urllib.request
+from concurrent.futures import ThreadPoolExecutor
 from typing import Callable
+
+_RESOLVE_WORKERS = 50
 
 from opfor.engine.graph import SituationGraph
 from opfor.model import (
@@ -114,12 +117,18 @@ class ReconHand(Hand):
         # depth, so we do not recurse, which keeps the surface bounded.
         if target.kind == "domain":
             eps.append(self._subdomains_ep(target.id))
-        resolved = {h.props.get("domain") for h in graph.entities("host")}  # type: ignore[attr-defined]
-        for name, url in self._known_domains(graph).items():
-            # Resolve every domain first, it is cheap. Only spend an HTTP probe on
-            # domains that actually resolve, so dead names cost nothing.
-            eps.append(self._resolve_ep(name))
-            if name in resolved:
+        hosts = graph.entities("host")
+        attempted = {h.props.get("domain") for h in hosts}  # type: ignore[attr-defined]
+        live = {h.props.get("domain") for h in hosts if h.props.get("live")}  # type: ignore[attr-defined]
+        known = self._known_domains(graph)
+        # Resolve everything not yet attempted in ONE concurrent batch, so a few
+        # hundred names cost one fast step instead of hundreds of slow ticks.
+        pending = sorted(n for n in known if n not in attempted)
+        if pending:
+            eps.append(self._resolve_batch_ep(pending, len(hosts)))
+        # Only spend an HTTP probe on names that actually resolved.
+        for name, url in known.items():
+            if name in live:
                 eps.append(self._get_ep(name, url))
         # Security checks run only on services we confirmed are live.
         for svc in graph.entities("service"):
@@ -156,17 +165,19 @@ class ReconHand(Hand):
             },
         )
 
-    def _resolve_ep(self, domain: str) -> Entrypoint:
+    def _resolve_batch_ep(self, domains: list[str], seq: int) -> Entrypoint:
         return Entrypoint(
-            id=f"resolve::{domain}",
-            target_id=domain,
-            kind="dns-name",
-            ref=domain,
-            actions=("resolve",),
+            id=f"resolve-batch::{seq}",
+            target_id="(batch)",
+            kind="dns-batch",
+            ref=f"{len(domains)} names",
+            actions=("resolve_all",),
             props={
-                "domain": domain,
-                "scope_host": domain,
-                "action_tiers": {"resolve": "recon"},
+                # Passive DNS over names already discovered under confirmed roots.
+                "domains": domains,
+                "osint": True,
+                "scope_host": "(batch)",
+                "action_tiers": {"resolve_all": "recon"},
             },
         )
 
@@ -224,14 +235,14 @@ class ReconHand(Hand):
             return self._act_discover(entrypoint)
         if action == "subdomains":
             return self._act_subdomains(entrypoint)
-        if action == "resolve":
-            return self._act_resolve(entrypoint)
+        if action == "resolve_all":
+            return self._act_resolve_all(entrypoint)
         if action == "get":
             return self._act_get(entrypoint)
         if action == "check":
             return self._act_check(entrypoint)
         raise ValueError(
-            f"recon hand supports discover_roots, subdomains, resolve, get, check, got: {action}"
+            f"recon hand supports discover_roots, subdomains, resolve_all, get, check, got: {action}"
         )
 
     def _act_check(self, entrypoint: Entrypoint) -> Observation:
@@ -285,14 +296,20 @@ class ReconHand(Hand):
             raw = {"org": org, "error": str(exc)}
         return Observation(entrypoint_id=entrypoint.id, action="discover_roots", raw=raw)
 
-    def _act_resolve(self, entrypoint: Entrypoint) -> Observation:
-        domain = entrypoint.props["domain"]
-        try:
-            ips = self._resolve_fn(domain)
-            raw = {"domain": domain, "ips": list(ips)}
-        except OSError as exc:
-            raw = {"domain": domain, "ips": [], "error": str(exc)}
-        return Observation(entrypoint_id=entrypoint.id, action="resolve", raw=raw)
+    def _act_resolve_all(self, entrypoint: Entrypoint) -> Observation:
+        domains = entrypoint.props["domains"]
+
+        def one(domain: str) -> tuple[str, list[str]]:
+            try:
+                return domain, list(self._resolve_fn(domain))
+            except OSError:
+                return domain, []
+
+        with ThreadPoolExecutor(max_workers=_RESOLVE_WORKERS) as pool:
+            results = dict(pool.map(one, domains))
+        return Observation(
+            entrypoint_id=entrypoint.id, action="resolve_all", raw={"results": results}
+        )
 
     def _act_get(self, entrypoint: Entrypoint) -> Observation:
         url = entrypoint.props["url"]
@@ -325,8 +342,8 @@ class ReconHand(Hand):
             return self._norm_discover(observation)
         if observation.action == "subdomains":
             return self._norm_subdomains(observation)
-        if observation.action == "resolve":
-            return self._norm_resolve(observation)
+        if observation.action == "resolve_all":
+            return self._norm_resolve_all(observation)
         if observation.action == "get":
             return self._norm_get(observation)
         if observation.action == "check":
@@ -391,25 +408,21 @@ class ReconHand(Hand):
             )
         ]
 
-    def _norm_resolve(self, obs: Observation) -> list[Fact]:
-        raw = obs.raw
-        domain = raw["domain"]
-        ips = raw.get("ips") or []
-        if not ips:
-            return [
-                Fact(
-                    kind="dns-dead",
-                    about=obs.entrypoint_id,
-                    data={"domain": domain, "error": raw.get("error")},
-                )
-            ]
-        host = Host(id=f"host:{domain}", props={"domain": domain, "ips": ips})
+    def _norm_resolve_all(self, obs: Observation) -> list[Fact]:
+        # One Host per domain, live or dead, so a dead name is recorded and never
+        # retried. Only live hosts carry addresses and earn an HTTP probe.
+        results = obs.raw.get("results", {})
+        hosts = tuple(
+            Host(id=f"host:{d}", props={"domain": d, "ips": ips, "live": bool(ips)})
+            for d, ips in results.items()
+        )
+        live = sum(1 for h in hosts if h.props["live"])
         return [
             Fact(
-                kind="resolved",
+                kind="resolved-batch",
                 about=obs.entrypoint_id,
-                data={"domain": domain, "ips": ips},
-                yields=(host,),
+                data={"resolved": len(hosts), "live": live},
+                yields=hosts,
             )
         ]
 

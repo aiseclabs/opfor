@@ -125,19 +125,19 @@ def test_checks_only_enumerated_for_live_services():
     assert "check::https://x.example.com/::git-config-exposed" in eps
 
 
-def test_resolve_marks_live_and_dead():
-    live = ReconHand(resolve_fn=lambda d: ["1.2.3.4"])
-    facts = live.normalize(live.act(live._resolve_ep("live.example.com"), "resolve", {}))
-    hosts = [e for f in facts for e in f.yields]
-    assert hosts and hosts[0].props["ips"] == ["1.2.3.4"]
-
-    def dead(_):
+def test_resolve_batch_marks_live_and_dead_concurrently():
+    def resolver(domain):
+        if domain == "live.example.com":
+            return ["1.2.3.4"]
         raise OSError("nxdomain")
 
-    gone = ReconHand(resolve_fn=dead)
-    facts = gone.normalize(gone.act(gone._resolve_ep("gone.example.com"), "resolve", {}))
-    assert facts[0].kind == "dns-dead"
-    assert not [e for f in facts for e in f.yields]
+    hand = ReconHand(resolve_fn=resolver)
+    ep = hand._resolve_batch_ep(["live.example.com", "gone.example.com"], 0)
+    facts = hand.normalize(hand.act(ep, "resolve_all", {}))
+    hosts = {h.props["domain"]: h for f in facts for h in f.yields}
+    assert hosts["live.example.com"].props["live"] is True
+    assert hosts["live.example.com"].props["ips"] == ["1.2.3.4"]
+    assert hosts["gone.example.com"].props["live"] is False
 
 
 def test_scope_allows_suffix_denies_outsiders_and_high_tiers():
@@ -186,13 +186,17 @@ def test_recon_loop_org_discovers_candidates_and_expands_confirmed(tmp_path):
     result = loop.run(graph)
 
     by_id = {d.id: d.props.get("candidate", False) for d in result.graph.entities("domain")}
-    # Candidate roots are recorded, flagged, and never expanded.
+    # Candidate roots are recorded, flagged, and never expanded (never resolved).
     assert by_id.get("example.cn") is True
     assert by_id.get("1example.com") is True
-    assert not result.graph.is_acted("resolve::example.cn", "resolve")
+    resolved_domains = {h.props["domain"] for h in result.graph.entities("host")}
+    assert "example.cn" not in resolved_domains
     # The confirmed root is expanded: subdomain discovered, resolved to a host.
     assert by_id.get("api.confirmed.invalid") is False
-    assert any(h.props["domain"] == "api.confirmed.invalid" for h in result.graph.entities("host"))
+    assert any(
+        h.props["domain"] == "api.confirmed.invalid" and h.props["live"]
+        for h in result.graph.entities("host")
+    )
     assert result.done
 
 
@@ -219,12 +223,11 @@ def test_recon_loop_resolves_then_gates_probes_offline(tmp_path):
 
     discovered = {d.id for d in result.graph.entities("domain")}
     assert {"up.test.invalid", "down.test.invalid"} <= discovered
-    # Both discovered domains were resolved, surface grew and re-enumerated.
-    assert result.graph.is_acted("resolve::up.test.invalid", "resolve")
-    assert result.graph.is_acted("resolve::down.test.invalid", "resolve")
-    # Only the resolvable one became a host and earned an HTTP probe entrypoint.
-    resolved = {h.props["domain"] for h in result.graph.entities("host")}
-    assert resolved == {"up.test.invalid"}
+    # Both discovered domains were resolved in the batch, recorded as hosts.
+    hosts = {h.props["domain"]: h.props["live"] for h in result.graph.entities("host")}
+    assert hosts.get("up.test.invalid") is True
+    assert hosts.get("down.test.invalid") is False
+    # Only the live one earned an HTTP probe entrypoint.
     entrypoint_ids = {ep.id for ep in result.graph.entrypoints()}
     assert "get::up.test.invalid" in entrypoint_ids
     assert "get::down.test.invalid" not in entrypoint_ids

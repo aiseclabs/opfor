@@ -43,6 +43,7 @@ def render(
         ("resolved hosts", len(hosts)),
         ("services", len(services)),
         ("technologies", len(technologies)),
+        ("endpoints", len(graph.entities("endpoint"))),
         ("findings", len(findings)),
     ]
     lines.append("## Surface")
@@ -69,6 +70,16 @@ def render(
         lines.append("## Live services")
         for s in sorted(services, key=lambda e: e.id):
             lines.append(f"- {s.id} (status {s.props.get('status')})")
+        lines.append("")
+
+    endpoints = graph.entities("endpoint")
+    if endpoints:
+        lines.append(f"## Endpoints ({len(endpoints)})")
+        for e in sorted(endpoints, key=lambda x: x.id)[:60]:
+            src = e.props.get("source", "?")
+            lines.append(f"- {e.id} (via {src})")
+        if len(endpoints) > 60:
+            lines.append(f"- ... and {len(endpoints) - 60} more")
         lines.append("")
 
     if technologies:

@@ -102,6 +102,15 @@ class Host:
 
 
 @dataclass(frozen=True, kw_only=True)
+class Endpoint:
+    """An interface on a service, the interface fanout. id is METHOD path."""
+
+    id: str
+    kind: str = "endpoint"
+    props: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(frozen=True, kw_only=True)
 class Finding:
     """A judgment recorded by the brain, for example an exposure or a weak spot."""
 
@@ -121,6 +130,7 @@ ENTITY_TYPES = {
     "service": Service,
     "technology": Technology,
     "host": Host,
+    "endpoint": Endpoint,
     "finding": Finding,
 }
 

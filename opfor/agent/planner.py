@@ -35,3 +35,21 @@ class FunctionPlanner(Planner):
 
     def expand(self, graph: SituationGraph) -> list[Task]:
         return list(self._rule(graph))
+
+
+class CompositePlanner(Planner):
+    """Run several planners and merge their tasks.
+
+    Lets one scenario compose phases (recon, endpoint discovery, vuln testing) on
+    the same blackboard. The task graph dedupes by id, and the control shell plus
+    scope tiers sequence the phases by readiness and tier, so this stays simple.
+    """
+
+    def __init__(self, planners: list[Planner]) -> None:
+        self._planners = planners
+
+    def expand(self, graph: SituationGraph) -> list[Task]:
+        tasks: list[Task] = []
+        for planner in self._planners:
+            tasks.extend(planner.expand(graph))
+        return tasks

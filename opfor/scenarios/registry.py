@@ -7,12 +7,14 @@ from opfor.scenarios.base import Scenario
 from opfor.scenarios.mock import MOCK
 from opfor.scenarios.recon import RECON
 from opfor.scenarios.web import WEB
+from opfor.scenarios.websurface import WEBSURFACE
 
 _SCENARIOS = {
     MOCK.name: MOCK,
     RECON.name: RECON,
     WEB.name: WEB,
     APISCAN.name: APISCAN,
+    WEBSURFACE.name: WEBSURFACE,
 }
 
 

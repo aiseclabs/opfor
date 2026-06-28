@@ -29,7 +29,8 @@ from opfor.model import (
 # both belong here.
 # A live service is new surface too, it spawns the security checks to run on it.
 _SURFACE_CHANGING = {
-    "target", "credential", "identity", "artifact", "domain", "host", "service"
+    "target", "credential", "identity", "artifact", "domain", "host", "service",
+    "endpoint",
 }
 
 

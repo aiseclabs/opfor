@@ -127,24 +127,6 @@ class Scope:
         # still be a recon-tier action, so this cannot widen scope.
         if entrypoint.props.get("osint") and tier_rank(tier) == 0:
             return Decision(allowed=True, reason="passive osint", tier=tier)
-        # A batch action carries many hosts. Every one must be in scope, and the
-        # tier ceiling still applies, so a batch cannot smuggle past either rung.
-        batch = entrypoint.props.get("scope_hosts")
-        if batch is not None:
-            out = [h for h in batch if not self._in_scope(h)]
-            if out:
-                return Decision(
-                    allowed=False,
-                    reason=f"{len(out)} hosts out of scope, e.g. {out[0]!r}",
-                    tier=tier,
-                )
-            if tier_rank(tier) > tier_rank(self.max_tier):
-                return Decision(
-                    allowed=False,
-                    reason=f"tier {tier} exceeds ceiling {self.max_tier}",
-                    tier=tier,
-                )
-            return Decision(allowed=True, reason="batch in scope", tier=tier)
         host = self._host_of(graph, entrypoint)
         if host is None:
             return Decision(

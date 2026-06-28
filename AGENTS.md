@@ -2,87 +2,87 @@
 
 opfor is a universal offensive-security engine. One generic engine drives every
 scenario, web, internal network, AI agents, phishing. You change scenario by
-swapping data and plugins and knowledge, never by editing the engine. The design
-mirrors codejury's "generic engine, knowledge as data" decoupling. The
-difference is that codejury only reads code and judges, while opfor acts on live
-targets, grows a live situation graph, gates every action by authorized scope,
-survives async waits, and keeps an audit ledger.
+swapping data, executors, and knowledge, never by editing the engine.
+
+The architecture follows the agentic-security consensus: a **blackboard** (the
+situation graph, the long-horizon state held outside any model context) read and
+written by specialist **executors**, with a **planner / executor / perceptor**
+(PEP) split and a control shell that runs ready work concurrently.
 
 ## Non-Negotiable Invariants
 
-1. **Attack knowledge is data, the engine is generic.** Attack strategy lives in
-   each scenario's `knowledge/` markdown under `opfor/scenarios/<name>/`, read by
-   the agent. Plugins (hands) only act, never decide what to try. Do not move
-   attack reasoning into Python. Adding a scenario or technique should be a data
-   change plus a thin hand.
+1. **Attack knowledge is data; executors only act, the planner decides.** Attack
+   strategy lives in each scenario's `knowledge/` markdown and in the planner's
+   rules, never inside an executor. An executor runs one tool and structures the
+   result; it makes no attack decisions and never reads `knowledge/`. Adding a
+   technique should be a data change plus, at most, a thin executor.
 
-2. **Success is judged by the agent, never hardcoded.** A hand returns the raw
-   observation and does not interpret it. The engine never writes
-   `if response contains X then success`. The model judges, from the raw reaction.
+2. **Success is judged by a model, never hardcoded.** Executors return raw
+   observations and structure them into facts; they do not interpret success. The
+   engine never writes `if response contains X then success`. Judgment lives in
+   the planner (for next moves) and the triage/verification stage (for findings).
 
-3. **The loop suspends, resumes, and accepts async late-arriving results.** Acts
-   may return immediately or much later, hours or days for phishing. The loop is
-   event-driven and checkpointed, never a synchronous busy-wait. This is designed
-   in from day one because it is expensive to retrofit.
+3. **The loop suspends, resumes, and accepts async late-arriving results.** Work
+   may complete immediately or much later, hours or days for phishing. The shell
+   is checkpointed and event-driven, never a synchronous busy-wait.
 
-4. **Scope is deny-by-default.** Every act is authorized against the campaign
-   scope before it runs, and every act is recorded in the append-only ledger. An
-   unauthorized act fails loud, it never silently proceeds.
+4. **Scope is deny-by-default.** Every task is authorized against the campaign
+   scope before it runs, and recorded in the append-only ledger. An unauthorized
+   task fails loud, it never silently proceeds.
 
 5. **Fail loud.** Never report a failure, a timeout, or an unparseable result as
    a clean or benign outcome. Surface it.
 
-## Architecture Map
+## Architecture (blackboard + PEP)
 
 - **Data sources** name who to attack. Campaign inventories under `campaigns/`,
-  loaded into the situation graph as targets.
-- **Plugins (hands)** under `opfor/plugins/` and per scenario. A hand implements
-  `enumerate`, `act`, `normalize` and nothing else. One hand per target kind.
-- **Knowledge (playbooks)** under `opfor/scenarios/<name>/knowledge/`. Markdown
-  read by the agent, never imported by a hand.
-- **Engine + agent** under `opfor/engine/` and `opfor/agent/`. The universal
-  attack loop, situation graph, scope gate, ledger, checkpoint state, and the
-  brain that reads the graph and a playbook and decides the next move.
+  seeded into the situation graph (seeds + scope + vantage).
+- **Blackboard** = the situation graph, `opfor/engine/graph.py`. The single,
+  persisted source of truth. All long-horizon state lives here, not in a model.
+- **Executors** under `opfor/plugins/` and per scenario, one capability each.
+  An `Executor` implements `run(task, graph) -> Observation` (the deed, raw) and
+  `perceive(observation) -> list[Fact]` (raw to structured). Nothing else.
+- **Planner** under `opfor/agent/planner.py`. Reads the graph and proposes
+  `Task`s. `DeterministicPlanner`/`FunctionPlanner` (rules) for known phases like
+  recon; a model planner for open-ended phases. It never runs tools.
+- **Control shell** `opfor/engine/control.py`. Each round: plan, take every
+  ready and authorized task, run them concurrently, perceive results onto the
+  graph, checkpoint. Concurrency is the shell's job, so there are no batch actions.
+- **Cross-cutting**: `scope.py` (policy-as-code gate), `ledger.py` (audit),
+  `state.py` (checkpoint/resume), `budget.py` (runaway cap), `agent/triage.py`
+  (the verification stage that rules findings real or false-positive).
+- **Knowledge** under `opfor/scenarios/<name>/knowledge/` (playbooks) and data
+  files like `checks.yaml` (nuclei-style check templates). Read by the planner,
+  never by an executor.
 
-## The hand contract
+A classic entrypoint loop (`opfor/engine/loop.py`, the `Hand` contract) still
+backs the older mock and web scenarios and is being migrated onto the control
+shell. New scenarios use executors + a planner (`ControlScenario`).
 
-A hand exposes exactly three actions, the only verbs the engine knows:
+## The task graph
 
-- `enumerate(target, graph) -> list[Entrypoint]` lists current pokeable
-  entrypoints. Re-callable, entrypoints grow with the situation graph.
-- `act(entrypoint, action, params) -> Observation` does one deed and returns the
-  raw observation. It does not judge success.
-- `normalize(observation) -> list[Fact]` turns a raw reaction into structured
-  facts for the situation graph.
-
-The hand discipline, enforced in review: a hand must not read `knowledge/` and
-must not make attack decisions. If you find yourself writing "once we have the
-password, try SMB" inside a hand, that belongs in a playbook for the agent.
-
-## The loop
-
-Pull inventory, agent reads the situation graph and the playbook, picks an
-entrypoint and action, the scope gate authorizes, the hand acts, the result is
-normalized into the graph, the ledger records it, the state checkpoints, the
-agent judges and decides whether to continue or suspend.
+`opfor/engine/tasks.py`. A `Task` is one capability against one target. The
+`TaskGraph` dedupes by id, so a planner may re-emit applicable tasks every round,
+and reports which tasks are ready. Readiness plus the growing graph is how the
+pokeable surface is computed live.
 
 ## Commands
 
 ```
 python -m venv .venv && . .venv/bin/activate && pip install -e ".[dev]"
 pytest
-opfor run campaigns/localhost-demo
-opfor run campaigns/localhost-demo --resume
+python -m evals.recon_eval     # score recon against the ground-truth baseline
+opfor run campaigns/example-recon
 ```
 
 ## Contributing
 
-- Add a scenario: create `opfor/scenarios/<name>/` with a `Scenario` object in
-  `__init__.py`, a `hand.py`, a `knowledge/` tree, and register it in
-  `opfor/scenarios/registry.py`.
-- Add a technique: write or extend a markdown playbook under the scenario's
-  `knowledge/`, do not touch Python.
-- Add tests when behavior changes.
+- Add a control-shell scenario: create `opfor/scenarios/<name>/` with capability
+  executors, a planner, a `knowledge/` tree, a `ControlScenario` in `__init__.py`,
+  and register it in `opfor/scenarios/registry.py`.
+- Add a technique: write or extend a markdown playbook or a `checks.yaml`
+  template, do not touch Python.
+- Add tests when behavior changes, and keep the eval baseline green.
 
 ## Style
 

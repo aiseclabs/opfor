@@ -23,11 +23,6 @@ def render(
     lines.append(f"Ledger intact: {ledger.verify()}")
     lines.append("")
 
-    lines.append("## Surface")
-    lines.append(f"- targets: {len(graph.targets())}")
-    lines.append(f"- entrypoints: {len(graph.entrypoints())}")
-    lines.append(f"- credentials: {len(graph.credentials())}")
-    lines.append(f"- artifacts: {len(graph.entities('artifact'))}")
     all_domains = graph.entities("domain")
     candidates = [d for d in all_domains if d.props.get("candidate")]
     domains = [d for d in all_domains if not d.props.get("candidate")]
@@ -35,13 +30,25 @@ def render(
     services = graph.entities("service")
     technologies = graph.entities("technology")
     findings = graph.entities("finding")
-    if all_domains or services or technologies:
-        lines.append(f"- candidate roots: {len(candidates)}")
-        lines.append(f"- mapped domains: {len(domains)}")
-        lines.append(f"- resolved hosts: {len(hosts)}")
-        lines.append(f"- services: {len(services)}")
-        lines.append(f"- technologies: {len(technologies)}")
-        lines.append(f"- findings: {len(findings)}")
+
+    # Only show categories that have something, so a report reads cleanly whatever
+    # the scenario produced.
+    surface = [
+        ("targets", len(graph.targets())),
+        ("entrypoints", len(graph.entrypoints())),
+        ("credentials", len(graph.credentials())),
+        ("artifacts", len(graph.entities("artifact"))),
+        ("candidate roots", len(candidates)),
+        ("mapped domains", len(domains)),
+        ("resolved hosts", len(hosts)),
+        ("services", len(services)),
+        ("technologies", len(technologies)),
+        ("findings", len(findings)),
+    ]
+    lines.append("## Surface")
+    for label, n in surface:
+        if n:
+            lines.append(f"- {label}: {n}")
     lines.append("")
 
     if candidates:

@@ -1,0 +1,8 @@
+# Signals that a target belongs to the web scenario. Used by the runner to pick
+# a scenario when one is not named. Kept as data so adding a signal is not a code
+# change, mirroring codejury's detection config.
+scheme:
+  - http
+  - https
+target_kind:
+  - web_host

@@ -1,0 +1,28 @@
+[project]
+name = "opfor"
+version = "0.1.0"
+description = "Universal offensive-security engine, generic engine with knowledge as data"
+requires-python = ">=3.12"
+dependencies = [
+    "PyYAML>=6.0",
+]
+
+[project.optional-dependencies]
+anthropic = ["anthropic>=0.40"]
+dev = ["pytest>=8.0"]
+
+[project.scripts]
+opfor = "opfor.cli:main"
+
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["opfor*"]
+
+[tool.setuptools.package-data]
+opfor = [
+    "scenarios/*/knowledge/**/*.md",
+    "scenarios/*/detection.yaml",
+]

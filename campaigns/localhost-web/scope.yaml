@@ -1,0 +1,4 @@
+# Only the local loopback host, and only recon-tier reads.
+hosts:
+  - 127.0.0.1
+max_tier: recon

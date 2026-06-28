@@ -11,21 +11,32 @@ def _seed(domain="example.com"):
     return Target(id=domain, kind="domain", props={"host": domain, "is_root": True})
 
 
-def test_crtsh_yields_in_scope_subdomains_only():
-    # crt.sh sometimes lists unrelated certificate names, they must be dropped.
-    fetch = lambda d: ["api.example.com", "www.example.com", "x.api.example.com", "unrelated.org"]
-    hand = ReconHand(crt_fetch=fetch)
+def test_subdomains_merge_sources_and_keep_in_scope_only():
+    # Two passive sources, one flaky, plus an unrelated name that must be dropped.
+    def good(d):
+        return ["api.example.com", "WWW.example.com", "*.api.example.com"]
+
+    def flaky(d):
+        raise OSError("source down")
+
+    def other(d):
+        return ["mail.example.com", "unrelated.org"]
+
+    hand = ReconHand(subdomain_sources=[("good", good), ("flaky", flaky), ("other", other)])
     graph = SituationGraph()
     seed = _seed()
     graph.add_target(seed)
 
-    crt_ep = next(ep for ep in hand.enumerate(seed, graph) if ep.actions == ("crtsh",))
-    obs = hand.act(crt_ep, "crtsh", {})
+    ep = next(e for e in hand.enumerate(seed, graph) if e.actions == ("subdomains",))
+    obs = hand.act(ep, "subdomains", {})
     facts = hand.normalize(obs)
 
     discovered = {e.id for f in facts for e in f.yields}
-    assert discovered == {"api.example.com", "www.example.com", "x.api.example.com"}
+    # Merged, cleaned (case, wildcard), deduped, and filtered to under the root.
+    assert discovered == {"api.example.com", "www.example.com", "mail.example.com"}
     assert "unrelated.org" not in discovered
+    # One source failing does not sink the sweep.
+    assert obs.raw["sources"]["flaky"].startswith("error:")
 
 
 def test_get_fingerprints_service_and_technology(stub_server):
@@ -40,6 +51,35 @@ def test_get_fingerprints_service_and_technology(stub_server):
     assert services and services[0].props["status"] == 200
     # The stub server sends a Server header, so a technology is fingerprinted.
     assert techs
+
+
+def test_discover_roots_yields_candidates_not_expanded():
+    hand = ReconHand(root_search=lambda kw: ["example.com", "example.cn", "1example.com"])
+    graph = SituationGraph()
+    org = Target(id="example", kind="org")
+    graph.add_target(org)
+
+    disc_ep = next(ep for ep in hand.enumerate(org, graph) if ep.actions == ("discover_roots",))
+    assert disc_ep.props.get("osint") is True
+    facts = hand.normalize(hand.act(disc_ep, "discover_roots", {}))
+    candidates = [e for f in facts for e in f.yields]
+    assert {c.id for c in candidates} == {"example.com", "example.cn", "1example.com"}
+    assert all(c.props["candidate"] for c in candidates)
+
+    # Candidates are recorded but not expanded: no resolve or get entrypoints.
+    for c in candidates:
+        graph.add_entity(c)
+    eps = {ep.id for ep in hand.enumerate(org, graph)}
+    assert not any(e.startswith("resolve::") or e.startswith("get::") for e in eps)
+
+
+def test_osint_discovery_is_authorized_even_with_empty_scope():
+    from opfor.engine.scope import Scope
+
+    hand = ReconHand()
+    scope = Scope(domain_suffixes=(), max_tier="recon")
+    disc_ep = hand._discover_ep("example")
+    assert scope.authorize(SituationGraph(), disc_ep, "discover_roots").allowed
 
 
 def test_resolve_marks_live_and_dead():
@@ -60,7 +100,7 @@ def test_resolve_marks_live_and_dead():
 def test_scope_allows_suffix_denies_outsiders_and_high_tiers():
     scope = Scope(domain_suffixes=("example.com",), max_tier="probe")
     graph = SituationGraph()
-    hand = ReconHand(crt_fetch=lambda d: [])
+    hand = ReconHand(subdomain_sources=[])
 
     inside = hand._get_ep("api.example.com", "https://api.example.com/")
     assert scope.authorize(graph, inside, "get").allowed
@@ -76,9 +116,46 @@ def test_scope_allows_suffix_denies_outsiders_and_high_tiers():
     assert not scope.authorize(graph, intrusive, "exploit").allowed
 
 
+def test_recon_loop_org_discovers_candidates_and_expands_confirmed(tmp_path):
+    def resolver(domain):
+        if domain == "api.confirmed.invalid":
+            return ["10.0.0.1"]
+        raise OSError("nxdomain")
+
+    hand = ReconHand(
+        root_search=lambda kw: ["example.cn", "1example.com"],
+        subdomain_sources=[("stub", lambda d: ["api.confirmed.invalid"])],
+        resolve_fn=resolver,
+    )
+    loop = AttackLoop(
+        hand=hand,
+        playbook="recon",
+        scope=Scope(domain_suffixes=("confirmed.invalid",), max_tier="probe"),
+        brain=MockBrain(),
+        workspace=Workspace(tmp_path / "run"),
+        budget=80,
+    )
+    graph = SituationGraph()
+    graph.add_target(Target(id="example", kind="org"))
+    graph.add_target(
+        Target(id="confirmed.invalid", kind="domain", props={"host": "confirmed.invalid", "is_root": True})
+    )
+    result = loop.run(graph)
+
+    by_id = {d.id: d.props.get("candidate", False) for d in result.graph.entities("domain")}
+    # Candidate roots are recorded, flagged, and never expanded.
+    assert by_id.get("example.cn") is True
+    assert by_id.get("1example.com") is True
+    assert not result.graph.is_acted("resolve::example.cn", "resolve")
+    # The confirmed root is expanded: subdomain discovered, resolved to a host.
+    assert by_id.get("api.confirmed.invalid") is False
+    assert any(h.props["domain"] == "api.confirmed.invalid" for h in result.graph.entities("host"))
+    assert result.done
+
+
 def test_recon_loop_resolves_then_gates_probes_offline(tmp_path):
     # All names on the reserved .invalid TLD so nothing can touch a real host.
-    fetch = lambda d: ["up.test.invalid", "down.test.invalid"]
+    sources = [("stub", lambda d: ["up.test.invalid", "down.test.invalid"])]
 
     def resolver(domain):
         if domain == "up.test.invalid":
@@ -86,7 +163,7 @@ def test_recon_loop_resolves_then_gates_probes_offline(tmp_path):
         raise OSError("nxdomain")
 
     loop = AttackLoop(
-        hand=ReconHand(crt_fetch=fetch, resolve_fn=resolver),
+        hand=ReconHand(subdomain_sources=sources, resolve_fn=resolver),
         playbook="recon",
         scope=Scope(domain_suffixes=("test.invalid",), max_tier="probe"),
         brain=MockBrain(),

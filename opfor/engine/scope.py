@@ -101,6 +101,11 @@ class Scope:
     ) -> Decision:
         """Authorize one act. Deny unless both rungs pass."""
         tier = self._action_tier(entrypoint, action)
+        # A passive OSINT lookup queries a public source about the target, it
+        # never touches the estate, so it is not gated by the host scope. It must
+        # still be a recon-tier action, so this cannot widen scope.
+        if entrypoint.props.get("osint") and tier_rank(tier) == 0:
+            return Decision(allowed=True, reason="passive osint", tier=tier)
         host = self._host_of(graph, entrypoint)
         if host is None:
             return Decision(

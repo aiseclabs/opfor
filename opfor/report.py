@@ -22,18 +22,27 @@ def render(graph: SituationGraph, ledger: Ledger, *, stopped_reason: str) -> str
     lines.append(f"- entrypoints: {len(graph.entrypoints())}")
     lines.append(f"- credentials: {len(graph.credentials())}")
     lines.append(f"- artifacts: {len(graph.entities('artifact'))}")
-    domains = graph.entities("domain")
+    all_domains = graph.entities("domain")
+    candidates = [d for d in all_domains if d.props.get("candidate")]
+    domains = [d for d in all_domains if not d.props.get("candidate")]
     hosts = graph.entities("host")
     services = graph.entities("service")
     technologies = graph.entities("technology")
     findings = graph.entities("finding")
-    if domains or services or technologies:
-        lines.append(f"- domains: {len(domains)}")
+    if all_domains or services or technologies:
+        lines.append(f"- candidate roots: {len(candidates)}")
+        lines.append(f"- mapped domains: {len(domains)}")
         lines.append(f"- resolved hosts: {len(hosts)}")
         lines.append(f"- services: {len(services)}")
         lines.append(f"- technologies: {len(technologies)}")
         lines.append(f"- findings: {len(findings)}")
     lines.append("")
+
+    if candidates:
+        lines.append("## Candidate roots (confirm before expanding)")
+        for d in sorted(candidates, key=lambda e: e.id):
+            lines.append(f"- {d.id} (via {d.props.get('source', '?')})")
+        lines.append("")
 
     if domains:
         lines.append("## Domains")

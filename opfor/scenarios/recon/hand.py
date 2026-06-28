@@ -1,18 +1,18 @@
 """The recon hand. Maps an attack surface from a company's seed domains.
 
-Two actions, both reach-and-read, neither decides anything. `crtsh` is passive,
-it asks certificate transparency for the subdomains under a root. `get` is a
-single light HTTP read of a domain root, enough to tell what is alive and what
-stack it runs. The surface grows: querying a root yields many domains, each of
-which becomes a new thing to probe. Judgment, which domain is interesting or
-exposed, is left to the brain in a later slice.
+Actions, all reach-and-read, none decides anything. `subdomains` aggregates many
+passive sources, certificate transparency and passive DNS, and merges them,
+because no single source is complete. `resolve` checks DNS. `get` is a single
+light HTTP read of a domain root, enough to tell what is alive and what stack it
+runs. `discover_roots` looks for candidate root domains from an org keyword. The
+surface grows: querying a root yields many domains, each a new thing to probe.
+Judgment, which domain is interesting or exposed, is left to the brain.
 """
 
 from __future__ import annotations
 
 import json
 import socket
-import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -30,45 +30,14 @@ from opfor.model import (
     Technology,
 )
 from opfor.plugins.base import Hand
+from opfor.scenarios.recon.sources import SUBDOMAIN_SOURCES
 
 _BODY_CAP = 2048
 _GET_TIMEOUT = 8
-# crt.sh is reliably slow, give it room before treating the read as failed.
-_CRT_TIMEOUT = 60
+_ROOT_TIMEOUT = 30
 
 # Response headers that name a server-side or framework technology.
 _TECH_HEADERS = ("Server", "X-Powered-By", "X-AspNet-Version", "X-Generator")
-
-
-_CRT_RETRIES = 3
-
-
-def _real_crt_fetch(domain: str) -> list[str]:
-    """Ask crt.sh for every name seen under a domain. Passive, no target contact.
-
-    crt.sh frequently answers with a transient 502 or a slow read, so retry a
-    few times before giving up. A persistent failure still raises, so the engine
-    records it honestly rather than reporting an empty surface as clean.
-    """
-    url = f"https://crt.sh/?q=%25.{urllib.parse.quote(domain)}&output=json"
-    req = urllib.request.Request(url, headers={"User-Agent": "opfor-recon"})
-    rows = None
-    for attempt in range(_CRT_RETRIES):
-        try:
-            with urllib.request.urlopen(req, timeout=_CRT_TIMEOUT) as resp:
-                rows = json.loads(resp.read().decode("utf-8", "replace"))
-            break
-        except (urllib.error.URLError, json.JSONDecodeError, TimeoutError):
-            if attempt == _CRT_RETRIES - 1:
-                raise
-            time.sleep(2 * (attempt + 1))
-    names: set[str] = set()
-    for row in rows:
-        for raw in str(row.get("name_value", "")).splitlines():
-            name = raw.strip().lstrip("*.").lower()
-            if name:
-                names.add(name)
-    return sorted(names)
 
 
 def _real_resolve(domain: str) -> list[str]:
@@ -77,26 +46,69 @@ def _real_resolve(domain: str) -> list[str]:
     return sorted({ai[4][0] for ai in infos})
 
 
+# Two-label suffixes where the registrable domain needs three labels.
+_TWO_LABEL_TLDS = {
+    "co.uk", "com.cn", "com.hk", "com.sg", "com.tw", "co.jp", "com.au", "co.in"
+}
+
+
+def _apex(name: str) -> str:
+    """Best-effort registrable domain from a hostname."""
+    name = name.strip().lstrip("*.").lower()
+    parts = name.split(".")
+    if len(parts) >= 3 and ".".join(parts[-2:]) in _TWO_LABEL_TLDS:
+        return ".".join(parts[-3:])
+    return ".".join(parts[-2:]) if len(parts) >= 2 else name
+
+
+def _real_root_search(keyword: str) -> list[str]:
+    """Best-effort candidate root domains for a keyword, from crt.sh.
+
+    This is deliberately just a lead generator. Name based search is noisy, it
+    misses owned domains that do not contain the keyword and it picks up
+    unrelated holders of the same string. The operator confirms which candidates
+    are really in scope, the tool never asserts ownership.
+    """
+    url = f"https://crt.sh/?q={urllib.parse.quote(keyword)}&output=json"
+    req = urllib.request.Request(url, headers={"User-Agent": "opfor-recon"})
+    with urllib.request.urlopen(req, timeout=_ROOT_TIMEOUT) as resp:
+        rows = json.loads(resp.read().decode("utf-8", "replace"))
+    roots: set[str] = set()
+    for row in rows:
+        for raw in str(row.get("name_value", "")).splitlines():
+            name = raw.strip().lstrip("*.").lower()
+            apex = _apex(name)
+            # Keep only apexes that look like a domain and carry the keyword.
+            if "." in apex and keyword.lower() in apex:
+                roots.add(apex)
+    return sorted(roots)
+
+
 class ReconHand(Hand):
     name = "recon"
 
     def __init__(
         self,
-        crt_fetch: Callable[[str], list[str]] | None = None,
+        subdomain_sources: list[tuple[str, Callable[[str], list[str]]]] | None = None,
         resolve_fn: Callable[[str], list[str]] | None = None,
+        root_search: Callable[[str], list[str]] | None = None,
     ) -> None:
-        # Both injectable so the hand is unit-testable without network access.
-        self._crt_fetch = crt_fetch or _real_crt_fetch
+        # All injectable so the hand is unit-testable without network access.
+        self._sources = subdomain_sources if subdomain_sources is not None else SUBDOMAIN_SOURCES
         self._resolve_fn = resolve_fn or _real_resolve
+        self._root_search = root_search or _real_root_search
 
     # --- enumerate --------------------------------------------------------
 
     def enumerate(self, target: Target, graph: SituationGraph) -> list[Entrypoint]:
         eps: list[Entrypoint] = []
-        # One crt.sh query per seed root. One query returns every depth, so we do
-        # not recurse, which keeps the surface bounded.
+        # From an org seed, look for candidate root domains. Passive OSINT.
+        if target.kind == "org":
+            eps.append(self._discover_ep(target.id))
+        # One passive sweep per confirmed seed root. The sources return every
+        # depth, so we do not recurse, which keeps the surface bounded.
         if target.kind == "domain":
-            eps.append(self._crt_ep(target.id))
+            eps.append(self._subdomains_ep(target.id))
         resolved = {h.props.get("domain") for h in graph.entities("host")}  # type: ignore[attr-defined]
         for name, url in self._known_domains(graph).items():
             # Resolve every domain first, it is cheap. Only spend an HTTP probe on
@@ -107,13 +119,33 @@ class ReconHand(Hand):
         return eps
 
     def _known_domains(self, graph: SituationGraph) -> dict[str, str]:
+        # Confirmed seed roots plus subdomains discovered under them. Candidate
+        # roots are deliberately excluded, they are not expanded until an
+        # operator confirms them by adding them to scope and seeding them.
         domains: dict[str, str] = {}
         for t in graph.targets():
             if t.kind == "domain":
                 domains[t.id] = t.props.get("url") or f"https://{t.id}/"
         for d in graph.entities("domain"):
+            if d.props.get("candidate"):  # type: ignore[attr-defined]
+                continue
             domains[d.id] = d.props.get("url") or f"https://{d.id}/"  # type: ignore[attr-defined]
         return domains
+
+    def _discover_ep(self, org: str) -> Entrypoint:
+        return Entrypoint(
+            id=f"discover::{org}",
+            target_id=org,
+            kind="org-roots",
+            ref=org,
+            actions=("discover_roots",),
+            props={
+                "org": org,
+                "osint": True,
+                "scope_host": org,
+                "action_tiers": {"discover_roots": "recon"},
+            },
+        )
 
     def _resolve_ep(self, domain: str) -> Entrypoint:
         return Entrypoint(
@@ -129,17 +161,17 @@ class ReconHand(Hand):
             },
         )
 
-    def _crt_ep(self, domain: str) -> Entrypoint:
+    def _subdomains_ep(self, domain: str) -> Entrypoint:
         return Entrypoint(
-            id=f"crtsh::{domain}",
+            id=f"subdomains::{domain}",
             target_id=domain,
-            kind="crtsh-query",
+            kind="subdomain-sweep",
             ref=domain,
-            actions=("crtsh",),
+            actions=("subdomains",),
             props={
                 "domain": domain,
                 "scope_host": domain,
-                "action_tiers": {"crtsh": "recon"},
+                "action_tiers": {"subdomains": "recon"},
             },
         )
 
@@ -161,13 +193,44 @@ class ReconHand(Hand):
     # --- act --------------------------------------------------------------
 
     def act(self, entrypoint: Entrypoint, action: str, params: dict) -> Observation:
-        if action == "crtsh":
-            return self._act_crtsh(entrypoint)
+        if action == "discover_roots":
+            return self._act_discover(entrypoint)
+        if action == "subdomains":
+            return self._act_subdomains(entrypoint)
         if action == "resolve":
             return self._act_resolve(entrypoint)
         if action == "get":
             return self._act_get(entrypoint)
-        raise ValueError(f"recon hand supports crtsh, resolve, get, got: {action}")
+        raise ValueError(
+            f"recon hand supports discover_roots, subdomains, resolve, get, got: {action}"
+        )
+
+    def _act_subdomains(self, entrypoint: Entrypoint) -> Observation:
+        """Query every passive source and merge. One source failing is fine."""
+        domain = entrypoint.props["domain"]
+        names: set[str] = set()
+        report: dict[str, object] = {}
+        for label, fetch in self._sources:
+            try:
+                got = fetch(domain)
+                names.update(got)
+                report[label] = len(got)
+            except Exception as exc:  # any source may flake, keep going
+                report[label] = f"error:{type(exc).__name__}"
+        return Observation(
+            entrypoint_id=entrypoint.id,
+            action="subdomains",
+            raw={"domain": domain, "names": sorted(names), "sources": report},
+        )
+
+    def _act_discover(self, entrypoint: Entrypoint) -> Observation:
+        org = entrypoint.props["org"]
+        try:
+            roots = self._root_search(org)
+            raw = {"org": org, "roots": roots}
+        except (urllib.error.URLError, json.JSONDecodeError, TimeoutError) as exc:
+            raw = {"org": org, "error": str(exc)}
+        return Observation(entrypoint_id=entrypoint.id, action="discover_roots", raw=raw)
 
     def _act_resolve(self, entrypoint: Entrypoint) -> Observation:
         domain = entrypoint.props["domain"]
@@ -177,15 +240,6 @@ class ReconHand(Hand):
         except OSError as exc:
             raw = {"domain": domain, "ips": [], "error": str(exc)}
         return Observation(entrypoint_id=entrypoint.id, action="resolve", raw=raw)
-
-    def _act_crtsh(self, entrypoint: Entrypoint) -> Observation:
-        domain = entrypoint.props["domain"]
-        try:
-            names = self._crt_fetch(domain)
-            raw = {"domain": domain, "names": names}
-        except (urllib.error.URLError, json.JSONDecodeError, TimeoutError) as exc:
-            raw = {"domain": domain, "error": str(exc)}
-        return Observation(entrypoint_id=entrypoint.id, action="crtsh", raw=raw)
 
     def _act_get(self, entrypoint: Entrypoint) -> Observation:
         url = entrypoint.props["url"]
@@ -214,13 +268,34 @@ class ReconHand(Hand):
     # --- normalize --------------------------------------------------------
 
     def normalize(self, observation: Observation) -> list[Fact]:
-        if observation.action == "crtsh":
-            return self._norm_crtsh(observation)
+        if observation.action == "discover_roots":
+            return self._norm_discover(observation)
+        if observation.action == "subdomains":
+            return self._norm_subdomains(observation)
         if observation.action == "resolve":
             return self._norm_resolve(observation)
         if observation.action == "get":
             return self._norm_get(observation)
         return []
+
+    def _norm_discover(self, obs: Observation) -> list[Fact]:
+        raw = obs.raw
+        if raw.get("error"):
+            return [Fact(kind="discover-failed", about=obs.entrypoint_id, data={"error": raw["error"]})]
+        org = raw["org"]
+        # Candidate roots only, flagged so they are recorded but not expanded.
+        candidates = tuple(
+            Domain(id=root, props={"candidate": True, "org": org, "source": "crtsh-org"})
+            for root in raw.get("roots", [])
+        )
+        return [
+            Fact(
+                kind="candidate-roots",
+                about=obs.entrypoint_id,
+                data={"org": org, "count": len(candidates)},
+                yields=candidates,
+            )
+        ]
 
     def _norm_resolve(self, obs: Observation) -> list[Fact]:
         raw = obs.raw
@@ -244,23 +319,25 @@ class ReconHand(Hand):
             )
         ]
 
-    def _norm_crtsh(self, obs: Observation) -> list[Fact]:
+    def _norm_subdomains(self, obs: Observation) -> list[Fact]:
         raw = obs.raw
-        if raw.get("error"):
-            return [Fact(kind="crtsh-failed", about=obs.entrypoint_id, data={"error": raw["error"]})]
         root = raw["domain"]
-        # Keep only names actually under the queried root, crt.sh sometimes lists
-        # unrelated certificate names. This is data hygiene, not a scope decision.
+        # Clean and dedupe across all sources, then keep only names actually under
+        # the queried root. This is data hygiene, not a scope decision.
+        clean: set[str] = set()
+        for name in raw.get("names", []):
+            n = str(name).strip().lstrip("*.").lower()
+            if n and (n == root or n.endswith("." + root)):
+                clean.add(n)
         discovered = tuple(
-            Domain(id=name, props={"parent": root, "depth": name.count(".")})
-            for name in raw.get("names", [])
-            if name == root or name.endswith("." + root)
+            Domain(id=n, props={"parent": root, "depth": n.count(".")})
+            for n in sorted(clean)
         )
         return [
             Fact(
                 kind="subdomains-found",
                 about=obs.entrypoint_id,
-                data={"root": root, "count": len(discovered)},
+                data={"root": root, "count": len(discovered), "sources": raw.get("sources", {})},
                 yields=discovered,
             )
         ]

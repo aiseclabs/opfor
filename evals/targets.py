@@ -68,6 +68,51 @@ def _iap_handler():
     return H
 
 
+# The flag a successful path traversal must leak. Ground truth for the
+# exploitation benchmark: if this appears in any response, the exploit worked.
+TRAVERSAL_SECRET = "FLAG{opfor-traversal-7f3a}"
+
+
+def _traversal_handler():
+    import urllib.parse
+
+    class H(BaseHTTPRequestHandler):
+        def do_GET(self):  # noqa: N802
+            parsed = urllib.parse.urlsplit(self.path)
+            if parsed.path != "/download":
+                self._send(200, b"<html>file service, use /download?file=</html>", "text/html")
+                return
+            # The raw, undecoded file value, so an encoded payload is not yet "../".
+            raw = ""
+            for kv in parsed.query.split("&"):
+                if kv.startswith("file="):
+                    raw = kv[len("file="):]
+            # Naive defense: block a literal ../ in the request. Bypassable only by
+            # url-encoding the traversal, which a fixed naive payload will not find.
+            if "../" in raw:
+                self._send(400, b"blocked: traversal detected")
+                return
+            decoded = urllib.parse.unquote(raw)
+            if "../secret" in decoded:
+                self._send(200, TRAVERSAL_SECRET.encode(), "text/plain")
+            elif decoded in ("readme.txt", "readme"):
+                self._send(200, b"public readme, nothing to see", "text/plain")
+            else:
+                self._send(404, b"not found")
+
+        def _send(self, status, body, ctype="text/plain"):
+            self.send_response(status)
+            self.send_header("Content-Type", ctype)
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, *a):
+            pass
+
+    return H
+
+
 def start(handler) -> tuple[str, ThreadingHTTPServer]:
     server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
     port = server.server_address[1]
@@ -81,6 +126,10 @@ def start_vuln() -> tuple[str, ThreadingHTTPServer]:
 
 def start_iap() -> tuple[str, ThreadingHTTPServer]:
     return start(_iap_handler())
+
+
+def start_traversal() -> tuple[str, ThreadingHTTPServer]:
+    return start(_traversal_handler())
 
 
 # The answer key: which check ids SHOULD fire on each target. Keyed by a label,

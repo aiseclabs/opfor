@@ -135,3 +135,28 @@
   match:
     status: 200
     body_contains: "secret"
+
+- id: jwt-alg-none
+  type: jwt
+  severity: critical
+  title: JWT alg=none accepted (auth bypass via none algorithm)
+  login:
+    path: "/api/auth/jwt/weak-key/login"
+    body: {user: admin, password: admin, op: basic}
+    token_field: token
+  attack: alg_none
+  validate:
+    path: "/api/auth/jwt/hmac/validate"
+  match:
+    status: 200
+    body_contains: "secret"
+
+- id: ssrf-cloud-metadata
+  severity: critical
+  title: SSRF reaches cloud metadata service (169.254.169.254)
+  request:
+    method: GET
+    path: "/api/file/aws?path=http%3A%2F%2F169.254.169.254%2Flatest%2Fmeta-data%2F"
+  match:
+    status: 200
+    body_contains: "ami-id"

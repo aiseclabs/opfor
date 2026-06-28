@@ -24,9 +24,12 @@ class ApiscanPlanner(Planner):
             base = t.props.get("url") or f"https://{t.id}/"
             host = t.props.get("host", t.id)
             for tpl in self._templates:
+                # A template's type selects the executor: a multi-step jwt flow
+                # or the default single request-and-match active check.
+                capability = "jwt_attack" if tpl.get("type") == "jwt" else "active_check"
                 tasks.append(Task(
                     id=f"check:{t.id}:{tpl['id']}",
-                    capability="active_check",
+                    capability=capability,
                     target=t.id,
                     params={"base_url": base, "template": tpl},
                     tier="intrusive",

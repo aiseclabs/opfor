@@ -12,7 +12,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import pytest
 
 from opfor.engine.tasks import Task
-from opfor.scenarios.apiscan.executors import ActiveCheckExecutor, _matches
+from opfor.scenarios.apiscan.executors import ActiveCheckExecutor, JwtAttackExecutor, _matches
 
 
 def test_matcher_conditions():
@@ -33,6 +33,19 @@ class _StubHandler(BaseHTTPRequestHandler):
     def do_GET(self):  # noqa: N802
         if self.path.startswith("/api/file?path=/etc/passwd"):
             self._send(200, b"root:x:0:0:root:/root:/bin/sh")
+        elif self.path == "/validate":
+            # Mimic the signature-not-checked bug: accept any token present.
+            if self.headers.get("Authorization"):
+                self._send(200, b'{"secret":"this is our secret"}')
+            else:
+                self._send(403, b"forbidden")
+        else:
+            self._send(404, b"nope")
+
+    def do_POST(self):  # noqa: N802
+        if self.path == "/login":
+            self.rfile.read(int(self.headers.get("Content-Length", 0)))
+            self._send(200, b'{"token":"aaa.bbb.ccc"}')
         else:
             self._send(404, b"nope")
 
@@ -69,6 +82,22 @@ def test_executor_fires_finding_on_vulnerable_response(apiscan_stub):
     facts = ex.perceive(ex.run(task, None))
     findings = [e for f in facts for e in f.yields]
     assert findings and findings[0].props["severity"] == "high"
+
+
+def test_jwt_attack_executor_logs_in_tampers_and_replays(apiscan_stub):
+    tpl = {
+        "id": "jwt-sig", "type": "jwt", "severity": "critical", "title": "JWT sig not verified",
+        "login": {"path": "/login", "body": {"user": "admin", "password": "admin"}, "token_field": "token"},
+        "attack": "tamper_signature",
+        "validate": {"path": "/validate"},
+        "match": {"status": 200, "body_contains": "secret"},
+    }
+    ex = JwtAttackExecutor()
+    task = Task(id="t", capability="jwt_attack", target="stub",
+                params={"base_url": apiscan_stub, "template": tpl}, tier="intrusive", scope_host="stub")
+    facts = ex.perceive(ex.run(task, None))
+    findings = [e for f in facts for e in f.yields]
+    assert findings and findings[0].props["severity"] == "critical"
 
 
 def test_executor_clean_on_safe_response(apiscan_stub):

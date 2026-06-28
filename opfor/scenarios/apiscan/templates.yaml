@@ -118,3 +118,20 @@
   match:
     status: 200
     body_contains: "cardNumber"
+
+# A multi-step JWT attack: log in, tamper the token's signature, replay it
+# against a validate endpoint that does not verify the signature.
+- id: jwt-signature-not-verified
+  type: jwt
+  severity: critical
+  title: JWT signature not verified (auth bypass, server secret disclosed)
+  login:
+    path: "/api/auth/jwt/weak-key/login"
+    body: {user: admin, password: admin, op: basic}
+    token_field: token
+  attack: tamper_signature
+  validate:
+    path: "/api/auth/jwt/rsa/signature/validate"
+  match:
+    status: 200
+    body_contains: "secret"

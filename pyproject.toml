@@ -24,5 +24,5 @@ include = ["opfor*"]
 [tool.setuptools.package-data]
 opfor = [
     "scenarios/*/knowledge/**/*.md",
-    "scenarios/*/detection.yaml",
+    "scenarios/*/*.yaml",
 ]

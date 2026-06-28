@@ -82,6 +82,49 @@ def test_osint_discovery_is_authorized_even_with_empty_scope():
     assert scope.authorize(SituationGraph(), disc_ep, "discover_roots").allowed
 
 
+_GIT_CHECK = {
+    "id": "git-config-exposed",
+    "path": "/.git/config",
+    "severity": "high",
+    "title": "Exposed .git/config",
+    "match": {"status": 200, "body_contains": "[core]"},
+}
+
+
+def test_check_fires_finding_on_exposed_git(stub_server):
+    hand = ReconHand(checks=[_GIT_CHECK])
+    ep = hand._check_ep(stub_server + "/", "probe.example.com", _GIT_CHECK)
+    facts = hand.normalize(hand.act(ep, "check", {}))
+    findings = [e for f in facts for e in f.yields]
+    assert findings and findings[0].kind == "finding"
+    assert findings[0].props["severity"] == "high"
+    assert findings[0].props["domain"] == "probe.example.com"
+
+
+def test_check_clean_when_signature_absent(stub_server):
+    miss = {**_GIT_CHECK, "path": "/nope"}
+    hand = ReconHand(checks=[miss])
+    ep = hand._check_ep(stub_server + "/", "probe.example.com", miss)
+    facts = hand.normalize(hand.act(ep, "check", {}))
+    assert facts[0].kind == "check-clean"
+    assert not [e for f in facts for e in f.yields]
+
+
+def test_checks_only_enumerated_for_live_services():
+    from opfor.model import Service
+
+    hand = ReconHand(subdomain_sources=[], checks=[_GIT_CHECK])
+    graph = SituationGraph()
+    graph.add_target(_seed())
+    # No service yet, no checks.
+    eps = {e.id for e in hand.enumerate(_seed(), graph)}
+    assert not any(e.startswith("check::") for e in eps)
+    # A live service spawns the check entrypoints.
+    graph.add_entity(Service(id="https://x.example.com/", props={"domain": "x.example.com", "status": 200}))
+    eps = {e.id for e in hand.enumerate(_seed(), graph)}
+    assert "check::https://x.example.com/::git-config-exposed" in eps
+
+
 def test_resolve_marks_live_and_dead():
     live = ReconHand(resolve_fn=lambda d: ["1.2.3.4"])
     facts = live.normalize(live.act(live._resolve_ep("live.example.com"), "resolve", {}))

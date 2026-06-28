@@ -23,6 +23,7 @@ from opfor.model import (
     Domain,
     Entrypoint,
     Fact,
+    Finding,
     Host,
     Observation,
     Service,
@@ -92,11 +93,15 @@ class ReconHand(Hand):
         subdomain_sources: list[tuple[str, Callable[[str], list[str]]]] | None = None,
         resolve_fn: Callable[[str], list[str]] | None = None,
         root_search: Callable[[str], list[str]] | None = None,
+        checks: list[dict] | None = None,
     ) -> None:
         # All injectable so the hand is unit-testable without network access.
         self._sources = subdomain_sources if subdomain_sources is not None else SUBDOMAIN_SOURCES
         self._resolve_fn = resolve_fn or _real_resolve
         self._root_search = root_search or _real_root_search
+        # Security checks are data the scenario wires in, the hand stays a
+        # generic matcher engine that applies whatever it is given (nuclei model).
+        self._checks = checks or []
 
     # --- enumerate --------------------------------------------------------
 
@@ -116,6 +121,10 @@ class ReconHand(Hand):
             eps.append(self._resolve_ep(name))
             if name in resolved:
                 eps.append(self._get_ep(name, url))
+        # Security checks run only on services we confirmed are live.
+        for svc in graph.entities("service"):
+            for check in self._checks:
+                eps.append(self._check_ep(svc.id, svc.props.get("domain"), check))  # type: ignore[attr-defined]
         return eps
 
     def _known_domains(self, graph: SituationGraph) -> dict[str, str]:
@@ -175,6 +184,24 @@ class ReconHand(Hand):
             },
         )
 
+    def _check_ep(self, service_url: str, domain: str, check: dict) -> Entrypoint:
+        cid = check["id"]
+        return Entrypoint(
+            id=f"check::{service_url}::{cid}",
+            target_id=domain,
+            kind="security-check",
+            ref=f"{cid} {check.get('path', '/')}",
+            actions=("check",),
+            props={
+                "url": service_url,
+                "path": check.get("path", "/"),
+                "domain": domain,
+                "check": check,
+                "scope_host": domain,
+                "action_tiers": {"check": "probe"},
+            },
+        )
+
     def _get_ep(self, domain: str, url: str) -> Entrypoint:
         return Entrypoint(
             id=f"get::{domain}",
@@ -201,9 +228,35 @@ class ReconHand(Hand):
             return self._act_resolve(entrypoint)
         if action == "get":
             return self._act_get(entrypoint)
+        if action == "check":
+            return self._act_check(entrypoint)
         raise ValueError(
-            f"recon hand supports discover_roots, subdomains, resolve, get, got: {action}"
+            f"recon hand supports discover_roots, subdomains, resolve, get, check, got: {action}"
         )
+
+    def _act_check(self, entrypoint: Entrypoint) -> Observation:
+        base = entrypoint.props["url"]
+        path = entrypoint.props["path"]
+        check = entrypoint.props["check"]
+        domain = entrypoint.props["domain"]
+        url = urllib.parse.urljoin(base, path.lstrip("/"))
+        req = urllib.request.Request(url, method="GET")
+        common = {"domain": domain, "url": url, "check": check}
+        try:
+            with urllib.request.urlopen(req, timeout=_GET_TIMEOUT) as resp:
+                body = resp.read(_BODY_CAP).decode("utf-8", "replace")
+                raw = {**common, "status": resp.status, "headers": dict(resp.headers.items()), "body": body}
+        except urllib.error.HTTPError as exc:
+            body = exc.read(_BODY_CAP).decode("utf-8", "replace")
+            raw = {
+                **common,
+                "status": exc.code,
+                "headers": dict(exc.headers.items()) if exc.headers else {},
+                "body": body,
+            }
+        except urllib.error.URLError as exc:
+            raw = {**common, "status": None, "error": str(exc.reason)}
+        return Observation(entrypoint_id=entrypoint.id, action="check", raw=raw)
 
     def _act_subdomains(self, entrypoint: Entrypoint) -> Observation:
         """Query every passive source and merge. One source failing is fine."""
@@ -276,7 +329,48 @@ class ReconHand(Hand):
             return self._norm_resolve(observation)
         if observation.action == "get":
             return self._norm_get(observation)
+        if observation.action == "check":
+            return self._norm_check(observation)
         return []
+
+    def _norm_check(self, obs: Observation) -> list[Fact]:
+        raw = obs.raw
+        check = raw.get("check", {})
+        cid = check.get("id", "check")
+        if raw.get("error"):
+            return [Fact(kind="check-failed", about=obs.entrypoint_id, data={"id": cid, "error": raw["error"]})]
+        match = check.get("match", {})
+        hit = True
+        if "status" in match and raw.get("status") != match["status"]:
+            hit = False
+        if "body_contains" in match:
+            body = (raw.get("body") or "").lower()
+            if str(match["body_contains"]).lower() not in body:
+                hit = False
+        if "header_missing" in match:
+            present = {k.lower() for k in (raw.get("headers") or {})}
+            if str(match["header_missing"]).lower() in present:
+                hit = False
+        if not hit:
+            return [Fact(kind="check-clean", about=obs.entrypoint_id, data={"id": cid})]
+        finding = Finding(
+            id=f"finding:{cid}:{raw.get('domain')}",
+            props={
+                "title": check.get("title", cid),
+                "severity": check.get("severity", "info"),
+                "domain": raw.get("domain"),
+                "url": raw.get("url"),
+                "evidence": f"{cid} matched at {raw.get('url')} (status {raw.get('status')})",
+            },
+        )
+        return [
+            Fact(
+                kind="vuln",
+                about=obs.entrypoint_id,
+                data={"id": cid, "severity": check.get("severity")},
+                yields=(finding,),
+            )
+        ]
 
     def _norm_discover(self, obs: Observation) -> list[Fact]:
         raw = obs.raw

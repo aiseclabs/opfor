@@ -27,7 +27,10 @@ from opfor.model import (
 # generation counter and prompts the loop to re-enumerate. A discovered domain
 # is new surface, and a domain that resolves to a host becomes probeable, so
 # both belong here.
-_SURFACE_CHANGING = {"target", "credential", "identity", "artifact", "domain", "host"}
+# A live service is new surface too, it spawns the security checks to run on it.
+_SURFACE_CHANGING = {
+    "target", "credential", "identity", "artifact", "domain", "host", "service"
+}
 
 
 class SituationGraph:

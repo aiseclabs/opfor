@@ -23,6 +23,8 @@ class _StubHandler(BaseHTTPRequestHandler):
             self._respond(200, b"admin area")
         elif self.path == "/about":
             self._respond(200, b"about page")
+        elif self.path == "/.git/config":
+            self._respond(200, b"[core]\n\trepositoryformatversion = 0\n")
         else:
             self._respond(404, b"not found")
 

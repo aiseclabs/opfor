@@ -1,0 +1,66 @@
+# Security checks, data not code. This is the miniature of a nuclei template set:
+# the hand is a generic matcher engine, these entries are the knowledge. Each
+# check fetches a path on a live service and matches the raw response. A check
+# fires a finding only when every key in `match` holds.
+#
+# match keys (all must hold):
+#   status: int            response status equals this
+#   body_contains: str     response body contains this (case-insensitive)
+#   header_missing: str    this response header is absent
+#
+# Keep checks safe and high-signal. Nothing here sends a payload, they are plain
+# GETs of well-known paths plus header hygiene on the root.
+
+- id: git-config-exposed
+  path: /.git/config
+  severity: high
+  title: Exposed .git/config (source code disclosure)
+  match:
+    status: 200
+    body_contains: "[core]"
+
+- id: dotenv-exposed
+  path: /.env
+  severity: high
+  title: Exposed .env file (secrets disclosure)
+  match:
+    status: 200
+    body_contains: "="
+
+- id: actuator-exposed
+  path: /actuator/env
+  severity: high
+  title: Spring Boot actuator env exposed
+  match:
+    status: 200
+    body_contains: "propertySources"
+
+- id: swagger-exposed
+  path: /swagger.json
+  severity: info
+  title: API schema (swagger) publicly readable
+  match:
+    status: 200
+    body_contains: "swagger"
+
+- id: dir-listing
+  path: /
+  severity: medium
+  title: Directory listing enabled
+  match:
+    status: 200
+    body_contains: "Index of /"
+
+- id: missing-hsts
+  path: /
+  severity: low
+  title: Missing Strict-Transport-Security header
+  match:
+    header_missing: Strict-Transport-Security
+
+- id: missing-csp
+  path: /
+  severity: low
+  title: Missing Content-Security-Policy header
+  match:
+    header_missing: Content-Security-Policy

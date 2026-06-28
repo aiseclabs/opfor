@@ -112,9 +112,27 @@ def render(
         lines.append(f"- {kind}: {counts[kind]}")
     lines.append("")
 
-    facts = graph.facts()
+    favicons = [f for f in graph.facts() if f.kind == "favicon"]
+    if favicons:
+        clusters: dict[int, list[str]] = {}
+        for f in favicons:
+            clusters.setdefault(f.data["hash"], []).append(f.data["domain"])
+        lines.append("## Favicon clusters")
+        for h, domains in sorted(clusters.items(), key=lambda kv: -len(kv[1])):
+            lines.append(f"- hash {h}: {len(domains)} hosts, pivot with `http.favicon.hash:{h}`")
+            for d in sorted(domains)[:8]:
+                lines.append(f"  - {d}")
+            if len(domains) > 8:
+                lines.append(f"  - ... and {len(domains) - 8} more")
+        lines.append("")
+
+    # Per-host favicon facts are summarized in the clusters section above, so
+    # leave them out of the raw fact dump to keep it readable.
+    facts = [f for f in graph.facts() if f.kind != "favicon"]
     if facts:
         lines.append("## Facts")
-        for fact in facts:
+        for fact in facts[:40]:
             lines.append(f"- {fact.kind} on {fact.about} {fact.data or ''}".rstrip())
+        if len(facts) > 40:
+            lines.append(f"- ... and {len(facts) - 40} more")
     return "\n".join(lines) + "\n"

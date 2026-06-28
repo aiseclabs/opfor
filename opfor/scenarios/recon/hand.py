@@ -34,6 +34,7 @@ from opfor.model import (
     Technology,
 )
 from opfor.plugins.base import Hand
+from opfor.scenarios.recon.favicon import favicon_hash
 from opfor.scenarios.recon.sources import (
     SUBDOMAIN_SOURCES,
     root_keyword,
@@ -119,6 +120,9 @@ class ReconHand(Hand):
         checkable = [s for s in services if s.props.get("status") is not None]  # type: ignore[attr-defined]
         if checkable and self._checks:
             eps.append(self._check_batch_ep(checkable, len(checkable)))
+        # Fingerprint favicons of live services in one concurrent batch.
+        if checkable:
+            eps.append(self._favicon_batch_ep(checkable, len(checkable)))
         return eps
 
     def _known_domains(self, graph: SituationGraph) -> dict[str, str]:
@@ -234,6 +238,20 @@ class ReconHand(Hand):
             },
         )
 
+    def _favicon_batch_ep(self, services: list, seq: int) -> Entrypoint:
+        return Entrypoint(
+            id=f"favicon-batch::{seq}",
+            target_id="(batch)",
+            kind="favicon-batch",
+            ref=f"{len(services)} favicons",
+            actions=("favicon_all",),
+            props={
+                "items": [{"url": s.id, "domain": s.props.get("domain")} for s in services],
+                "scope_hosts": [s.props.get("domain") for s in services],
+                "action_tiers": {"favicon_all": "probe"},
+            },
+        )
+
     def _check_ep(self, service_url: str, domain: str, check: dict) -> Entrypoint:
         cid = check["id"]
         return Entrypoint(
@@ -286,6 +304,8 @@ class ReconHand(Hand):
             return self._act_check(entrypoint)
         if action == "check_all":
             return self._act_check_all(entrypoint)
+        if action == "favicon_all":
+            return self._act_favicon_all(entrypoint)
         raise ValueError(
             f"recon hand supports discover_roots, subdomains, resolve_all, "
             f"get, probe_all, check, check_all, got: {action}"
@@ -310,6 +330,24 @@ class ReconHand(Hand):
         url = urllib.parse.urljoin(base, path.lstrip("/"))
         raw = {**_http_get(url, _BODY_CAP), "domain": domain, "check": check}
         return Observation(entrypoint_id=entrypoint.id, action="check", raw=raw)
+
+    def _act_favicon_all(self, entrypoint: Entrypoint) -> Observation:
+        items = entrypoint.props["items"]
+
+        def one(item):
+            url = urllib.parse.urljoin(item["url"], "favicon.ico")
+            try:
+                req = urllib.request.Request(url, method="GET")
+                with urllib.request.urlopen(req, timeout=_GET_TIMEOUT) as resp:
+                    content = resp.read(200_000)
+                    h = favicon_hash(content) if content and resp.status == 200 else None
+                    return {"domain": item["domain"], "url": url, "hash": h, "status": resp.status}
+            except Exception as exc:  # any host may not serve a favicon
+                return {"domain": item["domain"], "url": url, "hash": None, "error": type(exc).__name__}
+
+        with ThreadPoolExecutor(max_workers=_RESOLVE_WORKERS) as pool:
+            results = list(pool.map(one, items))
+        return Observation(entrypoint_id=entrypoint.id, action="favicon_all", raw={"results": results})
 
     def _act_check_all(self, entrypoint: Entrypoint) -> Observation:
         items = entrypoint.props["items"]
@@ -414,7 +452,24 @@ class ReconHand(Hand):
             return self._norm_check(observation)
         if observation.action == "check_all":
             return self._norm_check_all(observation)
+        if observation.action == "favicon_all":
+            return self._norm_favicon_all(observation)
         return []
+
+    def _norm_favicon_all(self, obs: Observation) -> list[Fact]:
+        facts = []
+        for r in obs.raw.get("results", []):
+            if r.get("hash") is not None:
+                facts.append(
+                    Fact(
+                        kind="favicon",
+                        about=r["domain"],
+                        data={"domain": r["domain"], "url": r["url"], "hash": r["hash"]},
+                    )
+                )
+        return facts or [
+            Fact(kind="favicon-none", about=obs.entrypoint_id, data={"checked": len(obs.raw.get("results", []))})
+        ]
 
     def _check_finding(self, raw: dict) -> Finding | None:
         """Apply a check's data-defined matcher to one raw response."""

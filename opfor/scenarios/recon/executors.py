@@ -229,7 +229,15 @@ class HttpProbeExecutor(Executor):
     capability = "http_probe"
 
     def run(self, task, graph) -> Observation:
-        raw = {**http_get(task.params["url"]), "domain": task.target}
+        url = task.params["url"]
+        raw = http_get(url)
+        # Some hosts serve http only. If https did not respond at all, fall back
+        # to http once, so an http-only target is not silently dropped as dead.
+        if raw.get("status") is None and url.startswith("https://"):
+            alt = http_get("http://" + url[len("https://"):])
+            if alt.get("status") is not None:
+                raw = alt
+        raw = {**raw, "domain": task.target}
         return Observation(entrypoint_id=task.id, action="http_probe", raw=raw)
 
     def perceive(self, observation) -> list[Fact]:

@@ -72,6 +72,41 @@ def test_http_probe_fingerprints(stub_server):
     assert any(e.kind == "technology" for e in yielded)  # stub sends a Server header
 
 
+def test_http_probe_falls_back_to_http_when_https_dead(monkeypatch):
+    from opfor.scenarios.recon import executors as ex_mod
+
+    seen = []
+
+    def fake_get(url, *a, **k):
+        seen.append(url)
+        if url.startswith("https://"):
+            return {"url": url, "status": None, "error": "connection refused"}
+        return {"url": url, "status": 200, "headers": {"Server": "nginx"}, "body": ""}
+
+    monkeypatch.setattr(ex_mod, "http_get", fake_get)
+    ex = ex_mod.HttpProbeExecutor()
+    obs = ex.run(_task("http_probe", "http-only.example.com", url="https://http-only.example.com/"), None)
+    assert obs.raw["status"] == 200
+    assert obs.raw["url"].startswith("http://")
+    assert seen == ["https://http-only.example.com/", "http://http-only.example.com/"]
+
+
+def test_http_probe_keeps_https_when_it_responds(monkeypatch):
+    from opfor.scenarios.recon import executors as ex_mod
+
+    seen = []
+
+    def fake_get(url, *a, **k):
+        seen.append(url)
+        return {"url": url, "status": 200, "headers": {}, "body": ""}
+
+    monkeypatch.setattr(ex_mod, "http_get", fake_get)
+    ex = ex_mod.HttpProbeExecutor()
+    obs = ex.run(_task("http_probe", "ok.example.com", url="https://ok.example.com/"), None)
+    assert obs.raw["url"] == "https://ok.example.com/"
+    assert seen == ["https://ok.example.com/"]  # no http fallback when https answers
+
+
 def test_http_check_fires_and_clears(stub_server):
     ex = HttpCheckExecutor()
     hit = ex.perceive(ex.run(_task("http_check", "h", url=stub_server, path="/.git/config", check=_GIT_CHECK), None))

@@ -1,9 +1,10 @@
 # opfor roadmap
 
 Current state: blackboard + PEP architecture; two-level fanout fully automatic
-(org -> domains -> services -> endpoints -> vulns); self-built, evidence-driven.
-Validated live on brokencrystals (69 endpoints auto-enumerated, vulns auto-found)
-and offline (recon/apiscan/endpoint/exploit eval harnesses). 55 tests green.
+(org -> domains -> services -> endpoints -> vulns), driven end to end by a single
+`opfor run campaigns/fullscan-example`. Self-built, evidence-driven. Validated
+live on brokencrystals (69 endpoints auto-enumerated, vulns auto-found) and
+offline (recon/apiscan/endpoint/exploit eval harnesses). 60 tests green.
 
 Remaining work, grouped by area.
 
@@ -43,7 +44,6 @@ Remaining work, grouped by area.
   stays fully self-built).
 
 ## CLI / product
-- Wire `websurface` end to end through a campaign: a single `opfor run` from a
-  domain to a domain -> endpoints -> vulns report.
-- Fix the https-only probe assumption (try http fallback for http-only targets).
-- A `fullscan` example campaign.
+- Done: `websurface` wired end to end via `campaigns/fullscan-example`, http
+  fallback for http-only targets, endpoint url scheme follows the service.
+- Per-campaign report polish (group findings by host, severity rollup).

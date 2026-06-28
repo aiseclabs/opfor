@@ -32,13 +32,16 @@ _SCRIPT_SRC = re.compile(r"""<script[^>]+src=['"]([^'"]+\.js[^'"]*)['"]""", re.I
 _MAX_JS = 8
 
 
-def _endpoint(host: str, method: str, path: str, source: str, confidence: str, params=None) -> Endpoint:
+def _endpoint(host: str, method: str, path: str, source: str, confidence: str, params=None, base=None) -> Endpoint:
+    # Scheme follows the service the endpoint was found on (an http-only host must
+    # not get https endpoint urls), defaulting to https for host-only sources.
+    scheme = urllib.parse.urlsplit(base).scheme if base else "https"
     return Endpoint(
         id=f"{method.upper()} {path}",
         props={
             "host": host, "method": method.upper(), "path": path,
             "params": params or [], "source": source, "confidence": confidence,
-            "url": f"https://{host}{path}",
+            "url": f"{scheme or 'https'}://{host}{path}",
         },
     )
 
@@ -65,8 +68,8 @@ class OpenApiExecutor(Executor):
                 continue
             if isinstance(spec, dict) and "paths" in spec:
                 return Observation(entrypoint_id=task.id, action="openapi_parse",
-                                   raw={"host": host, "spec_url": base + sp, "spec": spec["paths"]})
-        return Observation(entrypoint_id=task.id, action="openapi_parse", raw={"host": host, "spec": None})
+                                   raw={"host": host, "base": base, "spec_url": base + sp, "spec": spec["paths"]})
+        return Observation(entrypoint_id=task.id, action="openapi_parse", raw={"host": host, "base": base, "spec": None})
 
     def perceive(self, observation) -> list[Fact]:
         raw = observation.raw
@@ -82,7 +85,7 @@ class OpenApiExecutor(Executor):
                 if method.lower() not in _HTTP_VERBS:
                     continue
                 params = [p.get("name") for p in (info.get("parameters") or []) if isinstance(p, dict)]
-                endpoints.append(_endpoint(host, method, path, "openapi", "high", params))
+                endpoints.append(_endpoint(host, method, path, "openapi", "high", params, base=raw.get("base")))
         return [Fact(kind="endpoints-found", about=observation.entrypoint_id,
                      data={"host": host, "source": "openapi", "count": len(endpoints), "spec_url": raw.get("spec_url")},
                      yields=tuple(endpoints))]
@@ -107,12 +110,12 @@ class JsEndpointsExecutor(Executor):
             js = http_get(url, body_cap=400_000)
             paths.update(_JS_PATH.findall(js.get("body") or ""))
         return Observation(entrypoint_id=task.id, action="js_endpoints",
-                           raw={"host": host, "paths": sorted(paths), "js_count": len(js_srcs)})
+                           raw={"host": host, "base": base, "paths": sorted(paths), "js_count": len(js_srcs)})
 
     def perceive(self, observation) -> list[Fact]:
         raw = observation.raw
         host = raw["host"]
-        eps = tuple(_endpoint(host, "GET", p, "js", "medium") for p in raw.get("paths", []))
+        eps = tuple(_endpoint(host, "GET", p, "js", "medium", base=raw.get("base")) for p in raw.get("paths", []))
         return [Fact(kind="endpoints-found", about=observation.entrypoint_id,
                      data={"host": host, "source": "js", "count": len(eps)}, yields=eps)]
 

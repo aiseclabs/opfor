@@ -24,8 +24,9 @@ from opfor.model import (
 )
 
 # Adding one of these kinds may unlock new entrypoints, so it bumps the
-# generation counter and prompts the loop to re-enumerate.
-_SURFACE_CHANGING = {"target", "credential", "identity", "artifact"}
+# generation counter and prompts the loop to re-enumerate. A discovered domain
+# is new surface, it should grow a probe entrypoint, so it belongs here too.
+_SURFACE_CHANGING = {"target", "credential", "identity", "artifact", "domain"}
 
 
 class SituationGraph:

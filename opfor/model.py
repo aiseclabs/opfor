@@ -65,6 +65,33 @@ class Artifact:
     props: dict[str, Any] = field(default_factory=dict)
 
 
+@dataclass(frozen=True, kw_only=True)
+class Domain:
+    """A domain or subdomain associated with the seed, at any depth."""
+
+    id: str
+    kind: str = "domain"
+    props: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(frozen=True, kw_only=True)
+class Service:
+    """A reachable service on a domain, for example an HTTP endpoint at a url."""
+
+    id: str
+    kind: str = "service"
+    props: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(frozen=True, kw_only=True)
+class Technology:
+    """A framework or component fingerprinted on a service, with a version if known."""
+
+    id: str
+    kind: str = "technology"
+    props: dict[str, Any] = field(default_factory=dict)
+
+
 # Union of entity types the graph can hold and that a Fact can yield.
 ENTITY_TYPES = {
     "target": Target,
@@ -72,6 +99,9 @@ ENTITY_TYPES = {
     "credential": Credential,
     "identity": Identity,
     "artifact": Artifact,
+    "domain": Domain,
+    "service": Service,
+    "technology": Technology,
 }
 
 
@@ -107,7 +137,11 @@ class Fact:
     kind: str
     about: str
     data: dict[str, Any] = field(default_factory=dict)
-    yields: tuple[Target | Entrypoint | Credential | Identity | Artifact, ...] = ()
+    yields: tuple[
+        Target | Entrypoint | Credential | Identity | Artifact
+        | Domain | Service | Technology,
+        ...,
+    ] = ()
 
 
 # --- Serialization helpers ------------------------------------------------

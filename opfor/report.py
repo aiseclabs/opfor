@@ -22,7 +22,32 @@ def render(graph: SituationGraph, ledger: Ledger, *, stopped_reason: str) -> str
     lines.append(f"- entrypoints: {len(graph.entrypoints())}")
     lines.append(f"- credentials: {len(graph.credentials())}")
     lines.append(f"- artifacts: {len(graph.entities('artifact'))}")
+    domains = graph.entities("domain")
+    services = graph.entities("service")
+    technologies = graph.entities("technology")
+    if domains or services or technologies:
+        lines.append(f"- domains: {len(domains)}")
+        lines.append(f"- services: {len(services)}")
+        lines.append(f"- technologies: {len(technologies)}")
     lines.append("")
+
+    if domains:
+        lines.append("## Domains")
+        for d in sorted(domains, key=lambda e: e.id):
+            lines.append(f"- {d.id}")
+        lines.append("")
+
+    if services:
+        lines.append("## Live services")
+        for s in sorted(services, key=lambda e: e.id):
+            lines.append(f"- {s.id} (status {s.props.get('status')})")
+        lines.append("")
+
+    if technologies:
+        lines.append("## Technologies")
+        for t in sorted(technologies, key=lambda e: e.id):
+            lines.append(f"- {t.props.get('name', t.id)} on {t.props.get('on', '?')}")
+        lines.append("")
 
     lines.append("## Ledger activity")
     for kind in sorted(counts):

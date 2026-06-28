@@ -37,10 +37,23 @@ class Decision:
 
 
 class Scope:
-    """Authorized hosts plus the highest action tier the campaign permits."""
+    """Authorized hosts and domains plus the highest action tier permitted.
 
-    def __init__(self, *, hosts: tuple[str, ...], max_tier: str) -> None:
+    A host passes when it matches an exact host, or when it is, or sits under,
+    an authorized domain suffix. The suffix rung is what lets a recon campaign
+    authorize a whole estate, every subdomain of an authorized root, without
+    listing each host up front.
+    """
+
+    def __init__(
+        self,
+        *,
+        hosts: tuple[str, ...] = (),
+        domain_suffixes: tuple[str, ...] = (),
+        max_tier: str,
+    ) -> None:
         self.hosts = tuple(hosts)
+        self.domain_suffixes = tuple(domain_suffixes)
         tier_rank(max_tier)  # validate eagerly
         self.max_tier = max_tier
 
@@ -49,6 +62,7 @@ class Scope:
         data = yaml.safe_load(Path(path).read_text()) or {}
         return cls(
             hosts=tuple(data.get("hosts", ())),
+            domain_suffixes=tuple(data.get("domains", ())),
             max_tier=data.get("max_tier", "recon"),
         )
 
@@ -61,22 +75,40 @@ class Scope:
         tiers = entrypoint.props.get("action_tiers", {})
         return tiers.get(action, "intrusive")
 
+    def _host_of(self, graph: SituationGraph, entrypoint: Entrypoint) -> str | None:
+        """The host this act is aimed at.
+
+        Prefer the host the hand stamped on the entrypoint, fall back to the
+        owning target's host so the web and mock scenarios keep working.
+        """
+        stamped = entrypoint.props.get("scope_host")
+        if stamped is not None:
+            return stamped
+        target = next(
+            (t for t in graph.targets() if t.id == entrypoint.target_id), None
+        )
+        return target.props.get("host") if target is not None else None
+
+    def _in_scope(self, host: str) -> bool:
+        if host in self.hosts:
+            return True
+        return any(
+            host == s or host.endswith("." + s) for s in self.domain_suffixes
+        )
+
     def authorize(
         self, graph: SituationGraph, entrypoint: Entrypoint, action: str
     ) -> Decision:
         """Authorize one act. Deny unless both rungs pass."""
         tier = self._action_tier(entrypoint, action)
-        target = next(
-            (t for t in graph.targets() if t.id == entrypoint.target_id), None
-        )
-        if target is None:
+        host = self._host_of(graph, entrypoint)
+        if host is None:
             return Decision(
                 allowed=False,
-                reason=f"no target for entrypoint {entrypoint.id}",
+                reason=f"no host for entrypoint {entrypoint.id}",
                 tier=tier,
             )
-        host = target.props.get("host")
-        if host not in self.hosts:
+        if not self._in_scope(host):
             return Decision(
                 allowed=False,
                 reason=f"host out of scope: {host!r}",

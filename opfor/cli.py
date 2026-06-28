@@ -20,9 +20,10 @@ def main(argv: list[str] | None = None) -> int:
     run.add_argument("--budget", type=int, default=50, help="max steps")
     run.add_argument(
         "--brain",
-        choices=("mock", "model"),
+        choices=("mock", "model", "hybrid"),
         default="mock",
-        help="mock is the offline scripted policy, model asks a real model",
+        help="mock is offline scripted, model asks a model every step, "
+        "hybrid auto-runs recon and asks a model only for judgment",
     )
     run.add_argument(
         "--model",
@@ -41,11 +42,12 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "run":
         brain = None
-        if args.brain == "model":
-            from opfor.agent.brain import ModelBrain
+        if args.brain in ("model", "hybrid"):
+            from opfor.agent.brain import HybridBrain, ModelBrain
             from opfor.agent.providers import anthropic_complete
 
-            brain = ModelBrain(anthropic_complete(args.model))
+            model_brain = ModelBrain(anthropic_complete(args.model))
+            brain = model_brain if args.brain == "model" else HybridBrain(model_brain)
         result = run_campaign(
             args.campaign,
             run_dir=args.run_dir,

@@ -107,6 +107,38 @@ MOVE_SHAPE = (
 )
 
 
+class HybridBrain(Brain):
+    """Cheap auto-pilot for mechanical recon, a real model for judgment.
+
+    Asking a model to decide every step is wasteful, sweeping hundreds of DNS
+    lookups would be hundreds of API calls. So this brain clears all the cheap
+    recon-tier actions itself, and only consults the model once that mechanical
+    work is exhausted, the point where judgment, prioritization, and findings
+    actually matter.
+    """
+
+    name = "hybrid"
+
+    def __init__(self, model: "ModelBrain", recon_tiers: tuple[str, ...] = ("recon",)) -> None:
+        self._model = model
+        self._recon_tiers = set(recon_tiers)
+
+    def decide(self, context: BrainContext) -> Move:
+        for ep in context.live_entrypoints:
+            tiers = ep.props.get("action_tiers", {})
+            for action in ep.actions:
+                if context.graph.is_acted(ep.id, action):
+                    continue
+                if tiers.get(action, "intrusive") in self._recon_tiers:
+                    return Move(
+                        entrypoint_id=ep.id,
+                        action=action,
+                        note=f"auto recon {action} on {ep.ref}",
+                    )
+        # Cheap work is done, hand the judgment call to the model.
+        return self._model.decide(context)
+
+
 class ModelBrain(Brain):
     """Real brain. Renders a prompt, asks a model, parses one JSON Move."""
 

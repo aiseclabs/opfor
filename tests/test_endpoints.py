@@ -78,6 +78,19 @@ def test_archive_merges_sources_and_filters_host():
     assert paths == {"/api/x", "/api/y"}
 
 
+def test_endpoint_vuln_planner_fuzzes_each_param():
+    from opfor.model import Endpoint
+    from opfor.scenarios.apiscan.endpoint_vuln import EndpointVulnPlanner
+
+    graph = SituationGraph()
+    graph.add_entity(Endpoint(id="GET /api/file", props={
+        "host": "x.example.com", "method": "GET", "path": "/api/file", "params": ["path"]}))
+    tasks = EndpointVulnPlanner().expand(graph)
+    assert tasks and all(t.capability == "active_check" and t.tier == "intrusive" for t in tasks)
+    trav = [t for t in tasks if "traversal" in t.params["template"]["id"]]
+    assert trav and "%2Fetc%2Fpasswd" in trav[0].params["template"]["request"]["path"]
+
+
 def test_endpoint_planner_emits_sources_per_service():
     planner = EndpointPlanner()
     graph = SituationGraph()

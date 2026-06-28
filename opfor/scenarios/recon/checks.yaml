@@ -18,14 +18,20 @@
   match:
     status: 200
     body_contains: "[core]"
+    content_type_excludes: text/html
+    body_not_contains: ["<html", "<!doctype"]
 
 - id: dotenv-exposed
   path: /.env
   severity: high
   title: Exposed .env file (secrets disclosure)
+  # A real .env is key=value text, not an HTML page. Exclude html so an IAP or
+  # SPA returning a 200 login page for every path does not look like a leak.
   match:
     status: 200
     body_contains: "="
+    content_type_excludes: text/html
+    body_not_contains: ["<html", "<!doctype"]
 
 - id: actuator-exposed
   path: /actuator/env

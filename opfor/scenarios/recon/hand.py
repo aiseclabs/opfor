@@ -428,14 +428,25 @@ class ReconHand(Hand):
         if raw.get("error"):
             return None
         match = check.get("match", {})
+        body = (raw.get("body") or "").lower()
+        headers_lower = {k.lower(): str(v).lower() for k, v in (raw.get("headers") or {}).items()}
         if "status" in match and raw.get("status") != match["status"]:
             return None
         if "body_contains" in match:
-            if str(match["body_contains"]).lower() not in (raw.get("body") or "").lower():
+            if str(match["body_contains"]).lower() not in body:
+                return None
+        # Negative matchers, the nuclei pattern, to kill false positives like an
+        # IAP or SPA returning a 200 HTML login page for every path.
+        if "body_not_contains" in match:
+            blocked = match["body_not_contains"]
+            blocked = [blocked] if isinstance(blocked, str) else blocked
+            if any(str(b).lower() in body for b in blocked):
+                return None
+        if "content_type_excludes" in match:
+            if str(match["content_type_excludes"]).lower() in headers_lower.get("content-type", ""):
                 return None
         if "header_missing" in match:
-            present = {k.lower() for k in (raw.get("headers") or {})}
-            if str(match["header_missing"]).lower() in present:
+            if str(match["header_missing"]).lower() in headers_lower:
                 return None
         cid = check.get("id", "check")
         return Finding(

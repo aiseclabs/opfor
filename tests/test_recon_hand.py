@@ -101,6 +101,33 @@ def test_check_fires_finding_on_exposed_git(stub_server):
     assert findings[0].props["domain"] == "probe.example.com"
 
 
+def test_check_negative_matcher_kills_html_false_positive():
+    dotenv = {
+        "id": "dotenv-exposed",
+        "match": {
+            "status": 200,
+            "body_contains": "=",
+            "content_type_excludes": "text/html",
+            "body_not_contains": ["<html", "<!doctype"],
+        },
+    }
+    hand = ReconHand()
+    # A 200 HTML login page (IAP/SPA) that happens to contain "=" must NOT fire.
+    html = {
+        "status": 200, "url": "https://x/.env", "domain": "x",
+        "headers": {"Content-Type": "text/html"},
+        "body": "<!doctype html><html>a=b</html>", "check": dotenv,
+    }
+    assert hand._check_finding(html) is None
+    # A genuine key=value .env body fires.
+    real = {
+        "status": 200, "url": "https://x/.env", "domain": "x",
+        "headers": {"Content-Type": "text/plain"},
+        "body": "SECRET_KEY=abc\nDB_URL=postgres://x", "check": dotenv,
+    }
+    assert hand._check_finding(real) is not None
+
+
 def test_check_clean_when_signature_absent(stub_server):
     miss = {**_GIT_CHECK, "path": "/nope"}
     hand = ReconHand(checks=[miss])

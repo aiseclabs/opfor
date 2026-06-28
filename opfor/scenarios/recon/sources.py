@@ -15,12 +15,13 @@ import urllib.parse
 import urllib.request
 from typing import Callable
 
+from opfor.useragent import pick_ua
+
 _TIMEOUT = 20
-_UA = {"User-Agent": "opfor-recon"}
 
 
 def _get(url: str) -> bytes:
-    req = urllib.request.Request(url, headers=_UA)
+    req = urllib.request.Request(url, headers={"User-Agent": pick_ua()})
     with urllib.request.urlopen(req, timeout=_TIMEOUT) as resp:
         return resp.read()
 

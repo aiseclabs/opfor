@@ -19,6 +19,7 @@ import urllib.request
 
 from opfor.model import Fact, Finding, Observation
 from opfor.plugins.base import Executor
+from opfor.useragent import pick_ua
 
 _TIMEOUT = 12
 _BODY_CAP = 4096
@@ -35,7 +36,7 @@ class _NoRedirect(urllib.request.HTTPRedirectHandler):
 def _do(base, method, path, *, body=None, content_type=None, headers=None, follow_redirects=True) -> dict:
     """One HTTP request, raw result, never raises."""
     url = base.rstrip("/") + path
-    h = {"User-Agent": "opfor"}
+    h = {"User-Agent": pick_ua()}
     if content_type:
         h["Content-Type"] = content_type
     h.update(headers or {})

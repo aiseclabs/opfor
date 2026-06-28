@@ -24,6 +24,7 @@ from opfor.model import (
 )
 from opfor.plugins.base import Executor
 from opfor.scenarios.recon.favicon import favicon_hash
+from opfor.useragent import pick_ua
 from opfor.scenarios.recon.sources import (
     SUBDOMAIN_SOURCES,
     root_keyword,
@@ -48,7 +49,7 @@ def _real_resolve(domain: str) -> list[str]:
 
 def http_get(url: str, body_cap: int = 0) -> dict:
     """One GET, returning a raw dict. Never raises, errors are data."""
-    req = urllib.request.Request(url, method="GET")
+    req = urllib.request.Request(url, method="GET", headers={"User-Agent": pick_ua()})
     try:
         with urllib.request.urlopen(req, timeout=_GET_TIMEOUT) as resp:
             body = resp.read(body_cap).decode("utf-8", "replace") if body_cap else ""
@@ -256,7 +257,7 @@ class FaviconExecutor(Executor):
         url = urllib.parse.urljoin(task.params["url"], "favicon.ico")
         domain = task.target
         try:
-            req = urllib.request.Request(url, method="GET")
+            req = urllib.request.Request(url, method="GET", headers={"User-Agent": pick_ua()})
             with urllib.request.urlopen(req, timeout=_GET_TIMEOUT) as resp:
                 content = resp.read(_FAVICON_CAP)
                 h = favicon_hash(content) if content and resp.status == 200 else None

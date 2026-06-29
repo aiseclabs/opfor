@@ -31,11 +31,26 @@ def main(argv: list[str] | None = None) -> int:
 
     sub.add_parser("scenarios", help="list registered scenarios")
 
+    new = sub.add_parser("new-campaign", help="scaffold a new campaign directory")
+    new.add_argument("name", help="campaign / org name (becomes the directory)")
+    new.add_argument("--domain", required=True, help="a confirmed root domain in scope")
+    new.add_argument("--org", default=None, help="org keyword seed (defaults to name)")
+    new.add_argument("--vantage", default="public", help="public / vpn / internal / whitelisted-ip")
+    new.add_argument("--dir", default="campaigns", help="base directory to create the campaign under")
+
     args = parser.parse_args(argv)
 
     if args.command == "scenarios":
         for name in known_scenarios():
             print(name)
+        return 0
+
+    if args.command == "new-campaign":
+        from opfor.scaffold import new_campaign
+
+        path = new_campaign(args.name, domain=args.domain, org=args.org, vantage=args.vantage, base_dir=args.dir)
+        print(f"created campaign: {path}")
+        print(f"  edit {path}/scope.yaml and {path}/inventory.md, then: opfor run {path}")
         return 0
 
     if args.command == "run":

@@ -1,0 +1,25 @@
+name: Tests
+
+# Run the suite on every push to main and every pull request. The suite is fully
+# offline and deterministic: tests spin up local stub HTTP servers, and the eval
+# baseline guard (test_evals.py) scores the offline recon eval, so a loosened
+# matcher or a regressed detector fails CI here. No network and no API key needed.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.12", "3.13", "3.14"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - run: python -m pip install --upgrade pip
+      - run: pip install -e ".[dev]"
+      - run: pytest -q

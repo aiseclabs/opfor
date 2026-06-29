@@ -28,6 +28,7 @@ def run_campaign(
     run_dir: str | Path | None = None,
     resume: bool = False,
     budget: int = 50,
+    confidence_floor: float = 0.0,
     triage_complete: Callable[[str], str] | None = None,
 ):
     campaign = Campaign.load(campaign_dir)
@@ -40,6 +41,7 @@ def run_campaign(
         scope=campaign.scope,
         workspace=workspace,
         budget=Budget(budget),
+        confidence_floor=confidence_floor,
     )
     if resume:
         result = shell.resume()

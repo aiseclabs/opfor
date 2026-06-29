@@ -19,6 +19,10 @@ def main(argv: list[str] | None = None) -> int:
     run.add_argument("--resume", action="store_true", help="resume from the last checkpoint")
     run.add_argument("--budget", type=int, default=50, help="max steps")
     run.add_argument(
+        "--confidence-floor", type=float, default=0.0,
+        help="drop tasks the planner scored below this confidence (0..1); 0 keeps all",
+    )
+    run.add_argument(
         "--model",
         default="claude-sonnet-4-6",
         help="model id for finding triage (needs ANTHROPIC_API_KEY)",
@@ -64,6 +68,7 @@ def main(argv: list[str] | None = None) -> int:
             run_dir=args.run_dir,
             resume=args.resume,
             budget=args.budget,
+            confidence_floor=args.confidence_floor,
             triage_complete=triage_complete,
         )
         print(f"stopped after {result.steps} steps: {result.stopped_reason}")

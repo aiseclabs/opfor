@@ -30,6 +30,10 @@ class Task:
     scope_host: str | None = None
     osint: bool = False
     deps: tuple[str, ...] = ()
+    # The planner's belief (0..1) that this task is worth running. 1.0 = certain
+    # (the default, so existing planners are unaffected). A run can set a floor to
+    # prune low-confidence work; see opfor.agent.confidence for the bands.
+    confidence: float = 1.0
 
 
 class TaskGraph:
@@ -96,6 +100,7 @@ class TaskGraph:
                 scope_host=td.get("scope_host"),
                 osint=td.get("osint", False),
                 deps=tuple(td.get("deps", ())),
+                confidence=td.get("confidence", 1.0),
             )
             tg._tasks[task.id] = task
         tg._status = dict(data.get("status", {}))
@@ -112,4 +117,5 @@ class TaskGraph:
             "scope_host": t.scope_host,
             "osint": t.osint,
             "deps": list(t.deps),
+            "confidence": t.confidence,
         }

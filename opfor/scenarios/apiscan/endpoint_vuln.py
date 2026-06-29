@@ -90,12 +90,14 @@ class EndpointVulnPlanner(Planner):
         params = ep.props.get("params") or []
         query_params = [p for p in params if "{" + str(p) + "}" not in path]
         for probe in FUZZ_PROBES:
+            # A named parameter is a known input -> promising. Injecting into a
+            # path slot with no named param is a blind guess -> lower confidence.
             for p in query_params:
                 inj = _inject_query(path, query_params, p, probe["payload"])
-                tasks.append(self._task(host, base, probe, {"method": "GET", "path": inj}, inj, f"{path}|{p}"))
+                tasks.append(self._task(host, base, probe, {"method": "GET", "path": inj}, inj, f"{path}|{p}", confidence=0.7))
             if "{" in path:
                 inj = path[: path.index("{")] + urllib.parse.quote(probe["payload"], safe="") + path[path.index("}") + 1:]
-                tasks.append(self._task(host, base, probe, {"method": "GET", "path": inj}, inj, f"{path}|pathparam"))
+                tasks.append(self._task(host, base, probe, {"method": "GET", "path": inj}, inj, f"{path}|pathparam", confidence=0.4))
 
     def _fuzz_body(self, tasks, ep, host, base, path, method) -> None:
         fields = ep.props.get("body_params") or []
@@ -105,9 +107,9 @@ class EndpointVulnPlanner(Planner):
             for f in fields:
                 body = _inject_body(fields, f, probe["payload"])
                 req = {"method": method, "path": path, "body": body, "content_type": "application/json"}
-                tasks.append(self._task(host, base, probe, req, f"{method} {path}|{f}", key=f"{method}:{path}:{f}"))
+                tasks.append(self._task(host, base, probe, req, f"{method} {path}|{f}", key=f"{method}:{path}:{f}", confidence=0.7))
 
-    def _task(self, host, base, probe, request, where, key=None) -> Task:
+    def _task(self, host, base, probe, request, where, key=None, confidence=0.7) -> Task:
         kind = "body injection" if request["method"] in _BODY_METHODS else "parameter injection"
         template = {
             "id": f"fuzz-{probe['id']}-{where}",
@@ -123,4 +125,5 @@ class EndpointVulnPlanner(Planner):
             params={"base_url": base, "template": template},
             tier="intrusive",
             scope_host=host,
+            confidence=confidence,
         )

@@ -44,6 +44,7 @@ class ControlShell:
         workspace: Workspace,
         budget: Budget,
         max_workers: int = 16,
+        confidence_floor: float = 0.0,
     ) -> None:
         self._executors = executors
         self._planner = planner
@@ -51,6 +52,7 @@ class ControlShell:
         self._workspace = workspace
         self._budget = budget
         self._max_workers = max_workers
+        self._confidence_floor = confidence_floor
         self._ledger = Ledger(workspace.ledger_file)
 
     def run(self, graph: SituationGraph) -> RunResult:
@@ -104,6 +106,11 @@ class ControlShell:
             # Authorize. Deny-by-default; a denied task is retired, not retried.
             authorized = []
             for task in ready:
+                # Confidence floor: prune work the planner deemed not worth it.
+                if task.confidence < self._confidence_floor:
+                    self._ledger.append("low_confidence", task=task.id, confidence=task.confidence)
+                    tg.mark_done(task.id)
+                    continue
                 decision = self._scope.authorize_task(graph, task)
                 if decision.allowed:
                     tg.mark_running(task.id)

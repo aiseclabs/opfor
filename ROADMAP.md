@@ -18,7 +18,9 @@ Remaining work, grouped by area.
 ## Vulnerability coverage — deepen
 - Done: POST/PUT/PATCH JSON body-field injection (body field names from the
   OpenAPI requestBody schema); fuzzer scheme follows the discovered endpoint.
-- CORS misconfiguration: reflect-arbitrary-Origin + credentials check.
+- Done: CORS misconfiguration (reflect-arbitrary-Origin, escalated when credentials
+  are allowed); generic matcher now takes header_contains lists + header_not_contains.
+- CORS: also flag `null`-origin reflection.
 - Authenticated BOLA/IDOR: compare token vs no-token, my-id vs other-id responses.
 - More JWT variants: jku / jwk / x5c / x5u / kid-sql.
 - Mass assignment (write op, use a throwaway user, careful).

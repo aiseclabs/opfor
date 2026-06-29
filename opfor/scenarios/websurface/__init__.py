@@ -14,6 +14,7 @@ from pathlib import Path
 import yaml
 
 from opfor.agent.planner import CompositePlanner
+from opfor.scenarios.apiscan.cors import CorsPlanner
 from opfor.scenarios.apiscan.endpoint_vuln import EndpointVulnPlanner
 from opfor.scenarios.apiscan.executors import default_executors as apiscan_executors
 from opfor.scenarios.base import ControlScenario
@@ -31,5 +32,5 @@ WEBSURFACE = ControlScenario(
     name="websurface",
     content_root=Path(__file__).resolve().parent,
     executors={**recon_executors(), **endpoint_executors(), **apiscan_executors()},
-    planner=CompositePlanner([ReconPlanner(_CHECKS), EndpointPlanner(), EndpointVulnPlanner()]),
+    planner=CompositePlanner([ReconPlanner(_CHECKS), EndpointPlanner(), CorsPlanner(), EndpointVulnPlanner()]),
 )

@@ -78,9 +78,14 @@ def _matches(match: dict, raw: dict) -> bool:
             return False
     if "body_regex" in match and not re.search(match["body_regex"], body):
         return False
-    hc = match.get("header_contains")
-    if hc and str(hc["value"]).lower() not in headers.get(str(hc["name"]).lower(), "").lower():
-        return False
+    # header_contains accepts one {name,value} or a list of them, all must hold.
+    for hc in _as_list(match.get("header_contains")):
+        if str(hc["value"]).lower() not in headers.get(str(hc["name"]).lower(), "").lower():
+            return False
+    # header_not_contains is the negation, none may hold.
+    for hc in _as_list(match.get("header_not_contains")):
+        if str(hc["value"]).lower() in headers.get(str(hc["name"]).lower(), "").lower():
+            return False
     return True
 
 

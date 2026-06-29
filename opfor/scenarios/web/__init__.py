@@ -1,17 +1,16 @@
-"""The web scenario, a thin HTTP hand plus its playbooks."""
+"""The web scenario, a real HTTP crawler on the control shell."""
 
 from __future__ import annotations
 
 from pathlib import Path
 
-from opfor.plugins.registry import register_hand
-from opfor.scenarios.base import Scenario
-from opfor.scenarios.web.hand import WebHand
+from opfor.scenarios.base import ControlScenario
+from opfor.scenarios.web.executors import default_executors
+from opfor.scenarios.web.planner import WebPlanner
 
-register_hand(WebHand())
-
-WEB = Scenario(
+WEB = ControlScenario(
     name="web",
-    hand_name="web",
     content_root=Path(__file__).resolve().parent,
+    executors=default_executors(),
+    planner=WebPlanner(),
 )

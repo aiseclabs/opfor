@@ -29,6 +29,9 @@ class RunResult:
     stopped_reason: str
     tasks: dict
     workspace: Workspace
+    # done means terminal: the run drained its ready work. Not done means
+    # suspended (budget exhausted), a resume continues from the checkpoint.
+    done: bool = True
 
 
 class ControlShell:
@@ -53,7 +56,31 @@ class ControlShell:
     def run(self, graph: SituationGraph) -> RunResult:
         tg = TaskGraph()
         self._ledger.append("run_start", budget=self._budget.max_steps)
+        return self._drive(graph, tg)
+
+    def resume(self) -> RunResult:
+        """Resume from the last checkpoint, possibly in a fresh process.
+
+        The planners re-derive the remaining work from the restored graph, and
+        the task graph already knows which tasks are done, so completed work is
+        not repeated, the run continues exactly where the budget cut it off.
+        """
+        data = self._workspace.load_state()
+        graph = SituationGraph.from_dict(data["graph"])
+        tg = TaskGraph.from_dict(data["tasks"])
+        self._budget.steps = data.get("steps", 0)
+        if data.get("done"):
+            return RunResult(
+                graph=graph, steps=self._budget.steps,
+                stopped_reason=data.get("stopped_reason", "already done"),
+                tasks=tg.counts(), workspace=self._workspace, done=True,
+            )
+        self._ledger.append("run_resume", step=self._budget.steps)
+        return self._drive(graph, tg)
+
+    def _drive(self, graph: SituationGraph, tg: TaskGraph) -> RunResult:
         reason = ""
+        done = True
         while True:
             # Plan: propose tasks; the task graph dedupes by id.
             for task in self._planner.expand(graph):
@@ -65,6 +92,7 @@ class ControlShell:
                 break
             if not self._budget.ok():
                 reason = "budget exhausted"
+                done = False  # suspended, a resume continues
                 break
 
             # Authorize. Deny-by-default; a denied task is retired, not retried.
@@ -85,14 +113,15 @@ class ControlShell:
             self._run_round(authorized, graph, tg)
             self._checkpoint(graph, tg, done=False, reason="")
 
-        self._checkpoint(graph, tg, done=True, reason=reason)
-        self._ledger.append("run_end", reason=reason, steps=self._budget.steps)
+        self._checkpoint(graph, tg, done=done, reason=reason)
+        self._ledger.append("run_end", reason=reason, steps=self._budget.steps, done=done)
         return RunResult(
             graph=graph,
             steps=self._budget.steps,
             stopped_reason=reason,
             tasks=tg.counts(),
             workspace=self._workspace,
+            done=done,
         )
 
     def _run_round(self, tasks, graph, tg) -> None:

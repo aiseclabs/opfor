@@ -36,10 +36,16 @@ Remaining work, grouped by area.
 - Scope ladder uses vantage to decide what is reachable / authorized.
 
 ## Engine cleanup
-- Migrate mock and web scenarios off the legacy entrypoint loop onto the control
-  shell; then delete `engine/loop.py` and `agent/brain.py`.
-- Port async / suspend-resume into the control shell (constraint 3); add `deliver`.
-- Raise / make configurable the control shell `max_workers` (recon is I/O bound).
+- Done: one engine. mock and web ported onto the control shell; `engine/loop.py`,
+  `agent/brain.py`, the `Hand` contract, the hand registry, and the entrypoint /
+  generation / acted machinery in `graph.py` are deleted.
+- Done: suspend/resume on the control shell (`resume()` continues a
+  budget-suspended run from its checkpoint).
+- Async delivery of late results (`deliver`, phishing's hours-later path) is the
+  remaining half of invariant 3: a task returns pending, the shell suspends when
+  only pending work remains, an external event wakes it. No live scenario needs
+  it yet.
+- Make the control shell `max_workers` configurable (recon is I/O bound).
 - Store triage verdicts on the graph (Finding props) instead of a side dict.
 
 ## Integrations (optional, keyed)

@@ -1,11 +1,10 @@
-"""The situation graph, the live picture of what we know and can reach.
+"""The situation graph, the blackboard: the live picture of what we know.
 
-Constraint 1 from the architecture: the set of pokeable entrypoints is computed
-from current state, not enumerated once at the start. Owning a box or capturing
-a credential grows new entrypoints. So the graph is a core component, not a
-convenience cache. It exposes the entrypoints that are still worth poking right
-now, and it signals when the reachable surface may have changed so the loop
-re-enumerates.
+The single, persisted source of truth. All long-horizon state lives here, keyed
+by entity kind and id. The pokeable surface is computed from current state, not
+enumerated once at the start: capturing a credential or discovering a service
+adds entities, and the planner re-derives the next tasks from them each round, so
+the surface grows live and data-driven.
 """
 
 from __future__ import annotations
@@ -14,24 +13,13 @@ from typing import Iterable
 
 from opfor.model import (
     Credential,
-    Entrypoint,
-    Fact,
     Identity,
+    Fact,
     Target,
     entity_from_dict,
     entity_kind,
     entity_to_dict,
 )
-
-# Adding one of these kinds may unlock new entrypoints, so it bumps the
-# generation counter and prompts the loop to re-enumerate. A discovered domain
-# is new surface, and a domain that resolves to a host becomes probeable, so
-# both belong here.
-# A live service is new surface too, it spawns the security checks to run on it.
-_SURFACE_CHANGING = {
-    "target", "credential", "identity", "artifact", "domain", "host", "service",
-    "endpoint",
-}
 
 
 class SituationGraph:
@@ -40,11 +28,6 @@ class SituationGraph:
     def __init__(self) -> None:
         self._entities: dict[str, dict[str, object]] = {}
         self._facts: list[Fact] = []
-        # (entrypoint_id, action) pairs already performed, so a live entrypoint
-        # is one that still has an unacted action.
-        self._acted: set[tuple[str, str]] = set()
-        # Bumped whenever the reachable surface may have changed.
-        self._generation: int = 0
 
     # --- entities ---------------------------------------------------------
 
@@ -56,8 +39,6 @@ class SituationGraph:
         if ident in bucket:
             return False
         bucket[ident] = entity
-        if kind in _SURFACE_CHANGING:
-            self._generation += 1
         return True
 
     def add_target(self, target: Target) -> bool:
@@ -69,24 +50,13 @@ class SituationGraph:
     def targets(self) -> tuple[Target, ...]:
         return self.entities("target")  # type: ignore[return-value]
 
-    def entrypoints(self) -> tuple[Entrypoint, ...]:
-        return self.entities("entrypoint")  # type: ignore[return-value]
-
     def credentials(self) -> tuple[Credential, ...]:
         return self.entities("credential")  # type: ignore[return-value]
 
     def identities(self) -> tuple[Identity, ...]:
         return self.entities("identity")  # type: ignore[return-value]
 
-    # --- enumeration results and growth ----------------------------------
-
-    def merge_entrypoints(self, entrypoints: Iterable[Entrypoint]) -> int:
-        """Fold freshly enumerated entrypoints in, return how many were new."""
-        added = 0
-        for ep in entrypoints:
-            if self.add_entity(ep):
-                added += 1
-        return added
+    # --- growth -----------------------------------------------------------
 
     def absorb(self, facts: Iterable[Fact]) -> int:
         """Record facts and merge any entities they yield. Return new-entity count."""
@@ -101,31 +71,6 @@ class SituationGraph:
     def facts(self) -> tuple[Fact, ...]:
         return tuple(self._facts)
 
-    # --- liveness ---------------------------------------------------------
-
-    def mark_acted(self, entrypoint_id: str, action: str) -> None:
-        self._acted.add((entrypoint_id, action))
-
-    def is_acted(self, entrypoint_id: str, action: str) -> bool:
-        return (entrypoint_id, action) in self._acted
-
-    def live_entrypoints(self) -> tuple[Entrypoint, ...]:
-        """Entrypoints that still have at least one unacted action right now.
-
-        This is recomputed from current state on every call, so newly grown
-        entrypoints become live the moment they enter the graph.
-        """
-        live = []
-        for ep in self.entrypoints():
-            if any(not self.is_acted(ep.id, a) for a in ep.actions):
-                live.append(ep)
-        return tuple(live)
-
-    @property
-    def generation(self) -> int:
-        """Monotonic counter, bumped when the reachable surface may change."""
-        return self._generation
-
     # --- serialization for checkpoint and resume -------------------------
 
     def to_dict(self) -> dict:
@@ -136,8 +81,6 @@ class SituationGraph:
                 for e in bucket.values()
             ],
             "facts": [self._fact_to_dict(f) for f in self._facts],
-            "acted": [list(pair) for pair in sorted(self._acted)],
-            "generation": self._generation,
         }
 
     @classmethod
@@ -147,9 +90,6 @@ class SituationGraph:
             graph.add_entity(entity_from_dict(ed))
         for fd in data.get("facts", []):
             graph._facts.append(cls._fact_from_dict(fd))
-        graph._acted = {tuple(p) for p in data.get("acted", [])}
-        # Restore the saved generation, after adds bumped it during reload.
-        graph._generation = data.get("generation", graph._generation)
         return graph
 
     @staticmethod

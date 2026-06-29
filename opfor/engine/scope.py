@@ -15,10 +15,9 @@ from pathlib import Path
 import yaml
 
 from opfor.engine.graph import SituationGraph
-from opfor.model import Entrypoint
 
-# Action tiers, least to most intrusive. A hand tags each action it offers via
-# the entrypoint, so the tier stays data the hand declares, not engine logic.
+# Action tiers, least to most intrusive. A task declares its own tier, so the
+# tier stays data the planner sets, not engine logic.
 TIERS = ("recon", "probe", "intrusive")
 
 
@@ -66,29 +65,6 @@ class Scope:
             max_tier=data.get("max_tier", "recon"),
         )
 
-    def _action_tier(self, entrypoint: Entrypoint, action: str) -> str:
-        """Read the tier the hand declared for this action.
-
-        Default to the most intrusive tier when undeclared, so an unlabeled
-        action is treated as dangerous rather than waved through.
-        """
-        tiers = entrypoint.props.get("action_tiers", {})
-        return tiers.get(action, "intrusive")
-
-    def _host_of(self, graph: SituationGraph, entrypoint: Entrypoint) -> str | None:
-        """The host this act is aimed at.
-
-        Prefer the host the hand stamped on the entrypoint, fall back to the
-        owning target's host so the web and mock scenarios keep working.
-        """
-        stamped = entrypoint.props.get("scope_host")
-        if stamped is not None:
-            return stamped
-        target = next(
-            (t for t in graph.targets() if t.id == entrypoint.target_id), None
-        )
-        return target.props.get("host") if target is not None else None
-
     def _in_scope(self, host: str) -> bool:
         if host in self.hosts:
             return True
@@ -114,36 +90,5 @@ class Scope:
         if tier_rank(tier) > tier_rank(self.max_tier):
             return Decision(
                 allowed=False, reason=f"tier {tier} exceeds ceiling {self.max_tier}", tier=tier
-            )
-        return Decision(allowed=True, reason="in scope", tier=tier)
-
-    def authorize(
-        self, graph: SituationGraph, entrypoint: Entrypoint, action: str
-    ) -> Decision:
-        """Authorize one act. Deny unless both rungs pass."""
-        tier = self._action_tier(entrypoint, action)
-        # A passive OSINT lookup queries a public source about the target, it
-        # never touches the estate, so it is not gated by the host scope. It must
-        # still be a recon-tier action, so this cannot widen scope.
-        if entrypoint.props.get("osint") and tier_rank(tier) == 0:
-            return Decision(allowed=True, reason="passive osint", tier=tier)
-        host = self._host_of(graph, entrypoint)
-        if host is None:
-            return Decision(
-                allowed=False,
-                reason=f"no host for entrypoint {entrypoint.id}",
-                tier=tier,
-            )
-        if not self._in_scope(host):
-            return Decision(
-                allowed=False,
-                reason=f"host out of scope: {host!r}",
-                tier=tier,
-            )
-        if tier_rank(tier) > tier_rank(self.max_tier):
-            return Decision(
-                allowed=False,
-                reason=f"tier {tier} exceeds ceiling {self.max_tier}",
-                tier=tier,
             )
         return Decision(allowed=True, reason="in scope", tier=tier)

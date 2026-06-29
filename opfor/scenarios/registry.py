@@ -1,9 +1,9 @@
-"""Scenario registry. Importing a scenario registers its hand as a side effect."""
+"""Scenario registry. Every scenario is a ControlScenario on the control shell."""
 
 from __future__ import annotations
 
 from opfor.scenarios.apiscan import APISCAN
-from opfor.scenarios.base import Scenario
+from opfor.scenarios.base import ControlScenario
 from opfor.scenarios.mock import MOCK
 from opfor.scenarios.recon import RECON
 from opfor.scenarios.web import WEB
@@ -18,7 +18,7 @@ _SCENARIOS = {
 }
 
 
-def get_scenario(name: str) -> Scenario:
+def get_scenario(name: str) -> ControlScenario:
     if name not in _SCENARIOS:
         known = ", ".join(sorted(_SCENARIOS))
         raise KeyError(f"unknown scenario: {name}, known: {known}")

@@ -2,45 +2,54 @@ import pytest
 
 from opfor.engine.graph import SituationGraph
 from opfor.engine.scope import Scope, tier_rank
-from opfor.model import Entrypoint, Target
+from opfor.engine.tasks import Task
 
 
-def _graph(host="127.0.0.1"):
-    g = SituationGraph()
-    g.add_target(Target(id="t", kind="web_host", props={"host": host}))
-    return g
+def _graph():
+    return SituationGraph()
 
 
-def _ep(tiers):
-    return Entrypoint(
-        id="e", target_id="t", kind="http_endpoint", ref="/",
-        actions=tuple(tiers), props={"action_tiers": tiers},
-    )
+def _task(tier, host="127.0.0.1", osint=False):
+    return Task(id="t1", capability="c", target="t", tier=tier, scope_host=host, osint=osint)
 
 
 def test_deny_by_default_when_host_out_of_scope():
-    scope = Scope(hosts=("10.0.0.1",), max_tier="intrusive")
-    decision = scope.authorize(_graph(), _ep({"get": "recon"}), "get")
+    scope = Scope(domain_suffixes=("10.0.0.1",), max_tier="intrusive")
+    decision = scope.authorize_task(_graph(), _task("recon"))
     assert not decision.allowed
     assert "out of scope" in decision.reason
 
 
 def test_allow_in_scope_within_tier():
     scope = Scope(hosts=("127.0.0.1",), max_tier="recon")
-    assert scope.authorize(_graph(), _ep({"get": "recon"}), "get").allowed
+    assert scope.authorize_task(_graph(), _task("recon")).allowed
 
 
 def test_tier_ceiling_blocks_intrusive():
     scope = Scope(hosts=("127.0.0.1",), max_tier="recon")
-    decision = scope.authorize(_graph(), _ep({"post": "intrusive"}), "post")
+    decision = scope.authorize_task(_graph(), _task("intrusive"))
     assert not decision.allowed
     assert "exceeds ceiling" in decision.reason
 
 
-def test_unlabeled_action_is_treated_as_intrusive():
-    scope = Scope(hosts=("127.0.0.1",), max_tier="probe")
-    decision = scope.authorize(_graph(), _ep({}), "mystery")
-    assert not decision.allowed
+def test_passive_osint_recon_bypasses_host_scope():
+    # A passive OSINT lookup queries a public source, so it is not host-gated,
+    # but it must be recon tier so it cannot widen scope.
+    scope = Scope(hosts=(), max_tier="recon")
+    assert scope.authorize_task(_graph(), _task("recon", host=None, osint=True)).allowed
+    # osint at a higher tier is not waved through.
+    assert not scope.authorize_task(_graph(), _task("probe", host=None, osint=True)).allowed
+
+
+def test_task_without_host_is_denied():
+    scope = Scope(hosts=("127.0.0.1",), max_tier="intrusive")
+    assert not scope.authorize_task(_graph(), _task("probe", host=None)).allowed
+
+
+def test_domain_suffix_authorizes_whole_estate():
+    scope = Scope(domain_suffixes=("example.com",), max_tier="probe")
+    assert scope.authorize_task(_graph(), _task("probe", host="api.example.com")).allowed
+    assert not scope.authorize_task(_graph(), _task("probe", host="example.org")).allowed
 
 
 def test_unknown_tier_fails_loud():

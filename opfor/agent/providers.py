@@ -1,9 +1,9 @@
-"""Model providers for the real brain.
+"""Model providers for the parts that ask a model (triage, model planners).
 
-A provider is just a callable that maps a prompt to raw model text, the exact
-seam ModelBrain expects. Keeping it this thin means the engine never depends on
-any vendor SDK, the dependency lives only here and only when a model brain is
-actually used.
+A provider is just a callable that maps a prompt to raw model text, the seam the
+triage stage and any model planner expect. Keeping it this thin means the engine
+never depends on any vendor SDK, the dependency lives only here and only when a
+model is actually used.
 """
 
 from __future__ import annotations

@@ -1,9 +1,9 @@
-"""Assemble a campaign, a scenario, and an engine into a run.
+"""Assemble a campaign, a scenario, and the engine into a run.
 
-This is the seam where the four layers meet: data source, executors/hands,
-knowledge, and engine. A ControlScenario runs on the task-graph control shell
-(the recon path); a classic Scenario runs on the older entrypoint loop (mock,
-web). Both end with the same triage + report step, which is engine-agnostic.
+This is the seam where the layers meet: data source (campaign), executors and a
+planner (scenario), and the control shell (engine). Every scenario runs on the
+one engine, the task-graph control shell, and every run ends with the same triage
+plus report step, which is engine-agnostic.
 """
 
 from __future__ import annotations
@@ -11,16 +11,13 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Callable
 
-from opfor.agent.brain import Brain, MockBrain
 from opfor.agent.triage import triage_findings
 from opfor.campaign import Campaign
 from opfor.engine.budget import Budget
 from opfor.engine.control import ControlShell
 from opfor.engine.graph import SituationGraph
-from opfor.engine.loop import AttackLoop
 from opfor.engine.state import Workspace
 from opfor.report import render
-from opfor.scenarios.base import ControlScenario
 from opfor.scenarios.registry import get_scenario
 
 
@@ -29,7 +26,6 @@ def run_campaign(
     *,
     run_dir: str | Path | None = None,
     resume: bool = False,
-    brain: Brain | None = None,
     budget: int = 50,
     triage_complete: Callable[[str], str] | None = None,
 ):
@@ -37,16 +33,6 @@ def run_campaign(
     scenario = get_scenario(campaign.scenario_name)
     workspace = Workspace(run_dir or Path("runs") / campaign.name)
 
-    if isinstance(scenario, ControlScenario):
-        result, ledger = _run_control(scenario, campaign, workspace, budget)
-    else:
-        result, ledger = _run_loop(scenario, campaign, workspace, budget, brain, resume)
-
-    _finalize(result.graph, ledger, result.stopped_reason, workspace, triage_complete)
-    return result
-
-
-def _run_control(scenario, campaign, workspace, budget):
     shell = ControlShell(
         executors=scenario.executors,
         planner=scenario.planner,
@@ -54,30 +40,16 @@ def _run_control(scenario, campaign, workspace, budget):
         workspace=workspace,
         budget=Budget(budget),
     )
-    graph = SituationGraph()
-    for target in campaign.targets:
-        graph.add_target(target)
-    result = shell.run(graph)
-    return result, shell.ledger
-
-
-def _run_loop(scenario, campaign, workspace, budget, brain, resume):
-    loop = AttackLoop(
-        hand=scenario.hand(),
-        playbook=scenario.playbook(),
-        scope=campaign.scope,
-        brain=brain or MockBrain(),
-        workspace=workspace,
-        budget=budget,
-    )
     if resume:
-        result = loop.resume()
+        result = shell.resume()
     else:
         graph = SituationGraph()
         for target in campaign.targets:
             graph.add_target(target)
-        result = loop.run(graph)
-    return result, loop.ledger
+        result = shell.run(graph)
+
+    _finalize(result.graph, shell.ledger, result.stopped_reason, workspace, triage_complete)
+    return result
 
 
 def _finalize(graph, ledger, stopped_reason, workspace, triage_complete):

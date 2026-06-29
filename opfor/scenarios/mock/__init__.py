@@ -4,14 +4,13 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from opfor.plugins.registry import register_hand
-from opfor.scenarios.base import Scenario
-from opfor.scenarios.mock.hand import MockHand
+from opfor.scenarios.base import ControlScenario
+from opfor.scenarios.mock.executors import default_executors
+from opfor.scenarios.mock.planner import MockPlanner
 
-register_hand(MockHand())
-
-MOCK = Scenario(
+MOCK = ControlScenario(
     name="mock",
-    hand_name="mock",
     content_root=Path(__file__).resolve().parent,
+    executors=default_executors(),
+    planner=MockPlanner(),
 )

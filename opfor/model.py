@@ -112,7 +112,7 @@ class Endpoint:
 
 @dataclass(frozen=True, kw_only=True)
 class Finding:
-    """A judgment recorded by the brain, for example an exposure or a weak spot."""
+    """A judgment recorded by a planner or triage, for example an exposure."""
 
     id: str
     kind: str = "finding"

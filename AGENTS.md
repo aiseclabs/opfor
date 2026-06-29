@@ -55,9 +55,11 @@ written by specialist **executors**, with a **planner / executor / perceptor**
   files like `checks.yaml` (nuclei-style check templates). Read by the planner,
   never by an executor.
 
-A classic entrypoint loop (`opfor/engine/loop.py`, the `Hand` contract) still
-backs the older mock and web scenarios and is being migrated onto the control
-shell. New scenarios use executors + a planner (`ControlScenario`).
+Every scenario runs on the one engine, the control shell: a `ControlScenario`
+supplies capability executors plus a planner. The shell checkpoints each round
+and supports `resume()` (continue a budget-suspended run from its checkpoint).
+Async delivery of late results (`deliver`, the phishing "hours later" path) is
+the remaining piece of invariant 3 and is not built yet.
 
 ## The task graph
 

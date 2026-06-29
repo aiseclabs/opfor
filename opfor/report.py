@@ -35,7 +35,6 @@ def render(
     # the scenario produced.
     surface = [
         ("targets", len(graph.targets())),
-        ("entrypoints", len(graph.entrypoints())),
         ("credentials", len(graph.credentials())),
         ("artifacts", len(graph.entities("artifact"))),
         ("candidate roots", len(candidates)),

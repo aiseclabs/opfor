@@ -1,1 +1,1 @@
-"""The agent, the brain. It reads the graph and a playbook and decides moves."""
+"""The agent: planners that decide tasks and the triage stage that judges findings."""

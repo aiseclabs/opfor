@@ -38,6 +38,32 @@ def test_triage_empty_is_noop():
     assert triage_findings([], lambda p: "") == {}
 
 
+def test_triage_declined_response_is_uncertain_not_crash():
+    findings = [_finding("finding:x:a", title="Something", severity="high",
+                         body_snippet="evidence")]
+
+    def declines(prompt):
+        return "I can't help with that."
+
+    verdicts = triage_findings(findings, declines)
+    assert verdicts["finding:x:a"]["verdict"] == "uncertain"
+    assert "triage unavailable" in verdicts["finding:x:a"]["reason"]
+
+
+def test_triage_caps_snippet_evidence():
+    findings = [_finding("finding:x:a", title="t", severity="high",
+                         body_snippet="A" * 500)]
+    captured = {}
+
+    def complete(prompt):
+        captured["prompt"] = prompt
+        return json.dumps({"verdicts": [{"id": "finding:x:a", "verdict": "confirmed", "reason": "ok"}]})
+
+    triage_findings(findings, complete)
+    assert "A" * 160 in captured["prompt"]
+    assert "A" * 200 not in captured["prompt"]
+
+
 def test_report_groups_by_verdict(tmp_path):
     graph = SituationGraph()
     graph.add_entity(_finding("finding:dotenv:a", title="Exposed .env", severity="high", domain="a"))

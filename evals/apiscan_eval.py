@@ -7,8 +7,11 @@ the depth capability on a real, authorized, intentionally-vulnerable target.
 
 from __future__ import annotations
 
+import pathlib
 import tempfile
 import time
+
+import yaml
 
 from opfor.engine.budget import Budget
 from opfor.engine.control import ControlShell
@@ -17,6 +20,10 @@ from opfor.engine.scope import Scope
 from opfor.engine.state import Workspace
 from opfor.model import Target
 from opfor.scenarios.apiscan import APISCAN
+
+_TEMPLATES = yaml.safe_load(
+    (pathlib.Path(__file__).resolve().parents[1] / "opfor/scenarios/apiscan/templates.yaml").read_text()
+)
 
 
 def run_eval(host: str = "brokencrystals.com", url: str = "https://brokencrystals.com") -> dict:
@@ -34,7 +41,7 @@ def run_eval(host: str = "brokencrystals.com", url: str = "https://brokencrystal
         result = shell.run(graph)
         elapsed = time.time() - t0
 
-    templates = APISCAN.planner._templates
+    templates = _TEMPLATES
     fired = {f.id.split(":", 2)[1] for f in result.graph.entities("finding")}
     per = []
     for tpl in templates:

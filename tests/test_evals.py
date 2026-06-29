@@ -10,6 +10,14 @@ from evals.recon_eval import run_eval
 from evals.verify_eval import run_eval as run_verify_eval
 
 
+def test_all_eval_modules_import():
+    # Catches module-level breakage (e.g. a planner refactor) without hitting the
+    # live targets the network-bound evals use.
+    import evals.apiscan_eval  # noqa: F401
+    import evals.endpoint_eval  # noqa: F401
+    import evals.exploit_eval  # noqa: F401
+
+
 def test_oob_eval_confirms_only_real_callbacks():
     m = run_oob_eval()
     # Both url-param endpoints are probed, but only the one that actually called

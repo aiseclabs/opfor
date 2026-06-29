@@ -30,6 +30,7 @@ from opfor.scenarios.recon.executors import (
     RootPivotExecutor,
     SubdomainExecutor,
 )
+from opfor.scenarios.recon.fingerprints import FingerprintExecutor
 from opfor.scenarios.recon.planner import ReconPlanner
 
 _CHECKS_PATH = (
@@ -59,6 +60,7 @@ def run_eval() -> dict:
             "http_probe": HttpProbeExecutor(),
             "http_check": HttpCheckExecutor(),
             "favicon": FaviconExecutor(),
+            "fingerprint": FingerprintExecutor(),
         }
         scope = Scope(hosts=("vuln.local", "iap.local"), max_tier="probe")
         graph = SituationGraph()

@@ -80,6 +80,15 @@ def render(
             lines.append(f"- {s.id} (status {s.props.get('status')})")
         lines.append("")
 
+    # Hardened services sitting behind a known auth gateway: finding no
+    # unauthenticated surface on these is the expected outcome, not a tool miss.
+    gateways = [f for f in graph.facts() if f.kind == "classification" and f.data.get("category") == "gateway"]
+    if gateways:
+        lines.append("## Hardened (behind an auth gateway)")
+        for f in sorted(gateways, key=lambda x: x.data.get("service", "")):
+            lines.append(f"- {f.data.get('service')} — {f.data.get('label')}")
+        lines.append("")
+
     endpoints = graph.entities("endpoint")
     if endpoints:
         lines.append(f"## Endpoints ({len(endpoints)})")

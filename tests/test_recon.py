@@ -15,6 +15,7 @@ from opfor.scenarios.recon.executors import (
     SubdomainExecutor,
     _check_finding,
 )
+from opfor.scenarios.recon.fingerprints import FingerprintExecutor
 from opfor.scenarios.recon.planner import ReconPlanner
 
 _GIT_CHECK = {
@@ -180,6 +181,7 @@ def test_recon_runs_on_control_shell_and_finds(stub_server, tmp_path):
         "http_probe": HttpProbeExecutor(),
         "http_check": HttpCheckExecutor(),
         "favicon": FaviconExecutor(),
+        "fingerprint": FingerprintExecutor(),
     }
     shell = ControlShell(
         executors=executors,

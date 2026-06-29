@@ -57,6 +57,7 @@ class ReconPlanner(Planner):
                     tier="probe", scope_host=dom,
                 ))
             tasks.append(Task(id=f"favicon:{svc.id}", capability="favicon", target=dom, params={"url": svc.id}, tier="probe", scope_host=dom))
+            tasks.append(Task(id=f"fingerprint:{svc.id}", capability="fingerprint", target=dom, params={"url": svc.id}, tier="probe", scope_host=dom))
 
         return tasks
 

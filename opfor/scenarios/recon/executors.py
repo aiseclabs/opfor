@@ -285,6 +285,9 @@ class FaviconExecutor(Executor):
 
 
 def default_executors(checks=None) -> dict[str, Executor]:
+    # Imported lazily: fingerprints.py imports http_get from this module.
+    from opfor.scenarios.recon.fingerprints import FingerprintExecutor
+
     return {
         "root_keyword": RootKeywordExecutor(),
         "root_pivot": RootPivotExecutor(),
@@ -293,4 +296,5 @@ def default_executors(checks=None) -> dict[str, Executor]:
         "http_probe": HttpProbeExecutor(),
         "http_check": HttpCheckExecutor(),
         "favicon": FaviconExecutor(),
+        "fingerprint": FingerprintExecutor(),
     }

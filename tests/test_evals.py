@@ -5,8 +5,17 @@ loosens a matcher and the IAP target starts producing a false positive, or a
 matcher breaks and a real exposure is missed, these assertions fail.
 """
 
+from evals.oob_eval import run_eval as run_oob_eval
 from evals.recon_eval import run_eval
 from evals.verify_eval import run_eval as run_verify_eval
+
+
+def test_oob_eval_confirms_only_real_callbacks():
+    m = run_oob_eval()
+    # Both url-param endpoints are probed, but only the one that actually called
+    # back out of band is confirmed.
+    assert set(m["candidates"]) == {"GET /fetch", "GET /safe"}
+    assert m["confirmed"] == ["finding:blind-ssrf:GET /fetch:url"]
 
 
 def test_verify_eval_gates_findings_on_replay():

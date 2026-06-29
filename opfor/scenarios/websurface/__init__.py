@@ -18,6 +18,7 @@ from opfor.scenarios.apiscan.cors import CorsPlanner
 from opfor.scenarios.apiscan.endpoint_vuln import EndpointVulnPlanner
 from opfor.scenarios.apiscan.executors import default_executors as apiscan_executors
 from opfor.scenarios.apiscan.hypothesis import HypothesisPlanner, hypothesis_executors
+from opfor.scenarios.apiscan.oob import BlindSsrfPlanner, oob_executors
 from opfor.scenarios.apiscan.verify import VerifyPlanner, verify_executors
 from opfor.scenarios.base import ControlScenario
 from opfor.scenarios.recon.endpoints import EndpointPlanner, endpoint_executors
@@ -33,6 +34,6 @@ _CHECKS = yaml.safe_load((Path(__file__).resolve().parents[1] / "recon" / "check
 WEBSURFACE = ControlScenario(
     name="websurface",
     content_root=Path(__file__).resolve().parent,
-    executors={**recon_executors(), **endpoint_executors(), **apiscan_executors(), **hypothesis_executors(), **verify_executors()},
-    planner=CompositePlanner([ReconPlanner(_CHECKS), EndpointPlanner(), CorsPlanner(), HypothesisPlanner(), EndpointVulnPlanner(), VerifyPlanner()]),
+    executors={**recon_executors(), **endpoint_executors(), **apiscan_executors(), **hypothesis_executors(), **oob_executors(), **verify_executors()},
+    planner=CompositePlanner([ReconPlanner(_CHECKS), EndpointPlanner(), CorsPlanner(), HypothesisPlanner(), EndpointVulnPlanner(), BlindSsrfPlanner(), VerifyPlanner()]),
 )

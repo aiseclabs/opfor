@@ -58,9 +58,13 @@ class Collaborator:
         not someone guessing the token."""
         return f"{hint}{secrets.token_hex(8)}"
 
+    @property
+    def base_url(self) -> str:
+        """The externally reachable base a target should call back to."""
+        return self._public_base or f"http://127.0.0.1:{self._port}"
+
     def url_for(self, token: str) -> str:
-        base = self._public_base or f"http://127.0.0.1:{self._port}"
-        return f"{base.rstrip('/')}/{token}"
+        return f"{self.base_url.rstrip('/')}/{token}"
 
     def was_hit(self, token: str) -> bool:
         return token in self._hits

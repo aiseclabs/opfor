@@ -23,6 +23,11 @@ def main(argv: list[str] | None = None) -> int:
         help="drop tasks the planner scored below this confidence (0..1); 0 keeps all",
     )
     run.add_argument(
+        "--collaborator-url", default=None,
+        help="externally reachable base URL for out-of-band callbacks (blind SSRF); "
+        "required for external targets to reach opfor's listener",
+    )
+    run.add_argument(
         "--model",
         default="claude-sonnet-4-6",
         help="model id for finding triage (needs ANTHROPIC_API_KEY)",
@@ -69,6 +74,7 @@ def main(argv: list[str] | None = None) -> int:
             resume=args.resume,
             budget=args.budget,
             confidence_floor=args.confidence_floor,
+            collaborator_url=args.collaborator_url,
             triage_complete=triage_complete,
         )
         print(f"stopped after {result.steps} steps: {result.stopped_reason}")

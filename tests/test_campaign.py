@@ -11,6 +11,7 @@ _ROOT = Path(__file__).resolve().parents[1]
 def test_fullscan_example_loads_and_resolves_to_websurface():
     campaign = Campaign.load(_ROOT / "campaigns" / "fullscan-example")
     assert campaign.scenario_name == "websurface"
+    assert campaign.vantage == "public"
     scenario = get_scenario(campaign.scenario_name)
     assert isinstance(scenario, ControlScenario)
     # The whole chain is wired: recon, endpoint discovery, and vuln executors.
@@ -26,6 +27,37 @@ def test_example_campaigns_all_load():
             continue
         campaign = Campaign.load(path)
         assert campaign.targets  # every shipped campaign is well-formed
+
+
+def test_campaign_without_vantage_defaults_to_unspecified():
+    # localhost-demo declares no vantage.
+    assert Campaign.load(_ROOT / "campaigns" / "localhost-demo").vantage == "unspecified"
+
+
+def test_report_states_vantage_and_caveats_non_public(tmp_path):
+    from opfor.engine.graph import SituationGraph
+    from opfor.engine.ledger import Ledger
+    from opfor.model import Fact
+    from opfor.report import render
+
+    g = SituationGraph()
+    g.absorb([Fact(kind="vantage", about="campaign", data={"vantage": "whitelisted-ip"})])
+    out = render(g, Ledger(tmp_path / "ledger.jsonl"), stopped_reason="done")
+    assert "Vantage: whitelisted-ip" in out
+    assert "Reachability is relative" in out
+
+
+def test_report_public_vantage_has_no_caveat(tmp_path):
+    from opfor.engine.graph import SituationGraph
+    from opfor.engine.ledger import Ledger
+    from opfor.model import Fact
+    from opfor.report import render
+
+    g = SituationGraph()
+    g.absorb([Fact(kind="vantage", about="campaign", data={"vantage": "public"})])
+    out = render(g, Ledger(tmp_path / "ledger.jsonl"), stopped_reason="done")
+    assert "Vantage: public" in out
+    assert "Reachability is relative" not in out
 
 
 def test_endpoint_url_scheme_follows_service_base():

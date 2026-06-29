@@ -21,6 +21,15 @@ def render(
     lines.append("")
     lines.append(f"Stopped: {stopped_reason}")
     lines.append(f"Ledger intact: {ledger.verify()}")
+    vantage = next((f.data.get("vantage") for f in graph.facts() if f.kind == "vantage"), None)
+    if vantage:
+        lines.append(f"Vantage: {vantage}")
+        if str(vantage).lower() not in ("public", "internet"):
+            lines.append(
+                f"> Reachability is relative to the **{vantage}** vantage. Assets seen here "
+                "may not be reachable from the public internet (e.g. behind a VPN, internal "
+                "network, or IP allowlist); confirm exposure from an external vantage."
+            )
     lines.append("")
 
     all_domains = graph.entities("domain")

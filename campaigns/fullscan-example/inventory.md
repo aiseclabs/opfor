@@ -1,5 +1,6 @@
 ---
 scenario: websurface
+vantage: public
 targets:
   - id: example
     kind: org

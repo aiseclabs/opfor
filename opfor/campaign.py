@@ -39,6 +39,10 @@ class Campaign:
     scenario_name: str
     targets: tuple[Target, ...]
     scope: Scope
+    # The network vantage the run observes from. Reachability is relative to it:
+    # an asset reachable from a vpn / internal / whitelisted-ip vantage may not be
+    # reachable from the public internet, so the report must not be misread.
+    vantage: str = "unspecified"
 
     @classmethod
     def load(cls, campaign_dir: str | Path) -> "Campaign":
@@ -55,6 +59,7 @@ class Campaign:
             scenario_name=scenario_name,
             targets=targets,
             scope=Scope.from_yaml(path / "scope.yaml"),
+            vantage=str(front.get("vantage", "unspecified")),
         )
 
     @staticmethod

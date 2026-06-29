@@ -17,6 +17,7 @@ from opfor.engine.budget import Budget
 from opfor.engine.control import ControlShell
 from opfor.engine.graph import SituationGraph
 from opfor.engine.state import Workspace
+from opfor.model import Fact
 from opfor.report import render
 from opfor.scenarios.registry import get_scenario
 
@@ -46,6 +47,9 @@ def run_campaign(
         graph = SituationGraph()
         for target in campaign.targets:
             graph.add_target(target)
+        # Record the vantage on the blackboard so the report can state what the
+        # reachability claims are relative to. Survives checkpoint/resume.
+        graph.absorb([Fact(kind="vantage", about="campaign", data={"vantage": campaign.vantage})])
         result = shell.run(graph)
 
     _finalize(result.graph, shell.ledger, result.stopped_reason, workspace, triage_complete)

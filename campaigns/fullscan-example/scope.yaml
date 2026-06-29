@@ -6,7 +6,16 @@
 # enumeration (certificate transparency, OpenAPI specs, archives, JS) are
 # allowed. The intrusive endpoint-vuln fuzzing stays gated off at this tier.
 # Raise max_tier to intrusive only on a target you are authorized to actively
-# test.
+# test. Intrusive (payload-sending) is gated by an authorization envelope: it is
+# refused unless this file also carries an `authorization` block, so opfor never
+# sends payloads by accident. To enable the full intrusive chain, set:
+#
+#   max_tier: intrusive
+#   authorization:
+#     authorized: true
+#     reference: "PENTEST-1234 / written authorization on file"
+#     note: "external web assessment, scope as above"
+#
 domains:
   - example.com
 max_tier: probe

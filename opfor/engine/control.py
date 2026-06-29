@@ -55,7 +55,13 @@ class ControlShell:
 
     def run(self, graph: SituationGraph) -> RunResult:
         tg = TaskGraph()
-        self._ledger.append("run_start", budget=self._budget.max_steps)
+        self._ledger.append(
+            "run_start",
+            budget=self._budget.max_steps,
+            max_tier=self._scope.max_tier,
+            authorized=self._scope.authorized,
+            authorization=self._scope.authorization_ref,
+        )
         return self._drive(graph, tg)
 
     def resume(self) -> RunResult:

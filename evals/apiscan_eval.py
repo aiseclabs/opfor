@@ -26,7 +26,7 @@ def run_eval(host: str = "brokencrystals.com", url: str = "https://brokencrystal
         shell = ControlShell(
             executors=APISCAN.executors,
             planner=APISCAN.planner,
-            scope=Scope(hosts=(host,), max_tier="intrusive"),
+            scope=Scope(hosts=(host,), max_tier="intrusive", authorized=True),
             workspace=Workspace(d),
             budget=Budget(200),
         )

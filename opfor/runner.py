@@ -31,6 +31,7 @@ def run_campaign(
     resume: bool = False,
     budget: int = 50,
     confidence_floor: float = 0.0,
+    max_workers: int = 16,
     collaborator_url: str | None = None,
     oob_wait: float = 2.0,
     triage_complete: Callable[[str], str] | None = None,
@@ -46,6 +47,7 @@ def run_campaign(
         workspace=workspace,
         budget=Budget(budget),
         confidence_floor=confidence_floor,
+        max_workers=max_workers,
     )
     if resume:
         result = shell.resume()

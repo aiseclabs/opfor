@@ -18,6 +18,7 @@ def main(argv: list[str] | None = None) -> int:
     run.add_argument("--run-dir", default=None, help="where to write state, ledger, report")
     run.add_argument("--resume", action="store_true", help="resume from the last checkpoint")
     run.add_argument("--budget", type=int, default=50, help="max steps")
+    run.add_argument("--max-workers", type=int, default=16, help="max concurrent tasks per round")
     run.add_argument(
         "--confidence-floor", type=float, default=0.0,
         help="drop tasks the planner scored below this confidence (0..1); 0 keeps all",
@@ -74,6 +75,7 @@ def main(argv: list[str] | None = None) -> int:
             resume=args.resume,
             budget=args.budget,
             confidence_floor=args.confidence_floor,
+            max_workers=args.max_workers,
             collaborator_url=args.collaborator_url,
             triage_complete=triage_complete,
         )

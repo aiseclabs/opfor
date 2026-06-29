@@ -45,6 +45,7 @@ class ControlShell:
         budget: Budget,
         max_workers: int = 16,
         confidence_floor: float = 0.0,
+        approve=None,
     ) -> None:
         self._executors = executors
         self._planner = planner
@@ -53,6 +54,11 @@ class ControlShell:
         self._budget = budget
         self._max_workers = max_workers
         self._confidence_floor = confidence_floor
+        # Human-in-the-loop seam: an optional approve(task, decision) -> bool gate
+        # consulted after scope authorizes a task. None (the default) auto-approves,
+        # so opfor stays push-button; a future approver plugs in here without
+        # touching the loop. Kept as a no-op now by design.
+        self._approve = approve
         self._ledger = Ledger(workspace.ledger_file)
 
     def run(self, graph: SituationGraph) -> RunResult:
@@ -112,6 +118,10 @@ class ControlShell:
                     tg.mark_done(task.id)
                     continue
                 decision = self._scope.authorize_task(graph, task)
+                if decision.allowed and self._approve is not None and not self._approve(task, decision):
+                    self._ledger.append("approval_declined", task=task.id, tier=task.tier)
+                    tg.mark_done(task.id)
+                    continue
                 if decision.allowed:
                     tg.mark_running(task.id)
                     authorized.append(task)

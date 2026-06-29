@@ -53,14 +53,30 @@ def run_campaign(
 
 
 def _finalize(graph, ledger, stopped_reason, workspace, triage_complete):
-    # Verification stage: a model rules each finding real or a false positive.
-    verdicts = None
-    if triage_complete is not None:
-        findings = list(graph.entities("finding"))
-        verdicts = triage_findings(findings, triage_complete)
-        confirmed = sum(1 for v in verdicts.values() if v["verdict"] == "confirmed")
-        false_pos = sum(1 for v in verdicts.values() if v["verdict"] == "false_positive")
-        ledger.append("triage", findings=len(findings), confirmed=confirmed, false_positive=false_pos)
+    # Verification-as-currency: the oracle verdicts produced in the run (the
+    # verify stage re-proved each finding) are the source of truth, read off the
+    # graph. The model only advises on findings that carry no replayable proof.
+    findings = list(graph.entities("finding"))
+    verdicts: dict[str, dict] = {}
+    for f in graph.facts():
+        if f.kind == "verdict":
+            verdicts[f.data["finding"]] = {"verdict": f.data["verdict"], "reason": f.data["reason"]}
+    unverifiable = [fnd for fnd in findings if fnd.id not in verdicts]
+    if unverifiable and triage_complete is not None:
+        advised = triage_findings(unverifiable, triage_complete)
+        for fid, v in advised.items():
+            verdicts[fid] = {"verdict": "unverifiable", "reason": f"no PoC oracle; model says {v['verdict']}: {v.get('reason', '')}"}
+    else:
+        for fnd in unverifiable:
+            verdicts[fnd.id] = {"verdict": "unverifiable", "reason": "no PoC oracle available for this finding type"}
+    if findings:
+        ledger.append(
+            "triage",
+            findings=len(findings),
+            confirmed=sum(1 for v in verdicts.values() if v["verdict"] == "confirmed"),
+            false_positive=sum(1 for v in verdicts.values() if v["verdict"] == "false_positive"),
+            unverifiable=sum(1 for v in verdicts.values() if v["verdict"] == "unverifiable"),
+        )
     workspace.report_file.write_text(
-        render(graph, ledger, stopped_reason=stopped_reason, verdicts=verdicts)
+        render(graph, ledger, stopped_reason=stopped_reason, verdicts=verdicts or None)
     )

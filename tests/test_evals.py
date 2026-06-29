@@ -6,6 +6,16 @@ matcher breaks and a real exposure is missed, these assertions fail.
 """
 
 from evals.recon_eval import run_eval
+from evals.verify_eval import run_eval as run_verify_eval
+
+
+def test_verify_eval_gates_findings_on_replay():
+    m = run_verify_eval()
+    # A re-provable vuln is confirmed; a non-reproducing signal is a false
+    # positive; a finding with no replayable proof is left unverifiable.
+    assert m["verdicts"]["finding:real"] == "confirmed"
+    assert m["verdicts"]["finding:flaky"] == "false_positive"
+    assert m["unverifiable"] == ["finding:noproof"]
 
 
 def test_recon_eval_baseline_is_perfect():

@@ -12,8 +12,10 @@ from pathlib import Path
 
 import yaml
 
+from opfor.agent.planner import CompositePlanner
 from opfor.scenarios.apiscan.executors import default_executors
 from opfor.scenarios.apiscan.planner import ApiscanPlanner
+from opfor.scenarios.apiscan.verify import VerifyPlanner, verify_executors
 from opfor.scenarios.base import ControlScenario
 
 _TEMPLATES = yaml.safe_load((Path(__file__).resolve().parent / "templates.yaml").read_text())
@@ -21,6 +23,6 @@ _TEMPLATES = yaml.safe_load((Path(__file__).resolve().parent / "templates.yaml")
 APISCAN = ControlScenario(
     name="apiscan",
     content_root=Path(__file__).resolve().parent,
-    executors=default_executors(),
-    planner=ApiscanPlanner(_TEMPLATES),
+    executors={**default_executors(), **verify_executors()},
+    planner=CompositePlanner([ApiscanPlanner(_TEMPLATES), VerifyPlanner()]),
 )

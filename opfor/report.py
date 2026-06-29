@@ -108,7 +108,7 @@ def render(
             def verdict_of(f):
                 return verdicts.get(f.id, {}).get("verdict", "uncertain")
 
-            for label, key in (("Confirmed", "confirmed"), ("Uncertain", "uncertain")):
+            for label, key in (("Confirmed", "confirmed"), ("Unverifiable", "unverifiable"), ("Uncertain", "uncertain")):
                 group = [f for f in ranked if verdict_of(f) == key]
                 if group:
                     lines.append(f"## Findings, {label.lower()}")

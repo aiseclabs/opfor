@@ -93,6 +93,18 @@ def _emit(entrypoint_id: str, raw: dict, template: dict) -> list[Fact]:
     tid = template.get("id", "check")
     if not _matches(template.get("match", {}), raw):
         return [Fact(kind="check-clean", about=entrypoint_id, data={"id": tid})]
+    # The proof recipe is everything the verify stage needs to re-execute this
+    # finding: a finding is real only when replaying the request reproduces the
+    # same success signal. A single deterministic request, so it is replayable.
+    proof = None
+    if raw.get("base_url") and template.get("request"):
+        proof = {
+            "base_url": raw["base_url"],
+            "request": template["request"],
+            "match": template.get("match", {}),
+            "tier": raw.get("tier", "intrusive"),
+            "scope_host": raw.get("scope_host"),
+        }
     finding = Finding(
         id=f"finding:{tid}:{urllib.parse.urlsplit(raw.get('url') or '').netloc}",
         props={
@@ -103,6 +115,7 @@ def _emit(entrypoint_id: str, raw: dict, template: dict) -> list[Fact]:
             "evidence": f"{tid} fired at {raw.get('url')} (status {raw.get('status')})",
             "status": raw.get("status"),
             "body_snippet": (raw.get("body") or "")[:240],
+            "proof": proof,
         },
     )
     return [Fact(kind="vuln", about=entrypoint_id, data={"id": tid, "severity": template.get("severity")}, yields=(finding,))]
@@ -120,6 +133,9 @@ class ActiveCheckExecutor(Executor):
             headers=r.get("headers"), follow_redirects=r.get("follow_redirects", True),
         )
         raw["template"] = tpl
+        raw["base_url"] = task.params["base_url"]
+        raw["tier"] = task.tier
+        raw["scope_host"] = task.scope_host
         return Observation(entrypoint_id=task.id, action="active_check", raw=raw)
 
     def perceive(self, observation) -> list[Fact]:

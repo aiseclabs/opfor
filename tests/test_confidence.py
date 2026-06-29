@@ -69,13 +69,14 @@ def test_default_floor_runs_everything(tmp_path):
     assert ex.ran == ["lo"]
 
 
-def test_fuzz_planner_scores_named_params_higher_than_blind_path():
+def test_fuzz_confidence_is_evidence_driven():
     from opfor.model import Endpoint
 
     graph = SituationGraph()
-    graph.add_entity(Endpoint(id="GET /api/{id}", props={
-        "host": "h", "method": "GET", "path": "/api/{id}", "params": ["q"]}))
+    # `file` matches the traversal probe affinity (evidence); `xyz` matches nothing.
+    graph.add_entity(Endpoint(id="GET /dl", props={
+        "host": "h", "method": "GET", "path": "/dl", "params": ["file", "xyz"]}))
     tasks = EndpointVulnPlanner().expand(graph)
-    by_conf = {round(t.confidence, 2) for t in tasks}
-    # named-param injections are 0.7, blind path-param injections are 0.4.
-    assert 0.7 in by_conf and 0.4 in by_conf
+    trav_confs = {round(t.confidence, 2) for t in tasks if "traversal" in t.id}
+    # The traversal probe gets 0.8 on the `file` param (evidence) and 0.35 on `xyz`.
+    assert 0.8 in trav_confs and 0.35 in trav_confs

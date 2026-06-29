@@ -99,6 +99,16 @@ def render(
             lines.append(f"- ... and {len(endpoints) - 60} more")
         lines.append("")
 
+    hypotheses = graph.entities("hypothesis")
+    backed = [h for h in hypotheses if h.props.get("evidence_backed")]
+    if backed:
+        lines.append("## Exploitation hypotheses (evidence-backed)")
+        for h in sorted(backed, key=lambda x: x.id)[:40]:
+            lines.append(f"- {h.props.get('vuln')} @ {h.props.get('endpoint')} (evidence: param {h.props.get('support')})")
+        if hypotheses:
+            lines.append(f"- ({len(backed)} evidence-backed of {len(hypotheses)} hypotheses; the rest are blind, low-confidence)")
+        lines.append("")
+
     if technologies:
         lines.append("## Technologies")
         for t in sorted(technologies, key=lambda e: e.id):

@@ -111,6 +111,20 @@ class Endpoint:
 
 
 @dataclass(frozen=True, kw_only=True)
+class Hypothesis:
+    """A conjecture that an endpoint may have a vuln class, with its evidence.
+
+    The evidence layer: exploitation should be driven by why we think something is
+    vulnerable, not blind. A hypothesis records the supporting evidence (e.g. a
+    parameter name matching a probe's affinity) so the planner can score it.
+    """
+
+    id: str
+    kind: str = "hypothesis"
+    props: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(frozen=True, kw_only=True)
 class Finding:
     """A judgment recorded by a planner or triage, for example an exposure."""
 
@@ -131,6 +145,7 @@ ENTITY_TYPES = {
     "technology": Technology,
     "host": Host,
     "endpoint": Endpoint,
+    "hypothesis": Hypothesis,
     "finding": Finding,
 }
 

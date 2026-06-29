@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from opfor.scenarios.aiagent import AIAGENT
 from opfor.scenarios.apiscan import APISCAN
 from opfor.scenarios.base import ControlScenario
 from opfor.scenarios.mock import MOCK
@@ -15,6 +16,7 @@ _SCENARIOS = {
     WEB.name: WEB,
     APISCAN.name: APISCAN,
     WEBSURFACE.name: WEBSURFACE,
+    AIAGENT.name: AIAGENT,
 }
 
 

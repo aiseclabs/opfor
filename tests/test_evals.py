@@ -5,9 +5,16 @@ loosens a matcher and the IAP target starts producing a false positive, or a
 matcher breaks and a real exposure is missed, these assertions fail.
 """
 
+from evals.aiagent_eval import run_eval as run_aiagent_eval
 from evals.oob_eval import run_eval as run_oob_eval
 from evals.recon_eval import run_eval
 from evals.verify_eval import run_eval as run_verify_eval
+
+
+def test_aiagent_eval_confirms_only_the_compliant_model():
+    m = run_aiagent_eval()
+    assert m["vulnerable_confirmed"] == m["techniques"]  # compliant model: every injection lands
+    assert m["safe_confirmed"] == 0  # guarded model: nothing confirmed
 
 
 def test_all_eval_modules_import():

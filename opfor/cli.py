@@ -38,6 +38,13 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="model triage of findings, rules each one real or a false positive",
     )
+    run.add_argument(
+        "--triage-backend",
+        choices=("auto", "api", "cli"),
+        default="auto",
+        help="model backend for triage: 'api' (ANTHROPIC_API_KEY), 'cli' (claude "
+        "CLI on your subscription, no key), or 'auto' (api if a key is set, else cli)",
+    )
 
     sub.add_parser("scenarios", help="list registered scenarios")
 
@@ -66,9 +73,17 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "run":
         triage_complete = None
         if args.triage:
-            from opfor.agent.providers import anthropic_complete
+            import os
 
-            triage_complete = anthropic_complete(args.model, max_tokens=4096)
+            from opfor.agent.providers import anthropic_complete, claude_cli_complete
+
+            backend = args.triage_backend
+            if backend == "auto":
+                backend = "api" if os.environ.get("ANTHROPIC_API_KEY") else "cli"
+            if backend == "api":
+                triage_complete = anthropic_complete(args.model, max_tokens=4096)
+            else:
+                triage_complete = claude_cli_complete()
         result = run_campaign(
             args.campaign,
             run_dir=args.run_dir,

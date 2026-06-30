@@ -50,18 +50,25 @@ _CASES = [
 
 
 def _provider(model: str):
-    # The client constructs without a key (auth is checked only at call time), so
-    # probe for the key up front to skip cleanly rather than fail mid-call.
-    if not os.environ.get("ANTHROPIC_API_KEY"):
-        return None
+    """The API provider if a key is set, else the subscription-backed CLI provider.
+
+    Returns (complete, label) or (None, None) if neither is available. The CLI path
+    needs no ANTHROPIC_API_KEY, it drives the logged-in Claude subscription, so the
+    check runs from a plain Claude Code session.
+    """
+    from opfor.agent.providers import anthropic_complete, claude_cli_complete
+
+    # The SDK client constructs without a key (auth is checked only at call time),
+    # so probe for the key up front rather than fail mid-call.
+    if os.environ.get("ANTHROPIC_API_KEY"):
+        try:
+            return anthropic_complete(model), "api"
+        except Exception:
+            pass
     try:
-        from opfor.agent.providers import anthropic_complete
+        return claude_cli_complete(), "claude-cli (subscription)"
     except Exception:
-        return None
-    try:
-        return anthropic_complete(model)
-    except Exception:
-        return None
+        return None, None
 
 
 def classify(text: str, required_key: str) -> tuple[str, str]:
@@ -75,12 +82,12 @@ def classify(text: str, required_key: str) -> tuple[str, str]:
 
 def main(model: str = "claude-sonnet-4-6") -> int:
     print("=== opfor refusal sanity check ===\n")
-    complete = _provider(model)
+    complete, label = _provider(model)
     if complete is None:
-        print("skipped: no ANTHROPIC_API_KEY / anthropic package installed")
+        print("skipped: no ANTHROPIC_API_KEY and no claude CLI on PATH")
         return 0
 
-    print(f"model: {model}\n")
+    print(f"backend: {label}\n")
     print(f"{'prompt':10} {'result':10} note")
     refused = 0
     for name, build, key in _CASES:

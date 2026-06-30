@@ -18,6 +18,8 @@ authorization, and the system prompt simply tells the model the truth about them
 
 from __future__ import annotations
 
+import shutil
+import subprocess
 from typing import Callable
 
 
@@ -64,5 +66,38 @@ def anthropic_complete(
         return "".join(
             block.text for block in message.content if getattr(block, "type", None) == "text"
         )
+
+    return complete
+
+
+def claude_cli_complete(
+    model: str | None = None,
+    system: str = ASSESSMENT_SYSTEM,
+    timeout: float = 120.0,
+    binary: str = "claude",
+) -> Callable[[str], str]:
+    """Build a complete() backed by the Claude Code CLI in headless mode.
+
+    The same seam as anthropic_complete, but it shells out to `claude -p` instead
+    of the API SDK, so it authenticates with the logged-in Claude subscription and
+    needs no ANTHROPIC_API_KEY. Useful for driving triage or a model planner from a
+    subscription. model None uses the CLI's default model; pass a CLI alias like
+    "sonnet" or "opus" to pin one.
+    """
+    exe = shutil.which(binary)
+    if exe is None:
+        raise RuntimeError(f"claude CLI not found on PATH (looked for {binary!r})")
+
+    def complete(prompt: str) -> str:
+        cmd = [exe, "-p", prompt, "--output-format", "text", "--system-prompt", system]
+        if model:
+            cmd += ["--model", model]
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+        if result.returncode != 0:
+            # Fail loud: a CLI error is never a benign empty answer (invariant 5).
+            raise RuntimeError(
+                f"claude CLI exited {result.returncode}: {result.stderr.strip()[:200]}"
+            )
+        return result.stdout
 
     return complete

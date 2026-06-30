@@ -58,8 +58,11 @@ written by specialist **executors**, with a **planner / executor / perceptor**
 Every scenario runs on the one engine, the control shell: a `ControlScenario`
 supplies capability executors plus a planner. The shell checkpoints each round
 and supports `resume()` (continue a budget-suspended run from its checkpoint).
-Async delivery of late results (`deliver`, the phishing "hours later" path) is
-the remaining piece of invariant 3 and is not built yet.
+An executor whose result arrives later returns a pending observation with a
+handle; the shell parks the task, reports the run suspended, and accepts the late
+result through `deliver(handle, raw)`, possibly in a fresh process, after which a
+`resume()` drains the work it unlocked. This is the phishing "hours later" path,
+the async half of invariant 3.
 
 ## The task graph
 

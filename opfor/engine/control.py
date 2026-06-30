@@ -19,6 +19,7 @@ from opfor.engine.ledger import Ledger
 from opfor.engine.scope import Scope
 from opfor.engine.state import Workspace
 from opfor.engine.tasks import TaskGraph
+from opfor.model import Observation
 from opfor.plugins.base import Executor
 
 
@@ -92,6 +93,41 @@ class ControlShell:
         self._ledger.append("run_resume", step=self._budget.steps)
         return self._drive(graph, tg)
 
+    def deliver(self, handle: str, raw: dict) -> int:
+        """Feed a late async result in under its handle, then checkpoint.
+
+        Invariant 3's missing piece: a result that arrived hours or days later
+        (a phishing click, a callback) re-enters here, possibly in a fresh
+        process. The parked task is reconstructed into an observation, perceived
+        onto the graph exactly as a synchronous result would be, and marked done.
+        A later resume() picks up the new work the facts unlocked. Returns the
+        number of new entities the delivered result added to the graph.
+        """
+        data = self._workspace.load_state()
+        graph = SituationGraph.from_dict(data["graph"])
+        tg = TaskGraph.from_dict(data["tasks"])
+        self._budget.steps = data.get("steps", 0)
+        record = tg.waiting_record(handle)
+        if record is None:
+            # Fail loud: a result for an unknown handle is never silently dropped.
+            self._ledger.append("deliver_unknown", handle=handle)
+            raise KeyError(f"no task awaiting handle: {handle!r}")
+        task = tg.get(record["task_id"])
+        obs = Observation(
+            entrypoint_id=record["entrypoint_id"],
+            action=record["action"],
+            params=record.get("params", {}),
+            raw=raw,
+        )
+        facts = self._executors[task.capability].perceive(obs)
+        new_entities = graph.absorb(facts)
+        tg.resolve_waiting(handle)
+        self._ledger.append(
+            "deliver", task=task.id, handle=handle, facts=len(facts), new_entities=new_entities
+        )
+        self._checkpoint(graph, tg, done=False, reason="delivered, resume to continue")
+        return new_entities
+
     def _drive(self, graph: SituationGraph, tg: TaskGraph) -> RunResult:
         reason = ""
         done = True
@@ -102,7 +138,14 @@ class ControlShell:
 
             ready = tg.ready()
             if not ready:
-                reason = "no ready tasks"
+                # No ready work. If tasks are parked awaiting async results, the
+                # run is not done, it is suspended until deliver() feeds them back
+                # (invariant 3, the phishing "hours later" path). Otherwise drained.
+                if tg.waiting_count() > 0:
+                    reason = "awaiting async results"
+                    done = False
+                else:
+                    reason = "no ready tasks"
                 break
             if not self._budget.ok():
                 reason = "budget exhausted"
@@ -162,10 +205,13 @@ class ControlShell:
                     self._ledger.append("task_failed", task=task.id, error=type(exc).__name__)
                     tg.mark_done(task.id)
                     continue
+                self._budget.charge()  # the act happened, whether sync or dispatched
+                if obs.pending:
+                    self._await_async(task, obs, tg)
+                    continue
                 facts = self._executors[task.capability].perceive(obs)
                 new_entities = graph.absorb(facts)
                 tg.mark_done(task.id)
-                self._budget.charge()
                 self._ledger.append(
                     "act",
                     task=task.id,
@@ -174,6 +220,21 @@ class ControlShell:
                     facts=len(facts),
                     new_entities=new_entities,
                 )
+
+    def _await_async(self, task, obs, tg) -> None:
+        # The executor dispatched work whose result arrives later (e.g. a phishing
+        # email). Park the task under its handle so deliver() can resolve it, even
+        # in a fresh process after a checkpoint. No handle means we cannot track
+        # the result, so surface it loud rather than wait forever (invariant 5).
+        if not obs.handle:
+            self._ledger.append("await_no_handle", task=task.id, action=obs.action)
+            tg.mark_done(task.id)
+            return
+        tg.mark_waiting(
+            task.id, obs.handle,
+            {"action": obs.action, "entrypoint_id": obs.entrypoint_id, "params": dict(obs.params)},
+        )
+        self._ledger.append("await", task=task.id, handle=obs.handle, action=obs.action)
 
     def _checkpoint(self, graph, tg, *, done: bool, reason: str) -> None:
         self._workspace.save_state(

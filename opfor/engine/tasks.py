@@ -15,6 +15,7 @@ from typing import Any
 
 _PENDING = "pending"
 _RUNNING = "running"
+_WAITING = "waiting"  # dispatched, awaiting a late async result keyed by a handle
 _DONE = "done"
 
 
@@ -42,6 +43,11 @@ class TaskGraph:
     def __init__(self) -> None:
         self._tasks: dict[str, Task] = {}
         self._status: dict[str, str] = {}
+        # Async late-delivery: a task whose executor returned a pending observation
+        # is parked here, keyed by the handle the result will arrive under. The
+        # record carries what deliver() needs to reconstruct the observation later,
+        # possibly in a fresh process, so the await survives a checkpoint.
+        self._waiting: dict[str, dict] = {}
 
     def add(self, task: Task) -> bool:
         """Register a task, idempotent by id. Return True if it was new."""
@@ -67,11 +73,32 @@ class TaskGraph:
     def mark_done(self, task_id: str) -> None:
         self._status[task_id] = _DONE
 
+    def mark_waiting(self, task_id: str, handle: str, record: dict) -> None:
+        """Park a task awaiting an async result that will arrive under handle."""
+        self._status[task_id] = _WAITING
+        self._waiting[handle] = {"task_id": task_id, **record}
+
+    def waiting_record(self, handle: str) -> dict | None:
+        """The parked record for a handle, or None if no task awaits it."""
+        return self._waiting.get(handle)
+
+    def resolve_waiting(self, handle: str) -> None:
+        """Mark the task awaiting handle done and forget the await."""
+        record = self._waiting.pop(handle, None)
+        if record is not None:
+            self._status[record["task_id"]] = _DONE
+
+    def waiting_count(self) -> int:
+        return sum(1 for s in self._status.values() if s == _WAITING)
+
+    def get(self, task_id: str) -> Task:
+        return self._tasks[task_id]
+
     def is_done(self, task_id: str) -> bool:
         return self._status.get(task_id) == _DONE
 
     def counts(self) -> dict[str, int]:
-        out = {_PENDING: 0, _RUNNING: 0, _DONE: 0}
+        out = {_PENDING: 0, _RUNNING: 0, _WAITING: 0, _DONE: 0}
         for s in self._status.values():
             out[s] = out.get(s, 0) + 1
         return out
@@ -85,6 +112,7 @@ class TaskGraph:
         return {
             "tasks": [self._task_to_dict(t) for t in self._tasks.values()],
             "status": dict(self._status),
+            "waiting": dict(self._waiting),
         }
 
     @classmethod
@@ -104,6 +132,7 @@ class TaskGraph:
             )
             tg._tasks[task.id] = task
         tg._status = dict(data.get("status", {}))
+        tg._waiting = dict(data.get("waiting", {}))
         return tg
 
     @staticmethod

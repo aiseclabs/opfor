@@ -65,6 +65,9 @@ def run_campaign(
         graph.absorb([
             Fact(kind="vantage", about="campaign", data={"vantage": campaign.vantage}),
             Fact(kind="collaborator", about="campaign", data={"base": collaborator.base_url}),
+            # The run's artifact root, so a scenario executor can write per-target
+            # logs and tool workspaces under it without inferring paths from cwd.
+            Fact(kind="run_root", about="campaign", data={"root": str(workspace.dir)}),
         ])
         result = shell.run(graph)
         if any(f.kind == "oob-candidate" for f in result.graph.facts()):

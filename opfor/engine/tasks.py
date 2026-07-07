@@ -29,6 +29,9 @@ class Task:
     params: dict[str, Any] = field(default_factory=dict)
     tier: str = "recon"
     scope_host: str | None = None
+    # A non-host target authorized by resource id (e.g. an on-chain contract).
+    # A task names a host or a resource, never both; scope gates on whichever is set.
+    scope_resource: str | None = None
     osint: bool = False
     deps: tuple[str, ...] = ()
     # The planner's belief (0..1) that this task is worth running. 1.0 = certain
@@ -126,6 +129,7 @@ class TaskGraph:
                 params=td.get("params", {}),
                 tier=td.get("tier", "recon"),
                 scope_host=td.get("scope_host"),
+                scope_resource=td.get("scope_resource"),
                 osint=td.get("osint", False),
                 deps=tuple(td.get("deps", ())),
                 confidence=td.get("confidence", 1.0),
@@ -144,6 +148,7 @@ class TaskGraph:
             "params": t.params,
             "tier": t.tier,
             "scope_host": t.scope_host,
+            "scope_resource": t.scope_resource,
             "osint": t.osint,
             "deps": list(t.deps),
             "confidence": t.confidence,

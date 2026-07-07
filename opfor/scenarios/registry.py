@@ -5,6 +5,7 @@ from __future__ import annotations
 from opfor.scenarios.aiagent import AIAGENT
 from opfor.scenarios.apiscan import APISCAN
 from opfor.scenarios.base import ControlScenario
+from opfor.scenarios.chainaudit import CHAINAUDIT
 from opfor.scenarios.mock import MOCK
 from opfor.scenarios.recon import RECON
 from opfor.scenarios.web import WEB
@@ -17,6 +18,7 @@ _SCENARIOS = {
     APISCAN.name: APISCAN,
     WEBSURFACE.name: WEBSURFACE,
     AIAGENT.name: AIAGENT,
+    CHAINAUDIT.name: CHAINAUDIT,
 }
 
 

@@ -98,6 +98,43 @@ def test_from_yaml_intrusive_with_authorization_loads(tmp_path):
     assert scope.authorize_task(_graph(), _task("intrusive", host="h")).allowed
 
 
+# --- generic resource scope (non-host targets, e.g. on-chain contracts) -----
+
+
+def _resource_task(resource, tier="recon"):
+    return Task(id="t1", capability="c", target="t", tier=tier, scope_resource=resource)
+
+
+def test_resource_in_scope_is_authorized():
+    scope = Scope(resources=("evm_contract:bsc:0xabc",), max_tier="recon")
+    assert scope.authorize_task(_graph(), _resource_task("evm_contract:bsc:0xabc")).allowed
+
+
+def test_resource_out_of_scope_is_denied():
+    scope = Scope(resources=("evm_contract:bsc:0xabc",), max_tier="recon")
+    decision = scope.authorize_task(_graph(), _resource_task("evm_contract:bsc:0xdef"))
+    assert not decision.allowed
+    assert "resource out of scope" in decision.reason
+
+
+def test_resource_scope_is_case_insensitive():
+    # An operator may write a checksummed (mixed-case) address; it still matches.
+    scope = Scope(resources=("evm_contract:bsc:0xABCdef",), max_tier="recon")
+    assert scope.authorize_task(_graph(), _resource_task("evm_contract:bsc:0xabcdef")).allowed
+
+
+def test_resource_task_respects_tier_ceiling():
+    scope = Scope(resources=("r1",), max_tier="recon")
+    assert not scope.authorize_task(_graph(), _resource_task("r1", tier="probe")).allowed
+
+
+def test_from_yaml_parses_resources(tmp_path):
+    p = tmp_path / "scope.yaml"
+    p.write_text("resources:\n  - evm_contract:bsc:0xABC\nmax_tier: recon\n")
+    scope = Scope.from_yaml(p)
+    assert scope.resources == ("evm_contract:bsc:0xabc",)
+
+
 def test_cross_campaign_isolation():
     # Each campaign's scope only authorizes its own estate; one campaign can never
     # reach another's hosts.

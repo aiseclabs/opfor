@@ -1,5 +1,25 @@
-.venv/
+# Python
 __pycache__/
+*.py[cod]
+build/
+dist/
 *.egg-info/
+
+# Virtual environment
+.venv/
+
+# Env and secrets
+.env
+
+# Tooling caches
 .pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Campaign run output, not part of the project
 runs/
+
+# Local tokensave code graph index, not part of the project
+.tokensave/

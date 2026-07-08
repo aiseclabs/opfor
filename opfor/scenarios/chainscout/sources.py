@@ -5,17 +5,23 @@ None of them judge anything, they only fetch and shape, so the "attack knowledge
 is data, executors only act" line holds: the planner and triage decide what a
 result means, these just report it.
 
-Three sources cover the two axes we care about, value and risk:
-- DeFiLlama names where the money is (protocol TVL per chain), so it is the seed.
+Sources cover the two axes we care about, value and risk, plus recency:
+- Moralis names which contracts actually hold money (token top-holders, with a
+  per-holder USD value and an is-contract flag), so it is the seed; and its first
+  transaction of an address is that address's creation, which dates a contract.
 - GoPlus returns per-contract risk flags (honeypot, mintable, hidden owner, ...).
 - Etherscan (one V2 key, multichain by chainid) says whether the source is
-  verified, on which compiler, and whether it is a proxy.
+  verified, on which compiler, whether it is a proxy, and its contract name (used
+  to spot standard templates).
+- DeFiLlama (protocol TVL per chain) is retained as an alternate value seed; the
+  active seed is Moralis holders, because DeFiLlama only pins one governance-token
+  address per protocol, not the fund-holding contracts.
 
 The HTTP call is a single injected seam (`http_get`) so a test drives the whole
 scenario with fixtures and never touches a live endpoint or spends a real key.
-The Etherscan key travels only in the request URL to Etherscan and is redacted
-out of anything we hand back, so it never lands in an observation, a fact, or a
-log.
+The Etherscan key travels only in the request URL to Etherscan (redacted out of
+anything we hand back); the Moralis key travels only in a request header. Neither
+ever lands in an observation, a fact, or a log.
 """
 
 from __future__ import annotations
@@ -51,6 +57,7 @@ CHAINS: dict[str, dict] = {
         "defillama_prefix": "bsc",     # the prefix on a chain-scoped `address`
         "etherscan_chainid": 56,
         "goplus_chainid": 56,
+        "moralis_chain": "bsc",        # Moralis chain identifier
         "explorer": "https://bscscan.com/address/",
     },
 }
@@ -112,6 +119,115 @@ def _looks_like_evm_address(addr: str) -> bool:
         and len(addr) == 42
         and all(c in "0123456789abcdef" for c in addr[2:])
     )
+
+
+# --- Moralis: which contracts hold money, and when they were born ----------
+
+MORALIS_BASE = "https://deep-index.moralis.io/api/v2.2"
+
+
+def _moralis_headers(api_key: str) -> dict:
+    # The key travels only in this header, never in a returned value or a log.
+    return {"X-API-Key": api_key, "accept": "application/json"}
+
+
+def moralis_token_owners(
+    get: HttpGet, api_key: str, chain: str, token: str, *, limit: int = 100,
+    cursor: str | None = None,
+) -> dict:
+    """One page of a token's holders, richest first.
+
+    Each holder record carries `owner_address`, `usd_value`, `is_contract`, and
+    labels (`owner_address_label`, `entity`) when Moralis knows them. Returns the
+    page plus the cursor for the next one; we only fetch, we do not judge.
+    """
+    info = chain_info(chain)
+    query = {"chain": info["moralis_chain"], "order": "DESC", "limit": str(limit)}
+    if cursor:
+        query["cursor"] = cursor
+    url = f"{MORALIS_BASE}/erc20/{token}/owners?" + urllib.parse.urlencode(query)
+    body = json.loads(get(url, _moralis_headers(api_key)).decode("utf-8", "replace"))
+    return {"result": body.get("result") or [], "cursor": body.get("cursor")}
+
+
+def moralis_value_contracts(
+    get: HttpGet, api_key: str, chain: str, tokens: list[str], *,
+    min_usd: float, max_usd: float, max_pages: int,
+) -> dict:
+    """Contracts holding an in-band USD amount of any token in a basket.
+
+    Pages each token's holder list from the top, keeps holders that are contracts
+    (`is_contract`) whose USD value lands in [min_usd, max_usd], and aggregates by
+    address so a contract holding several assets sums across them. Paging stops for
+    a token once a holder falls below the band (the list is value-sorted) or the
+    page cap is hit. A token still above the band at the cap is recorded in
+    `truncated`, so the caller can report the coverage was bounded, never silently.
+    """
+    contracts: dict[str, dict] = {}
+    truncated: list[str] = []
+    for token in tokens:
+        cursor = None
+        pages = 0
+        last: float | None = None
+        while pages < max_pages:
+            page = moralis_token_owners(get, api_key, chain, token, cursor=cursor)
+            rows = page["result"]
+            pages += 1
+            if not rows:
+                break
+            for row in rows:
+                usd = _as_float(row.get("usd_value"))
+                last = usd
+                if not row.get("is_contract"):
+                    continue
+                if usd is None or not (min_usd <= usd <= max_usd):
+                    continue
+                addr = str(row.get("owner_address", "")).lower()
+                if not _looks_like_evm_address(addr):
+                    continue
+                entry = contracts.setdefault(
+                    addr, {"usd": 0.0, "tokens": {}, "label": None, "entity": None})
+                entry["usd"] += usd
+                entry["tokens"][token.lower()] = usd
+                if row.get("owner_address_label"):
+                    entry["label"] = str(row["owner_address_label"])
+                if row.get("entity"):
+                    entry["entity"] = str(row["entity"])
+            cursor = page["cursor"]
+            if last is not None and last < min_usd:
+                break
+            if not cursor:
+                break
+        if pages >= max_pages and last is not None and last >= min_usd:
+            truncated.append(token.lower())
+    return {"contracts": contracts, "truncated": truncated}
+
+
+def moralis_first_seen(get: HttpGet, api_key: str, chain: str, address: str) -> dict:
+    """When an address was first active, i.e. its creation.
+
+    A contract's earliest transaction is the transaction that created it, so the
+    oldest transaction's block timestamp dates the deployment. Returns the raw
+    timestamp and block; the age (and whether that is "fresh") is computed later,
+    against a reference date, so this stays a pure fetch.
+    """
+    info = chain_info(chain)
+    query = {"chain": info["moralis_chain"], "order": "ASC", "limit": "1"}
+    url = f"{MORALIS_BASE}/{address.lower()}?" + urllib.parse.urlencode(query)
+    body = json.loads(get(url, _moralis_headers(api_key)).decode("utf-8", "replace"))
+    rows = body.get("result") or []
+    first = rows[0] if rows else {}
+    return {
+        "born_ts": first.get("block_timestamp"),
+        "born_block": first.get("block_number"),
+    }
+
+
+def _as_float(value) -> float | None:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
 
 
 # --- GoPlus: per-contract risk flags (the risk axis) -----------------------

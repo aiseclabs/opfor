@@ -4,26 +4,41 @@ How a candidate contract is prioritized. The planner reads this to set each
 finding's `severity` band. It is a triage hint, not a verdict: the authoritative
 "real / worth auditing" call is the model triage stage, downstream.
 
-Risk and value are kept as independent axes. The band below reflects **risk**
-only; **value** (TVL) rides along on the finding as a separate property so the
-operator can sort by either.
+The ordering principle is **recency-first**. Holding value is a *gate* applied at
+the seed (a contract is only a candidate if it holds an in-band USD amount), not
+a band input, so value never inflates priority. What raises priority is being
+**fresh, custom code** — newly deployed, non-standard logic that already holds
+money, which is where real exploits concentrate.
 
 ## Priority band (severity)
 
-- **high** — GoPlus trips an owner-controls-your-funds flag: `is_honeypot`,
+Evaluated top to bottom; the first match wins.
+
+- **high** — a GoPlus owner-controls-your-funds flag trips (`is_honeypot`,
   `hidden_owner`, `can_take_back_ownership`, `selfdestruct`, `owner_change_balance`,
-  or `cannot_sell_all`. These are the scariest to leave unaudited.
-- **medium** — the contract source is unverified. Nothing to audit and opaque to
-  a reviewer, which is itself a reason to look harder.
-- **low** — verified source and no high-risk flag. Still a candidate (it holds
-  value), just lower on the list.
+  `cannot_sell_all`). A rug/trap dominates everything else.
+- **low** — a known standard template (name or implementation matches
+  `knowledge/templates.yaml`: Gnosis Safe multisigs, PancakeSwap AMM/staking,
+  timelocks, ...). Audited, standard, everywhere; de-prioritized even when rich.
+- **high** — custom logic deployed within the recency window (`window_days`,
+  default 90). Fresh unaudited code holding value: the top target.
+- **medium** — custom logic, older than the window (includes unverified/opaque
+  contracts we cannot date or read). Worth a look, not fresh.
 
 ## Notes
 
-- Absence of a GoPlus record (`covered: false`) is not safety. It means the
+- **Unverified is not a template.** With no source we cannot match a template
+  name, so an unverified contract falls through to the custom branches; fresh and
+  opaque still bands high. `unverified` is recorded as a signal either way.
+- **Bare OZ proxies / Diamonds are custom.** `TransparentUpgradeableProxy`,
+  `ERC1967Proxy`, and Diamonds are intentionally absent from the template list:
+  the wrapper is standard but the logic it points at is app-specific, so we treat
+  them as custom and let recency decide.
+- **Absence of a GoPlus record (`covered: false`) is not safety.** It means the
   address is not a token GoPlus has seen; treat it as unknown, not clean.
-- Value does not raise the band. A rich, verified, flag-free contract stays low
-  priority for *risk* even though its TVL makes it attractive; the TVL is visible
-  on the finding for the operator to weigh.
-- To retune, edit `_HIGH_RISK_FLAGS` and `_severity` in `planner.py` alongside
-  this file. No executor reads this rubric.
+- **Coverage is bounded, and says so.** The seed pages each token only up to a
+  cap; a token still in-band at the cap is listed in `truncated_tokens`. A missing
+  contract may mean "past the cap", never "none exist".
+- To retune, edit `_HIGH_RISK_FLAGS` / `_classify` in `planner.py` and the token
+  basket / band / window in the campaign inventory, alongside this file. No
+  executor reads this rubric.

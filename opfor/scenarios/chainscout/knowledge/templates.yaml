@@ -19,9 +19,11 @@ names:
   - pancakepair
   - pancakerouter
   - pancakefactory
+  - v3pool           # substring: PancakeV3Pool, UniswapV3Pool, any standard V3 AMM pool
   - smartchef
   - masterchef
   - syrupbar
+  - childpool        # standard staking child pool (Stader / Lido style)
   # Common governance / utility scaffolding.
   - timelock
   - multicall

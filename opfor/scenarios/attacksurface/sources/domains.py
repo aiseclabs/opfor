@@ -11,6 +11,7 @@ injected seam, so a test drives the scenario with fixtures.
 
 from __future__ import annotations
 
+import concurrent.futures
 import http.client
 import ipaddress
 import json
@@ -20,6 +21,8 @@ import ssl
 import urllib.error
 import urllib.parse
 import urllib.request
+
+from opfor.scenarios.attacksurface import config
 
 _UA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
 _TIMEOUT = 12
@@ -31,37 +34,62 @@ _DOH_RESOLVERS = ("https://dns.google/resolve", "https://cloudflare-dns.com/dns-
 # --- certificate transparency: subdomains without touching the target -------
 
 
+# The certspotter free endpoint returns a bounded page, so a walk follows the `after`
+# cursor. The page cap bounds a large log, ten pages is a few thousand certificates.
+_CERTSPOTTER_PAGES = 12
+
+
 def subdomains(domain: str) -> set[str]:
-    """Certificate-transparency subdomains of a domain, certspotter first, crt.sh next.
+    """Certificate-transparency subdomains of a domain, the union of certspotter and crt.sh.
 
     Both are public logs of issued certificates, so they name hosts without touching the
-    target. certspotter leads because it is fast and reliable, crt.sh is the fallback and
-    is often slow or 503 under load. Only when both fail is the failure raised, never
-    swallowed into an empty set, so an empty result means no certificates, not a dead
-    source.
+    target. Each source is best effort, an individual failure is tolerated so one dead
+    source does not blind the other, and only when every source fails is the failure
+    raised, so an empty result means no certificates rather than a dead source.
     """
-    try:
-        return certspotter_subdomains(domain)
-    except Exception as first:
+    names: set[str] = set()
+    errors: list[str] = []
+    for source in (certspotter_subdomains, crt_subdomains):
         try:
-            return crt_subdomains(domain)
-        except Exception as second:
-            raise RuntimeError(f"certspotter failed ({first}), crt.sh failed ({second})") from second
+            names |= source(domain)
+        except Exception as exc:
+            errors.append(f"{source.__name__}: {exc}")
+    if not names and len(errors) == 2:
+        raise RuntimeError("all certificate-transparency sources failed: " + ", ".join(errors))
+    return names
 
 
 def certspotter_subdomains(domain: str) -> set[str]:
-    """Subdomains of a domain seen in certificate transparency, via certspotter."""
-    url = (f"https://api.certspotter.com/v1/issuances?domain={domain}"
-           "&include_subdomains=true&expand=dns_names")
-    request = urllib.request.Request(url, headers={"User-Agent": _UA, "Accept": "application/json"})
-    with urllib.request.urlopen(request, timeout=_TIMEOUT) as resp:
-        issuances = json.loads(resp.read().decode("utf-8", "replace"))
+    """Subdomains of a domain seen in certificate transparency, via certspotter, paged.
+
+    The free endpoint returns one bounded page, so this follows the `after` cursor to walk
+    the log rather than stopping at the first page, which multiplies recall many times over
+    on a large log. It stops at a page cap so the walk stays bounded.
+    """
+    headers = {"User-Agent": _UA, "Accept": "application/json"}
+    token = config.certspotter_token()
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
     names: set[str] = set()
-    for issuance in issuances:
-        for raw in issuance.get("dns_names", []):
-            name = str(raw).strip().lower().lstrip("*.")
-            if name and name.endswith("." + domain) and _looks_like_host(name):
-                names.add(name)
+    after = ""
+    for _ in range(_CERTSPOTTER_PAGES):
+        url = (f"https://api.certspotter.com/v1/issuances?domain={domain}"
+               "&include_subdomains=true&expand=dns_names")
+        if after:
+            url += f"&after={after}"
+        request = urllib.request.Request(url, headers=headers)
+        with urllib.request.urlopen(request, timeout=_TIMEOUT) as resp:
+            issuances = json.loads(resp.read().decode("utf-8", "replace"))
+        if not issuances:
+            break
+        for issuance in issuances:
+            for raw in issuance.get("dns_names", []):
+                name = str(raw).strip().lower().lstrip("*.")
+                if name and name.endswith("." + domain) and _looks_like_host(name):
+                    names.add(name)
+        after = str(issuances[-1].get("id") or "")
+        if not after:
+            break
     return names
 
 
@@ -223,6 +251,56 @@ def _doh_a(resolver: str, name: str) -> list[str]:
     with urllib.request.urlopen(request, timeout=_TIMEOUT) as resp:
         body = json.loads(resp.read().decode("utf-8", "replace"))
     return [str(a["data"]) for a in body.get("Answer", []) if a.get("type") == 1 and a.get("data")]
+
+
+# --- DNS brute force: names certificate transparency never saw -------------
+
+_BRUTE_WORKERS = 16
+# Two unlikely labels, so a wildcard zone that answers every name is learned before the
+# wordlist runs. A fluke hit on one is unlikely to repeat on both.
+_WILDCARD_PROBES = ("opfor-wildcard-6f3a9c2e", "opfor-absent-8b1d4a37")
+
+
+def brute_subdomains(root: str, words) -> set[str]:
+    """Subdomains of a root found by resolving a wordlist over DNS-over-HTTPS.
+
+    This finds a name certificate transparency never saw, one hidden behind a wildcard
+    certificate or one that never had a public certificate. A name that resolves under the
+    root is a real host, so this is evidence, not a guess. A wildcard zone answers every
+    name with the same address, so the wildcard address is learned first and a candidate
+    that only echoes it is dropped, otherwise brute force would return the whole wordlist.
+    """
+    wildcard = _wildcard_addresses(root)
+    candidates = [f"{w.strip().lower()}.{root}" for w in words if w and w.strip()]
+    resolved: dict[str, list[str]] = {}
+    with concurrent.futures.ThreadPoolExecutor(max_workers=_BRUTE_WORKERS) as pool:
+        for name, addresses in pool.map(lambda n: (n, _resolve_addresses(n)), candidates):
+            resolved[name] = addresses
+    return brute_hits(resolved, wildcard)
+
+
+def brute_hits(resolved: dict, wildcard: set) -> set[str]:
+    """Names that resolved to an address other than the wildcard catch-all, the real hits."""
+    return {name for name, addresses in resolved.items()
+            if addresses and set(addresses) != set(wildcard)}
+
+
+def _wildcard_addresses(root: str) -> set[str]:
+    """Addresses a wildcard zone returns for a name that should not exist, empty when the
+    zone is not wildcard."""
+    addresses: set[str] = set()
+    for label in _WILDCARD_PROBES:
+        addresses |= set(_resolve_addresses(f"{label}.{root}"))
+    return addresses
+
+
+def _resolve_addresses(name: str) -> list[str]:
+    """The addresses a name resolves to, empty when it does not resolve or the lookup errs."""
+    try:
+        result = resolve_host(name)
+    except Exception:
+        return []
+    return list(result.get("addresses", ())) if result.get("resolvable") else []
 
 
 def public_addresses(addresses) -> list[str]:

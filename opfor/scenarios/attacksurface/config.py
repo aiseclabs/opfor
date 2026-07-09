@@ -20,6 +20,16 @@ def github_token() -> str:
     return os.environ.get("OPFOR_GITHUB_TOKEN", "") or os.environ.get("GITHUB_TOKEN", "")
 
 
+def certspotter_token() -> str:
+    """A certspotter API token to raise the rate limit, empty when unset.
+
+    Certificate-transparency reads work unauthenticated, but the free tier throttles the
+    paging that walks a large log, so a token is a throughput lift that makes a full walk
+    reliable, not a requirement. A free account provides one.
+    """
+    return os.environ.get("OPFOR_CERTSPOTTER_KEY", "")
+
+
 def reverse_whois_key() -> str:
     """A reverse-WHOIS provider key, empty when unset.
 

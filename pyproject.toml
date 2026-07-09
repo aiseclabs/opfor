@@ -28,4 +28,5 @@ include = ["opfor*"]
 opfor = [
     "scenarios/*/knowledge/**/*.md",
     "scenarios/*/**/*.yaml",
+    "scenarios/*/knowledge/**/*.txt",
 ]

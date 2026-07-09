@@ -53,7 +53,15 @@ sequenced along a fixed lifecycle spine so a run either closes or says why it di
 - `rules.py` is planning. `RuleSet` groups rules by phase and the `each` helper covers the
   common "for each node lacking this fact, run that capability" pattern, so a scenario
   declares its pipeline rather than hand-coding the gating loop.
-- `triage.py` is the judge, the only place findings are minted.
+- `triage.py` is the judge, the only place findings are minted. It may be rule-based or
+  model-backed, the engine does not care which. A recon scenario judges with a model, so
+  the semantic call of what is real and how severe is prose a model reads, not a keyword
+  list in code.
+- `providers/`, `json_parse.py`, `markdown_docs.py` are the model layer, a generic
+  primitive any triage or planner may use. A `Provider` is one model call, keyless on the
+  operator's Claude Code subscription by default and a vendor API when a key is set, see
+  `make_provider` and `.env.example`. `json_parse` recovers a JSON object from a reply and
+  fails loud when there is none, `markdown_docs` reads a scenario's model-facing knowledge.
 - `scope.py`, `ledger.py`, `budget.py` are the cross-cutting rails.
 - `result.py` is the contract, a `Finding` and the `Report` that answers did the run close,
   how far did it get, and what did it find.

@@ -49,20 +49,24 @@ def each(
     *,
     run: str,
     unless_fact: str | None = None,
+    where: Callable[[object], bool] | None = None,
     scope_host: Callable[[object], str | None] | None = None,
     scope_resource: Callable[[object], str | None] | None = None,
 ) -> Rule:
     """A rule that runs a capability once per node of a type.
 
     `unless_fact` skips a node that already carries a fact of that kind, which is how
-    a stage waits for its predecessor without a task dependency. `scope_host` and
-    `scope_resource` read a locator off the node's payload, so a non-osint capability
-    is authorized against the right target.
+    a stage waits for its predecessor without a task dependency. `where` filters on the
+    node's payload, so a rule can target only some nodes such as the seed roots.
+    `scope_host` and `scope_resource` read a locator off the payload, so a non-osint
+    capability is authorized against the right target.
     """
 
     def rule(world: World) -> list[Task]:
         tasks: list[Task] = []
         for node in world.nodes(node_type):
+            if where is not None and not where(node.payload):
+                continue
             if unless_fact is not None and world.has_fact(node.id, unless_fact):
                 continue
             tasks.append(Task(

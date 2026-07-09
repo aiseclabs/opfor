@@ -7,10 +7,12 @@ the tool cannot run is an error, not an empty clean result.
 from __future__ import annotations
 
 from opfor.core import Scenario
+from opfor.scenarios.attacksurface import ATTACKSURFACE
 from opfor.scenarios.mock import MOCK
 
 _SCENARIOS: dict[str, Scenario] = {
     MOCK.name: MOCK,
+    ATTACKSURFACE.name: ATTACKSURFACE,
 }
 
 

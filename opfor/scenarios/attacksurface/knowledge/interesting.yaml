@@ -1,0 +1,36 @@
+# Subdomain name keywords that suggest a sensitive or non-production surface. When a live
+# name's subdomain part contains one, triage raises it to a MEDIUM finding, since an
+# internet-facing admin, staging, or infrastructure host is a foothold worth reducing.
+# This is a heuristic, so triage keeps the matched keyword as the evidence and an operator
+# overrules it. Adding a keyword is a data change here.
+
+keywords:
+  - admin
+  - staging
+  - stage
+  - dev
+  - test
+  - uat
+  - internal
+  - intranet
+  - vpn
+  - jenkins
+  - grafana
+  - kibana
+  - jira
+  - confluence
+  - gitlab
+  - sonar
+  - vault
+  - nexus
+  - portainer
+  - phpmyadmin
+  - adminer
+  - backup
+  - gateway
+  - sso
+  - dashboard
+  - debug
+  - beta
+  - demo
+  - legacy

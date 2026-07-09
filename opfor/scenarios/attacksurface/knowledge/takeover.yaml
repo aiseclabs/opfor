@@ -1,0 +1,34 @@
+# Subdomain takeover signatures: a service plus the error-page text it serves when a
+# name still points at it but the underlying resource is unclaimed. Triage matches a
+# signature, lowercased, against the lowercased body head of a live host. This is public
+# knowledge, mirrored from the can-i-take-over-xyz catalogue. Adding a service is a data
+# change here, never a code change. A match is a candidate, not a proof, the operator
+# confirms before acting.
+
+services:
+  - service: GitHub Pages
+    signature: "there isn't a github pages site here"
+  - service: Amazon S3
+    signature: "nosuchbucket"
+  - service: Heroku
+    signature: "no such app"
+  - service: Fastly
+    signature: "fastly error: unknown domain"
+  - service: Surge.sh
+    signature: "project not found"
+  - service: Bitbucket
+    signature: "repository not found"
+  - service: Read the Docs
+    signature: "unknown to read the docs"
+  - service: Ghost
+    signature: "the thing you were looking for is no longer here"
+  - service: Pantheon
+    signature: "the gods are wise, but do not know of the site which you seek"
+  - service: WP Engine
+    signature: "the site you were looking for couldn't be found"
+  - service: Tumblr
+    signature: "whatever you were looking for doesn't currently exist at this address"
+  - service: Shopify
+    signature: "sorry, this shop is currently unavailable"
+  - service: Netlify
+    signature: "not found - request id"

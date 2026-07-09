@@ -67,7 +67,7 @@ def run(
             if not ready:
                 break
 
-            _run_batch(scenario, world, ready, budget, done, pending, ledger, max_workers)
+            _run_batch(scenario, world, ready, budget, done, pending, ledger, notes, max_workers)
 
         if pending:
             notes.append(f"awaiting async results: {len(pending)}")
@@ -105,12 +105,13 @@ def _authorize(scenario, scope, world, phase, done, pending, ledger, notes) -> l
     return ready
 
 
-def _run_batch(scenario, world, ready, budget, done, pending, ledger, max_workers) -> None:
+def _run_batch(scenario, world, ready, budget, done, pending, ledger, notes, max_workers) -> None:
     """Run authorized tasks concurrently, then record outcomes on the main thread.
 
     Outcomes are collected while the pool runs and applied only after it joins, so the
     world is mutated by one thread and a running capability never reads a half-written
-    world.
+    world. A failure is added to the run notes as well as the ledger, so the report is
+    loud about it and a caller does not have to read the ledger to see a failed step.
     """
     collected: list[tuple[Task, object]] = []
     with ThreadPoolExecutor(max_workers=max_workers) as pool:
@@ -126,6 +127,7 @@ def _run_batch(scenario, world, ready, budget, done, pending, ledger, max_worker
     for task, outcome in collected:
         if isinstance(outcome, Exception):
             ledger.append("task_error", task=task.id, error=type(outcome).__name__)
+            notes.append(f"error {task.id}: {type(outcome).__name__}: {outcome}")
             done.add(task.id)
         elif isinstance(outcome, Done):
             world.absorb(outcome.facts)
@@ -134,6 +136,7 @@ def _run_batch(scenario, world, ready, budget, done, pending, ledger, max_worker
         elif isinstance(outcome, Failed):
             done.add(task.id)
             ledger.append("failed", task=task.id, reason=outcome.reason)
+            notes.append(f"failed {task.id}: {outcome.reason}")
         elif isinstance(outcome, Later):
             pending[outcome.handle] = task
             ledger.append("later", task=task.id, handle=outcome.handle)

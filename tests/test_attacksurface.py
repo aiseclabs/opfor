@@ -100,6 +100,15 @@ def _pivot(domain):
     return dict(SIBLINGS.get(domain, {}))
 
 
+# Reverse-WHOIS results keyed by search term. The org name resolves to a root registered
+# to the same registrant, the definitional ownership signal.
+WHOIS = {"ExampleCorp": {"example.org": "registration record names ExampleCorp"}}
+
+
+def _reverse(term, api_key=""):
+    return dict(WHOIS.get(term, {}))
+
+
 def _enumerate(domain):
     return set(CRT.get(domain, set()))
 
@@ -350,3 +359,57 @@ def test_pivot_failure_still_closes_and_is_loud():
     report = run(scenario, world, scope=Scope(max_tier="recon", hosts=(ROOT,)), budget=Budget(500))
     assert report.closed
     assert any("failed" in n and "domain_pivot" in n for n in report.notes)
+
+
+def _with_reverse(reverse_fn=_reverse):
+    return build(search_fn=_search, repos_fn=_repos, enumerate_fn=_enumerate, pivot_fn=_pivot,
+                 reverse_whois_fn=reverse_fn, resolve_fn=_resolve, probe_fn=_probe, fetch_fn=_fetch)
+
+
+def test_registrant_pivot_is_off_without_a_key():
+    # the default seam stays off when no key is set, so the run has no registrant fact
+    world = _seed()
+    _run(world)
+    assert not world.has_fact("org:ExampleCorp", "registrant")
+
+
+def test_registrant_pivot_discovers_a_root_when_wired():
+    world = _seed()
+    run(_with_reverse(), world, scope=Scope(max_tier="recon", hosts=(ROOT,)), budget=Budget(500))
+    org = world.node("domain:example.org")
+    assert org is not None
+    assert org.payload.source == "reverse-whois"
+    assert org.payload.confidence == "confirmed"
+    assert "registration record names ExampleCorp" in org.payload.evidence
+
+
+def test_registrant_root_is_an_info_finding():
+    world = _seed()
+    report = run(_with_reverse(), world, scope=Scope(max_tier="recon", hosts=(ROOT,)), budget=Budget(500))
+    roots = {f.where: f for f in report.findings if f.data.get("kind") == "root"}
+    assert "example.org" in roots
+    assert roots["example.org"].data["source"] == "reverse-whois"
+
+
+def test_registrant_pivot_failure_still_closes_and_is_loud():
+    def boom(term, api_key=""):
+        raise TimeoutError("provider slow")
+
+    world = _seed()
+    report = run(_with_reverse(boom), world, scope=Scope(max_tier="recon", hosts=(ROOT,)), budget=Budget(500))
+    assert report.closed
+    assert any("failed" in n and "domain_registrant" in n for n in report.notes)
+
+
+def test_roots_from_reverse_whois_reads_both_shapes():
+    from opfor.scenarios.attacksurface.sources.domains import roots_from_reverse_whois
+
+    as_strings = {"domainsList": ["a.example.org", "b.example.net"]}
+    assert roots_from_reverse_whois(as_strings, "Acme") == {
+        "example.org": "registration record names Acme",
+        "example.net": "registration record names Acme",
+    }
+    as_records = {"domainsList": [{"domainName": "c.example.io"}]}
+    assert roots_from_reverse_whois(as_records, "Acme") == {
+        "example.io": "registration record names Acme"
+    }

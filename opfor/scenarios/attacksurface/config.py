@@ -18,3 +18,14 @@ def github_token() -> str:
     is an optional throughput lift, not a requirement.
     """
     return os.environ.get("OPFOR_GITHUB_TOKEN", "") or os.environ.get("GITHUB_TOKEN", "")
+
+
+def reverse_whois_key() -> str:
+    """A reverse-WHOIS provider key, empty when unset.
+
+    Reverse-WHOIS has no keyless mode, a provider bills for the bulk registration index,
+    so without a key the registrant pivot is left out of the run rather than failing per
+    root. Ownership by registration is the definitional signal of who a domain belongs
+    to, so this pivot is the reliable core, wired only when the operator supplies a key.
+    """
+    return os.environ.get("OPFOR_REVERSE_WHOIS_KEY", "")

@@ -22,6 +22,7 @@ class Org:
     name: str
     domains: tuple[str, ...] = ()
     classes: tuple[str, ...] = ()
+    whois_terms: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, kw_only=True)

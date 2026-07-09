@@ -102,6 +102,42 @@ class DomainPivot(Capability):
         return Done(facts=(Fact(kind="pivoted", about=task.node, yields=found),))
 
 
+class DomainRegistrant(Capability):
+    """MAP: sibling root domains that share a registrant with the org, via reverse-WHOIS.
+
+    Ownership by registration is the definitional signal of who a domain belongs to, so a
+    root whose registration record names the same registrant is owned by the same party.
+    The search terms are a registrant identity tied to the org, an organization name or a
+    known registrant email, handed in by the planner from `Org.whois_terms`, and the org
+    name is the fallback term. It reads a public registration index through a keyed
+    provider, so it is osint. Wired only when a key is set.
+    """
+
+    name = "domain_registrant"
+    phase = Phase.MAP
+
+    def __init__(self, reverse_fn) -> None:
+        self._reverse = reverse_fn
+
+    def run(self, task: Task, world: World) -> Outcome:
+        org = world.node(task.node).payload
+        terms = org.whois_terms or (org.name,)
+        key = config.reverse_whois_key()
+        roots: dict[str, str] = {}
+        for term in terms:
+            try:
+                roots.update(self._reverse(term, key))
+            except Exception as exc:
+                return Failed(reason=f"reverse-whois {type(exc).__name__}: {exc}")
+        found = tuple(
+            Node(id=f"domain:{root}", type="domain",
+                 payload=DomainData(name=root, root=root, source="reverse-whois",
+                                    confidence="confirmed", evidence=evidence))
+            for root, evidence in sorted(roots.items())
+        )
+        return Done(facts=(Fact(kind="registrant", about=task.node, yields=found),))
+
+
 class Subdomains(Capability):
     """MAP: certificate transparency subdomains of a domain root, as new domain nodes."""
 

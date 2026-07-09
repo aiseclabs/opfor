@@ -19,10 +19,12 @@ from pathlib import Path
 import yaml
 
 from opfor.core import Phase, RuleSet, Scenario, Task, World, each
+from opfor.scenarios.attacksurface import config
 from opfor.scenarios.attacksurface.capabilities import (
     DiscoverDomains,
     DiscoverGithub,
     DomainPivot,
+    DomainRegistrant,
     Endpoints,
     GithubRepos,
     HttpDomain,
@@ -32,6 +34,10 @@ from opfor.scenarios.attacksurface.capabilities import (
 from opfor.scenarios.attacksurface.sources import domains as domain_src
 from opfor.scenarios.attacksurface.sources import github as github_src
 from opfor.scenarios.attacksurface.triage import SurfaceTriage
+
+# Sentinel so build can tell an unset reverse-WHOIS seam from one a caller passed, even
+# a fake in a test, and default the real seam to on only when a provider key is set.
+_DEFAULT = object()
 
 _PATHS = yaml.safe_load(
     (Path(__file__).resolve().parent / "knowledge" / "paths.yaml").read_text(encoding="utf-8")
@@ -86,35 +92,49 @@ def build(
     repos_fn=github_src.org_repos,
     enumerate_fn=domain_src.subdomains,
     pivot_fn=domain_src.cert_sibling_roots,
+    reverse_whois_fn=_DEFAULT,
     resolve_fn=domain_src.resolve_host,
     probe_fn=domain_src.http_probe,
     fetch_fn=domain_src.fetch_url,
 ) -> Scenario:
+    # The registrant pivot is the reliable core, but its provider has no keyless mode, so
+    # the real seam turns on only when a key is set. A test passes its own fake to wire it
+    # without a key.
+    if reverse_whois_fn is _DEFAULT:
+        reverse_whois_fn = domain_src.reverse_whois if config.reverse_whois_key() else None
+
     root = Path(__file__).resolve().parent
+    capabilities = [
+        DiscoverDomains(),
+        DiscoverGithub(search_fn),
+        DomainPivot(pivot_fn),
+        Subdomains(enumerate_fn),
+        ResolveDomain(resolve_fn),
+        HttpDomain(probe_fn),
+        Endpoints(fetch_fn),
+        GithubRepos(repos_fn),
+    ]
+    map_rules = [
+        each("org", run="discover_domains", unless_fact="domains_discovered",
+             where=lambda p: _enabled(p, "domain")),
+        each("org", run="discover_github", unless_fact="github_discovered",
+             where=lambda p: _enabled(p, "github")),
+        each("domain", run="domain_pivot", unless_fact="pivoted",
+             where=lambda p: p.name == p.root),
+        each("domain", run="domain_subdomains", unless_fact="enumerated",
+             where=lambda p: p.name == p.root),
+    ]
+    if reverse_whois_fn is not None:
+        capabilities.append(DomainRegistrant(reverse_whois_fn))
+        map_rules.append(each("org", run="domain_registrant", unless_fact="registrant",
+                              where=lambda p: _enabled(p, "domain")))
+
     return Scenario(
         name="attacksurface",
         content_root=root,
-        capabilities=(
-            DiscoverDomains(),
-            DiscoverGithub(search_fn),
-            DomainPivot(pivot_fn),
-            Subdomains(enumerate_fn),
-            ResolveDomain(resolve_fn),
-            HttpDomain(probe_fn),
-            Endpoints(fetch_fn),
-            GithubRepos(repos_fn),
-        ),
+        capabilities=tuple(capabilities),
         planner=RuleSet({
-            Phase.MAP: [
-                each("org", run="discover_domains", unless_fact="domains_discovered",
-                     where=lambda p: _enabled(p, "domain")),
-                each("org", run="discover_github", unless_fact="github_discovered",
-                     where=lambda p: _enabled(p, "github")),
-                each("domain", run="domain_pivot", unless_fact="pivoted",
-                     where=lambda p: p.name == p.root),
-                each("domain", run="domain_subdomains", unless_fact="enumerated",
-                     where=lambda p: p.name == p.root),
-            ],
+            Phase.MAP: map_rules,
             Phase.ENRICH: [
                 each("domain", run="domain_resolve", unless_fact="resolved"),
                 _http_rule,

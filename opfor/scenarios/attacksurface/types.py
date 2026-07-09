@@ -47,7 +47,7 @@ class Resolved:
 
 
 @dataclass(frozen=True, kw_only=True)
-class Http:
+class HTTP:
     """An HTTP probe result. `body` is a lowercased head of the response, kept so
     triage can match a takeover signature against it."""
 
@@ -77,7 +77,7 @@ class Endpoint:
 
 
 @dataclass(frozen=True, kw_only=True)
-class ApiSpec:
+class APISpec:
     """The interface surface parsed from an exposed API specification. `paths` are the
     operations the specification declares, so a single exposed spec expands into the whole
     unauthenticated API surface rather than one finding."""
@@ -88,7 +88,7 @@ class ApiSpec:
 
 
 @dataclass(frozen=True, kw_only=True)
-class GraphqlSchema:
+class GraphQLSchema:
     """The result of a GraphQL introspection probe. `enabled` is True when introspection
     answered, which itself maps the whole API, and `operations` are the query and mutation
     fields it named."""
@@ -99,7 +99,7 @@ class GraphqlSchema:
 
 
 @dataclass(frozen=True, kw_only=True)
-class GithubOrg:
+class GitHubOrg:
     """A GitHub organization that matched the org name. `login` is its handle."""
 
     login: str
@@ -108,7 +108,7 @@ class GithubOrg:
 
 
 @dataclass(frozen=True, kw_only=True)
-class GithubRepo:
+class GitHubRepo:
     """One public repository under a discovered GitHub org."""
 
     full_name: str

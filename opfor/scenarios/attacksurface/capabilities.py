@@ -21,13 +21,13 @@ from opfor.scenarios.attacksurface.sources.domains import (
     paths_from_openapi,
 )
 from opfor.scenarios.attacksurface.types import (
-    ApiSpec,
+    APISpec,
     DomainData,
     Endpoint,
-    GithubOrg,
-    GithubRepo,
-    GraphqlSchema,
-    Http,
+    GitHubOrg,
+    GitHubRepo,
+    GraphQLSchema,
+    HTTP,
     Resolved,
 )
 
@@ -56,7 +56,7 @@ class DiscoverDomains(Capability):
         return Done(facts=(Fact(kind="domains_discovered", about=task.node, yields=found),))
 
 
-class DiscoverGithub(Capability):
+class DiscoverGitHub(Capability):
     """MAP: search GitHub for orgs matching the name, as new github_org nodes."""
 
     name = "discover_github"
@@ -73,7 +73,7 @@ class DiscoverGithub(Capability):
             return Failed(reason=f"github search {type(exc).__name__}: {exc}")
         found = tuple(
             Node(id=f"github_org:{o['login']}", type="github_org",
-                 payload=GithubOrg(login=o["login"], url=o.get("url", ""), org_id=o.get("org_id")))
+                 payload=GitHubOrg(login=o["login"], url=o.get("url", ""), org_id=o.get("org_id")))
             for o in orgs
         )
         return Done(facts=(Fact(kind="github_discovered", about=task.node, yields=found),))
@@ -193,7 +193,7 @@ class ResolveDomain(Capability):
         return Done(facts=(Fact(kind="resolved", about=task.node, payload=payload),))
 
 
-class HttpDomain(Capability):
+class HTTPDomain(Capability):
     """ENRICH: probe a resolvable domain over HTTP, capturing status and body head."""
 
     name = "domain_http"
@@ -211,7 +211,7 @@ class HttpDomain(Capability):
             result = self._probe(name, addresses)
         except Exception as exc:
             return Failed(reason=f"http {type(exc).__name__}: {exc}")
-        payload = Http(
+        payload = HTTP(
             alive=bool(result["alive"]),
             status=result.get("status"),
             url=str(result.get("url", "")),
@@ -351,11 +351,11 @@ class ExpandSpec(Capability):
         except Exception:
             parsed = {}
         paths = paths_from_openapi(parsed)
-        payload = ApiSpec(base=endpoint.url, paths=tuple(paths), count=len(paths))
+        payload = APISpec(base=endpoint.url, paths=tuple(paths), count=len(paths))
         return Done(facts=(Fact(kind="api_spec", about=task.node, payload=payload),))
 
 
-class GraphqlIntrospect(Capability):
+class GraphQLIntrospect(Capability):
     """ENRICH: introspect an open GraphQL endpoint into the operations it exposes.
 
     Introspection enabled in production maps the entire API, so this sends one read-only
@@ -378,12 +378,12 @@ class GraphqlIntrospect(Capability):
         except Exception as exc:
             return Failed(reason=f"graphql introspection {type(exc).__name__}: {exc}")
         operations = operations_from_introspection(schema) if schema else []
-        payload = GraphqlSchema(enabled=bool(schema), operations=tuple(operations),
+        payload = GraphQLSchema(enabled=bool(schema), operations=tuple(operations),
                                 count=len(operations))
         return Done(facts=(Fact(kind="graphql", about=task.node, payload=payload),))
 
 
-class GithubRepos(Capability):
+class GitHubRepos(Capability):
     """ENRICH: list a GitHub org's public repositories, as new github_repo nodes."""
 
     name = "github_repos"
@@ -400,7 +400,7 @@ class GithubRepos(Capability):
             return Failed(reason=f"github repos {type(exc).__name__}: {exc}")
         found = tuple(
             Node(id=f"github_repo:{r['full_name']}", type="github_repo",
-                 payload=GithubRepo(full_name=r["full_name"], url=r.get("url", ""),
+                 payload=GitHubRepo(full_name=r["full_name"], url=r.get("url", ""),
                                     language=r.get("language", ""), pushed_at=r.get("pushed_at", ""),
                                     archived=bool(r.get("archived"))))
             for r in repos

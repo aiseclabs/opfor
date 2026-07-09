@@ -23,14 +23,14 @@ from opfor.core import Phase, RuleSet, Scenario, Task, World, each
 from opfor.scenarios.attacksurface import config
 from opfor.scenarios.attacksurface.capabilities import (
     DiscoverDomains,
-    DiscoverGithub,
+    DiscoverGitHub,
     DomainPivot,
     DomainRegistrant,
     Endpoints,
     ExpandSpec,
-    GithubRepos,
-    GraphqlIntrospect,
-    HttpDomain,
+    GitHubRepos,
+    GraphQLIntrospect,
+    HTTPDomain,
     ResolveDomain,
     Subdomains,
 )
@@ -146,15 +146,15 @@ def build(
     root = Path(__file__).resolve().parent
     capabilities = [
         DiscoverDomains(),
-        DiscoverGithub(search_fn),
+        DiscoverGitHub(search_fn),
         DomainPivot(pivot_fn),
         Subdomains(enumerate_fn),
         ResolveDomain(resolve_fn),
-        HttpDomain(probe_fn),
+        HTTPDomain(probe_fn),
         Endpoints(fetch_fn),
         ExpandSpec(fetch_doc_fn),
-        GraphqlIntrospect(introspect_fn),
-        GithubRepos(repos_fn),
+        GraphQLIntrospect(introspect_fn),
+        GitHubRepos(repos_fn),
     ]
     map_rules = [
         each("org", run="discover_domains", unless_fact="domains_discovered",

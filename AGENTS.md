@@ -108,6 +108,9 @@ Code:
   one line, it does not narrate what the next line plainly does.
 - Module names are plural for a collection and singular for one concept, a single word
   where one reads cleanly.
+- An acronym in a CapWords name is fully capitalized, `HTTPProbe` not `HttpProbe`,
+  `APISpec` not `ApiSpec`, per PEP 8. A brand keeps its own casing, `GitHub`, `GraphQL`.
+  A snake_case identifier or a data tag stays lowercase, `domain_http`, `kind="graphql"`.
 
 Commit messages are a single `type: summary` line in the present tense. No body and no
 trailers, so no `Co-Authored-By` or other trailer line.

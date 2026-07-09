@@ -35,8 +35,11 @@ _DOH_RESOLVERS = ("https://dns.google/resolve", "https://cloudflare-dns.com/dns-
 
 
 # The certspotter free endpoint returns a bounded page, so a walk follows the `after`
-# cursor. The page cap bounds a large log, ten pages is a few thousand certificates.
+# cursor. With a key the quota allows a full walk. Without one the free quota is tiny, so
+# paging hard would exhaust it and self-throttle, so a keyless walk stays to a couple of
+# pages, still the most recent certificates, and leans on the other sources for the rest.
 _CERTSPOTTER_PAGES = 12
+_CERTSPOTTER_PAGES_KEYLESS = 2
 
 
 def subdomains(domain: str) -> set[str]:
@@ -75,9 +78,10 @@ def certspotter_subdomains(domain: str) -> set[str]:
     token = config.certspotter_token()
     if token:
         headers["Authorization"] = f"Bearer {token}"
+    pages = _CERTSPOTTER_PAGES if token else _CERTSPOTTER_PAGES_KEYLESS
     names: set[str] = set()
     after = ""
-    for _ in range(_CERTSPOTTER_PAGES):
+    for _ in range(pages):
         url = (f"https://api.certspotter.com/v1/issuances?domain={domain}"
                "&include_subdomains=true&expand=dns_names")
         if after:

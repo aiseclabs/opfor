@@ -165,38 +165,6 @@ class Subdomains(Capability):
         return Done(facts=(Fact(kind="enumerated", about=task.node, yields=found),))
 
 
-class BruteSubdomains(Capability):
-    """MAP: subdomains of a root found by resolving a wordlist, past what CT saw.
-
-    Certificate transparency misses a name hidden behind a wildcard certificate or one
-    that never had a public certificate, so this resolves a knowledge wordlist against the
-    root over public DNS. A name that resolves under the root is a real host, evidence not
-    a guess. The wordlist is knowledge, handed in by the planner, so this reads no file.
-    Resolving over a public resolver is a public read, so it is osint.
-    """
-
-    name = "domain_bruteforce"
-    phase = Phase.MAP
-
-    def __init__(self, brute_fn) -> None:
-        self._brute = brute_fn
-
-    def run(self, task: Task, world: World) -> Outcome:
-        root = world.node(task.node).payload.name
-        words = task.params.get("words") or ()
-        try:
-            names = self._brute(root, words)
-        except Exception as exc:
-            return Failed(reason=f"bruteforce {type(exc).__name__}: {exc}")
-        found = tuple(
-            Node(id=f"domain:{n}", type="domain",
-                 payload=DomainData(name=n, root=root, source="brute",
-                                    confidence="confirmed", evidence="resolves under the root"))
-            for n in sorted(names) if n != root
-        )
-        return Done(facts=(Fact(kind="bruteforced", about=task.node, yields=found),))
-
-
 class ResolveDomain(Capability):
     """ENRICH: resolve a domain to its addresses, or mark it dangling."""
 

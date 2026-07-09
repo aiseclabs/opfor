@@ -11,7 +11,6 @@ injected seam, so a test drives the scenario with fixtures.
 
 from __future__ import annotations
 
-import concurrent.futures
 import http.client
 import ipaddress
 import json
@@ -297,56 +296,6 @@ def _doh_a(resolver: str, name: str) -> list[str]:
     with urllib.request.urlopen(request, timeout=_TIMEOUT) as resp:
         body = json.loads(resp.read().decode("utf-8", "replace"))
     return [str(a["data"]) for a in body.get("Answer", []) if a.get("type") == 1 and a.get("data")]
-
-
-# --- DNS brute force: names certificate transparency never saw -------------
-
-_BRUTE_WORKERS = 16
-# Two unlikely labels, so a wildcard zone that answers every name is learned before the
-# wordlist runs. A fluke hit on one is unlikely to repeat on both.
-_WILDCARD_PROBES = ("opfor-wildcard-6f3a9c2e", "opfor-absent-8b1d4a37")
-
-
-def brute_subdomains(root: str, words) -> set[str]:
-    """Subdomains of a root found by resolving a wordlist over DNS-over-HTTPS.
-
-    This finds a name certificate transparency never saw, one hidden behind a wildcard
-    certificate or one that never had a public certificate. A name that resolves under the
-    root is a real host, so this is evidence, not a guess. A wildcard zone answers every
-    name with the same address, so the wildcard address is learned first and a candidate
-    that only echoes it is dropped, otherwise brute force would return the whole wordlist.
-    """
-    wildcard = _wildcard_addresses(root)
-    candidates = [f"{w.strip().lower()}.{root}" for w in words if w and w.strip()]
-    resolved: dict[str, list[str]] = {}
-    with concurrent.futures.ThreadPoolExecutor(max_workers=_BRUTE_WORKERS) as pool:
-        for name, addresses in pool.map(lambda n: (n, _resolve_addresses(n)), candidates):
-            resolved[name] = addresses
-    return brute_hits(resolved, wildcard)
-
-
-def brute_hits(resolved: dict, wildcard: set) -> set[str]:
-    """Names that resolved to an address other than the wildcard catch-all, the real hits."""
-    return {name for name, addresses in resolved.items()
-            if addresses and set(addresses) != set(wildcard)}
-
-
-def _wildcard_addresses(root: str) -> set[str]:
-    """Addresses a wildcard zone returns for a name that should not exist, empty when the
-    zone is not wildcard."""
-    addresses: set[str] = set()
-    for label in _WILDCARD_PROBES:
-        addresses |= set(_resolve_addresses(f"{label}.{root}"))
-    return addresses
-
-
-def _resolve_addresses(name: str) -> list[str]:
-    """The addresses a name resolves to, empty when it does not resolve or the lookup errs."""
-    try:
-        result = resolve_host(name)
-    except Exception:
-        return []
-    return list(result.get("addresses", ())) if result.get("resolvable") else []
 
 
 def public_addresses(addresses) -> list[str]:

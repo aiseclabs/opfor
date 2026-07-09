@@ -21,7 +21,6 @@ import yaml
 from opfor.core import Phase, RuleSet, Scenario, Task, World, each
 from opfor.scenarios.attacksurface import config
 from opfor.scenarios.attacksurface.capabilities import (
-    BruteSubdomains,
     DiscoverDomains,
     DiscoverGithub,
     DomainPivot,
@@ -45,13 +44,6 @@ _PATHS = yaml.safe_load(
 ) or {}
 _PROBE_PATHS = [str(p) for p in (_PATHS.get("paths") or [])]
 
-_WORDS = [
-    line.strip()
-    for line in (Path(__file__).resolve().parent / "knowledge" / "subdomains.txt")
-    .read_text(encoding="utf-8").splitlines()
-    if line.strip() and not line.startswith("#")
-]
-
 
 def _enabled(org, asset_class: str) -> bool:
     """Whether an asset class runs, given the org's optional class restriction."""
@@ -73,24 +65,6 @@ def _http_rule(world: World) -> list[Task]:
         if world.has_fact(node.id, "http"):
             continue
         tasks.append(Task(capability="domain_http", node=node.id, scope_host=node.payload.name))
-    return tasks
-
-
-def _brute_rule(world: World) -> list[Task]:
-    """Brute force subdomains on every root that has not been brute forced yet.
-
-    Runs on a root regardless of how it was found, so a pivoted or registrant root is
-    enumerated too, and hands the capability the knowledge wordlist. Resolving over a
-    public resolver is osint, so the task names no host for scope.
-    """
-    tasks: list[Task] = []
-    for node in world.nodes("domain"):
-        payload = node.payload
-        if payload.name != payload.root:
-            continue
-        if world.has_fact(node.id, "bruteforced"):
-            continue
-        tasks.append(Task(capability="domain_bruteforce", node=node.id, params={"words": _WORDS}))
     return tasks
 
 
@@ -117,7 +91,6 @@ def build(
     search_fn=github_src.search_orgs,
     repos_fn=github_src.org_repos,
     enumerate_fn=domain_src.subdomains,
-    brute_fn=domain_src.brute_subdomains,
     pivot_fn=domain_src.cert_sibling_roots,
     reverse_whois_fn=_DEFAULT,
     resolve_fn=domain_src.resolve_host,
@@ -136,7 +109,6 @@ def build(
         DiscoverGithub(search_fn),
         DomainPivot(pivot_fn),
         Subdomains(enumerate_fn),
-        BruteSubdomains(brute_fn),
         ResolveDomain(resolve_fn),
         HttpDomain(probe_fn),
         Endpoints(fetch_fn),
@@ -151,7 +123,6 @@ def build(
              where=lambda p: p.name == p.root),
         each("domain", run="domain_subdomains", unless_fact="enumerated",
              where=lambda p: p.name == p.root),
-        _brute_rule,
     ]
     if reverse_whois_fn is not None:
         capabilities.append(DomainRegistrant(reverse_whois_fn))

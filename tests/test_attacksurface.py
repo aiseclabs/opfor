@@ -109,15 +109,6 @@ def _reverse(term, api_key=""):
     return dict(WHOIS.get(term, {}))
 
 
-# DNS brute-force hits per root, names that resolve but never appeared in CT. int.example.com
-# stands for a wildcard-hidden or never-certed internal host.
-BRUTE = {ROOT: {"int.example.com", "vpn.example.com"}}
-
-
-def _brute(root, words):
-    return set(BRUTE.get(root, set()))
-
-
 def _enumerate(domain):
     return set(CRT.get(domain, set()))
 
@@ -131,7 +122,7 @@ def _probe(name, addresses=()):
 
 
 def _scenario():
-    return build(search_fn=_search, repos_fn=_repos, enumerate_fn=_enumerate, brute_fn=_brute,
+    return build(search_fn=_search, repos_fn=_repos, enumerate_fn=_enumerate,
                  pivot_fn=_pivot, resolve_fn=_resolve, probe_fn=_probe, fetch_fn=_fetch)
 
 
@@ -292,7 +283,7 @@ def test_total_resolution_failure_reports_incomplete_not_dangling():
     def none_resolve(name):
         return {"resolvable": False, "addresses": ()}
 
-    scenario = build(search_fn=_search, repos_fn=_repos, enumerate_fn=_enumerate, brute_fn=_brute,
+    scenario = build(search_fn=_search, repos_fn=_repos, enumerate_fn=_enumerate,
                      pivot_fn=_pivot, resolve_fn=none_resolve, probe_fn=_probe, fetch_fn=_fetch)
     world = _seed(classes=("domain",))
     report = run(scenario, world, scope=Scope(max_tier="recon", hosts=(ROOT,)), budget=Budget(500))
@@ -305,7 +296,7 @@ def test_github_search_failure_still_closes():
     def boom(name, token=""):
         raise TimeoutError("github slow")
 
-    scenario = build(search_fn=boom, repos_fn=_repos, enumerate_fn=_enumerate, brute_fn=_brute,
+    scenario = build(search_fn=boom, repos_fn=_repos, enumerate_fn=_enumerate,
                      pivot_fn=_pivot, resolve_fn=_resolve, probe_fn=_probe)
     world = _seed()
     report = run(scenario, world, scope=Scope(max_tier="recon", hosts=(ROOT,)), budget=Budget(500))
@@ -374,7 +365,7 @@ def test_pivot_failure_still_closes_and_is_loud():
     def boom(domain):
         raise TimeoutError("certspotter slow")
 
-    scenario = build(search_fn=_search, repos_fn=_repos, enumerate_fn=_enumerate, brute_fn=_brute,
+    scenario = build(search_fn=_search, repos_fn=_repos, enumerate_fn=_enumerate,
                      pivot_fn=boom, resolve_fn=_resolve, probe_fn=_probe, fetch_fn=_fetch)
     world = _seed()
     report = run(scenario, world, scope=Scope(max_tier="recon", hosts=(ROOT,)), budget=Budget(500))
@@ -383,7 +374,7 @@ def test_pivot_failure_still_closes_and_is_loud():
 
 
 def _with_reverse(reverse_fn=_reverse):
-    return build(search_fn=_search, repos_fn=_repos, enumerate_fn=_enumerate, brute_fn=_brute,
+    return build(search_fn=_search, repos_fn=_repos, enumerate_fn=_enumerate,
                  pivot_fn=_pivot, reverse_whois_fn=reverse_fn, resolve_fn=_resolve,
                  probe_fn=_probe, fetch_fn=_fetch)
 
@@ -437,40 +428,6 @@ def test_roots_from_reverse_whois_reads_both_shapes():
     }
 
 
-def test_brute_force_finds_a_subdomain_ct_missed():
-    world = _seed()
-    _run(world)
-    node = world.node("domain:int.example.com")
-    assert node is not None
-    assert node.payload.source == "brute"
-    assert node.payload.root == ROOT
-    assert node.payload.confidence == "confirmed"
-
-
-def test_brute_force_runs_on_a_discovered_root_too():
-    # the sibling root discovered by the cert pivot is also brute forced, so a name is
-    # scheduled against it, proving brute force follows the snowball rather than the seed
-    scenario = build(search_fn=_search, repos_fn=_repos, enumerate_fn=_enumerate,
-                     brute_fn=_brute, pivot_fn=_pivot, resolve_fn=_resolve,
-                     probe_fn=_probe, fetch_fn=_fetch)
-    world = _seed()
-    run(scenario, world, scope=Scope(max_tier="recon", hosts=(ROOT,)), budget=Budget(500))
-    assert world.has_fact("domain:example.net", "bruteforced")
-
-
-def test_brute_force_failure_still_closes_and_is_loud():
-    def boom(root, words):
-        raise TimeoutError("resolver slow")
-
-    scenario = build(search_fn=_search, repos_fn=_repos, enumerate_fn=_enumerate,
-                     brute_fn=boom, pivot_fn=_pivot, resolve_fn=_resolve,
-                     probe_fn=_probe, fetch_fn=_fetch)
-    world = _seed()
-    report = run(scenario, world, scope=Scope(max_tier="recon", hosts=(ROOT,)), budget=Budget(500))
-    assert report.closed
-    assert any("failed" in n and "domain_bruteforce" in n for n in report.notes)
-
-
 def test_subdomains_from_vt_reads_relationship_ids():
     from opfor.scenarios.attacksurface.sources.domains import subdomains_from_vt
 
@@ -487,14 +444,3 @@ def test_virustotal_is_skipped_without_a_key(monkeypatch):
     assert d.virustotal_subdomains("example.com") == set()
 
 
-def test_brute_hits_drops_the_wildcard_catch_all():
-    from opfor.scenarios.attacksurface.sources.domains import brute_hits
-
-    # a.example.com is a real host on its own address, w.example.com only echoes the
-    # wildcard address, and x.example.com does not resolve, so only a survives
-    resolved = {
-        "a.example.com": ["1.2.3.4"],
-        "w.example.com": ["9.9.9.9"],
-        "x.example.com": [],
-    }
-    assert brute_hits(resolved, {"9.9.9.9"}) == {"a.example.com"}

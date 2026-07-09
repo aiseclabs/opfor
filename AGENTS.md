@@ -1,97 +1,113 @@
-# opfor
+# AGENTS.md
 
-opfor is a universal offensive-security engine. One generic engine drives every
-scenario, web, internal network, AI agents, phishing. You change scenario by
-swapping data, executors, and knowledge, never by editing the engine.
+Project instructions for coding agents. Claude Code reads it through the `@AGENTS.md`
+import in `CLAUDE.md`.
 
-The architecture follows the agentic-security consensus: a **blackboard** (the
-situation graph, the long-horizon state held outside any model context) read and
-written by specialist **executors**, with a **planner / executor / perceptor**
-(PEP) split and a control shell that runs ready work concurrently.
+It is a universal offensive-security engine. One generic engine drives every scenario,
+web, internal network, AI agents, phishing, chain, people. A scenario changes by swapping
+data, capabilities, and knowledge, never by editing the engine.
+
+The architecture is a blackboard, the world model held outside any model context, read and
+written by narrow capabilities, with a planner that proposes and a triage that judges, all
+sequenced along a fixed lifecycle spine so a run either closes or says why it did not.
 
 ## Non-Negotiable Invariants
 
-1. **Attack knowledge is data; executors only act, the planner decides.** Attack
-   strategy lives in each scenario's `knowledge/` markdown and in the planner's
-   rules, never inside an executor. An executor runs one tool and structures the
-   result; it makes no attack decisions and never reads `knowledge/`. Adding a
-   technique should be a data change plus, at most, a thin executor.
+1. **Knowledge is data. Capabilities act, the planner proposes, triage judges.** Attack
+   strategy lives in each scenario's `knowledge/` markdown and data files, and in the
+   planner's rules, never inside a capability. A capability runs one tool and reports raw
+   facts, it makes no attack decision and reads no knowledge. Adding a technique is a data
+   change plus at most a thin capability.
+2. **Success is judged by triage, never hardcoded.** A capability returns raw facts, it
+   never interprets them as success. The engine holds no `if response contains X then win`.
+   The next move is the planner's, the real or false verdict and the severity are triage's.
+3. **A run closes or says why.** The engine advances a fixed phase spine, SEED, MAP,
+   ENRICH, TRIAGE, then the intrusive EXPLOIT and CONFIRM, and stops at the terminal phase
+   the scenario declares. A run that reaches its terminal is closed. A run stopped by an
+   exhausted budget or by work awaiting an async result is suspended and records why, so a
+   stall is a visible failure to close, not a silently clean result. Async results arrive
+   later, the phishing "hours later" path, through a parked handle.
+4. **Scope is deny-by-default, every act is authored in the ledger.** Every task is
+   authorized against the campaign scope before it runs. A passive recon-tier osint lookup
+   of a public source is waved through, anything else must name an in-scope target within
+   the tier ceiling, and an intrusive task additionally needs an explicit recorded
+   authorization. An unauthorized task fails loud.
+5. **Fail loud.** Never report a failure, a timeout, or an unparsable result as a clean or
+   benign outcome. A capability returns `Failed` with a reason, never an empty `Done`.
 
-2. **Success is judged by a model, never hardcoded.** Executors return raw
-   observations and structure them into facts; they do not interpret success. The
-   engine never writes `if response contains X then success`. Judgment lives in
-   the planner (for next moves) and the triage/verification stage (for findings).
+## Architecture Map
 
-3. **The loop suspends, resumes, and accepts async late-arriving results.** Work
-   may complete immediately or much later, hours or days for phishing. The shell
-   is checkpointed and event-driven, never a synchronous busy-wait.
+### The Kernel
 
-4. **Scope is deny-by-default.** Every task is authorized against the campaign
-   scope before it runs, and recorded in the append-only ledger. An unauthorized
-   task fails loud, it never silently proceeds.
+- Lives under `opfor/core/`, and it is generic. It names no host, contract, or person.
+  Those are scenario data, carried in the typed payload a node or fact holds.
+- `world.py` is the blackboard. A `Node` is a thing that exists, a `Fact` is a statement
+  about a node that may yield new nodes, which is the only way the surface grows. Both tag
+  themselves with a string so the engine indexes them generically, the real data is a typed
+  frozen dataclass in `payload`.
+- `phase.py` is the lifecycle spine, an ordered `Phase` enum. The spine is the answer to
+  scenarios that never close.
+- `capability.py` defines `Capability`, the one verb the engine runs, and its three
+  outcomes `Done`, `Failed`, `Later`. Explicit outcomes are why task dependencies are
+  honest again, a failure is never marked done.
+- `rules.py` is planning. `RuleSet` groups rules by phase and the `each` helper covers the
+  common "for each node lacking this fact, run that capability" pattern, so a scenario
+  declares its pipeline rather than hand-coding the gating loop.
+- `triage.py` is the judge, the only place findings are minted.
+- `scope.py`, `ledger.py`, `budget.py` are the cross-cutting rails.
+- `result.py` is the contract, a `Finding` and the `Report` that answers did the run close,
+  how far did it get, and what did it find.
+- `scenario.py` is the plugin bundle, and `engine.py` is the loop that drives it.
 
-5. **Fail loud.** Never report a failure, a timeout, or an unparseable result as
-   a clean or benign outcome. Surface it.
+### Scenarios
 
-## Architecture (blackboard + PEP)
+- A scenario is a package under `opfor/scenarios/<name>/` that builds a `Scenario`. It
+  supplies capabilities, a planner, a triage, a declared terminal phase, and a content root
+  holding its `knowledge/` and data files.
+- `scenarios/registry.py` is the one place that lists scenarios. `mock` is the reference,
+  the smallest run that closes the loop, and the kernel's own fixture.
+- Knowledge markdown and data files such as wordlists or fingerprint tables are read by the
+  planner and triage, never by a capability.
 
-- **Data sources** name who to attack. Campaign inventories under `campaigns/`,
-  seeded into the situation graph (seeds + scope + vantage).
-- **Blackboard** = the situation graph, `opfor/engine/graph.py`. The single,
-  persisted source of truth. All long-horizon state lives here, not in a model.
-- **Executors** under `opfor/plugins/` and per scenario, one capability each.
-  An `Executor` implements `run(task, graph) -> Observation` (the deed, raw) and
-  `perceive(observation) -> list[Fact]` (raw to structured). Nothing else.
-- **Planner** under `opfor/agent/planner.py`. Reads the graph and proposes
-  `Task`s. `DeterministicPlanner`/`FunctionPlanner` (rules) for known phases like
-  recon; a model planner for open-ended phases. It never runs tools.
-- **Control shell** `opfor/engine/control.py`. Each round: plan, take every
-  ready and authorized task, run them concurrently, perceive results onto the
-  graph, checkpoint. Concurrency is the shell's job, so there are no batch actions.
-- **Cross-cutting**: `scope.py` (policy-as-code gate), `ledger.py` (audit),
-  `state.py` (checkpoint/resume), `budget.py` (runaway cap), `agent/triage.py`
-  (the verification stage that rules findings real or false-positive).
-- **Knowledge** under `opfor/scenarios/<name>/knowledge/` (playbooks) and data
-  files like `checks.yaml` (nuclei-style check templates). Read by the planner,
-  never by an executor.
+## Adding Things
 
-Every scenario runs on the one engine, the control shell: a `ControlScenario`
-supplies capability executors plus a planner. The shell checkpoints each round
-and supports `resume()` (continue a budget-suspended run from its checkpoint).
-An executor whose result arrives later returns a pending observation with a
-handle; the shell parks the task, reports the run suspended, and accepts the late
-result through `deliver(handle, raw)`, possibly in a fresh process, after which a
-`resume()` drains the work it unlocked. This is the phishing "hours later" path,
-the async half of invariant 3.
-
-## The task graph
-
-`opfor/engine/tasks.py`. A `Task` is one capability against one target. The
-`TaskGraph` dedupes by id, so a planner may re-emit applicable tasks every round,
-and reports which tasks are ready. Readiness plus the growing graph is how the
-pokeable surface is computed live.
+- Add a scenario: a new package under `opfor/scenarios/`, with its node and fact payload
+  types, capabilities, planner rules, triage, a declared terminal phase, a `knowledge/`
+  tree, and a registry entry. The kernel does not change.
+- Add a technique to an existing scenario: extend a knowledge markdown or a data file, or
+  add a thin capability. Do not move attack knowledge into engine or capability logic.
+- Add or update tests when behavior changes, especially for failure handling, scope, and
+  closure.
 
 ## Commands
 
-```
-python -m venv .venv && . .venv/bin/activate && pip install -e ".[dev]"
-pytest
-python -m evals.recon_eval     # score recon against the ground-truth baseline
-opfor run campaigns/example-recon
-```
+- Set up and test in a venv:
+  `python -m venv .venv && . .venv/bin/activate && pip install -e ".[dev]" && pytest`
 
-## Contributing
+## Style Guide
 
-- Add a control-shell scenario: create `opfor/scenarios/<name>/` with capability
-  executors, a planner, a `knowledge/` tree, a `ControlScenario` in `__init__.py`,
-  and register it in `opfor/scenarios/registry.py`.
-- Add a technique: write or extend a markdown playbook or a `checks.yaml`
-  template, do not touch Python.
-- Add tests when behavior changes, and keep the eval baseline green.
+A tight prose and code style, match it.
 
-## Style
+Prose, in comments, docstrings, and markdown:
 
-- English in code and docs.
-- One statement per line.
-- Commit messages are a single subject line, `type: summary`, present tense, no
-  body and no trailer.
+- No em-dash, neither the unicode em-dash nor a spaced double hyphen. Use two sentences, a comma, or a colon.
+- No semicolons. Use a period or a comma.
+- No parentheses. Reword the aside with "such as", "for example", or a comma.
+- Few hyphenated words. Keep the hyphen only where it is part of an identifier, a CLI flag, a rule id, or a file path.
+- No sentence begins with the lowercase brand. Start with "It", "The engine", or a rewording.
+- Title Case headings.
+- English only, no CJK, in code, comments, docs, and data.
+
+Semicolons and parentheses stay where they are code, not prose.
+
+Code:
+
+- One statement per line, no `;` separator.
+- No linter or type-checker suppression comments. Fix the cause instead.
+- A comment earns its place only as the why or an invariant. A docstring states the why in
+  one line, it does not narrate what the next line plainly does.
+- Module names are plural for a collection and singular for one concept, a single word
+  where one reads cleanly.
+
+Commit messages are a single `type: summary` line in the present tense. No body and no
+trailers, so no `Co-Authored-By` or other trailer line.

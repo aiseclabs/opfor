@@ -1,7 +1,0 @@
-# Authorized estate. Any host at or under these domain suffixes is in scope,
-# everything else is denied. Replace these with the roots you are authorized to
-# assess. Ceiling is probe, so passive discovery and a light HTTP read are
-# allowed, anything intrusive is not.
-domains:
-  - example.com
-max_tier: probe

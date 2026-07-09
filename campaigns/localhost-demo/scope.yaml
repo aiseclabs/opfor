@@ -1,6 +1,0 @@
-# Authorization for the localhost demo. Deny-by-default, only what is listed is
-# allowed. The mock admin entrypoint is a probe-tier action, so the ceiling is
-# probe.
-hosts:
-  - lab
-max_tier: probe

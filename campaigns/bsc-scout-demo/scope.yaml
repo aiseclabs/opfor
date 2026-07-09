@@ -1,5 +1,0 @@
-# chainscout discovers and enriches contracts by reading public APIs only; it
-# never touches a contract, so every task is osint recon tier and needs no
-# per-target authorization. This scope only sets the ceiling: recon, so the run
-# can never escalate past passive reads.
-max_tier: recon

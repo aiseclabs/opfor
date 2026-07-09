@@ -1,34 +1,25 @@
-"""Scenario registry. Every scenario is a ControlScenario on the control shell."""
+"""Scenario registry: the one place that lists which scenarios exist.
+
+`get_scenario` fails loud on an unknown name rather than falling back, so a target
+the tool cannot run is an error, not an empty clean result.
+"""
 
 from __future__ import annotations
 
-from opfor.scenarios.aiagent import AIAGENT
-from opfor.scenarios.apiscan import APISCAN
-from opfor.scenarios.base import ControlScenario
-from opfor.scenarios.chainaudit import CHAINAUDIT
-from opfor.scenarios.chainscout import CHAINSCOUT
+from opfor.core import Scenario
 from opfor.scenarios.mock import MOCK
-from opfor.scenarios.recon import RECON
-from opfor.scenarios.web import WEB
-from opfor.scenarios.websurface import WEBSURFACE
 
-_SCENARIOS = {
+_SCENARIOS: dict[str, Scenario] = {
     MOCK.name: MOCK,
-    RECON.name: RECON,
-    WEB.name: WEB,
-    APISCAN.name: APISCAN,
-    WEBSURFACE.name: WEBSURFACE,
-    AIAGENT.name: AIAGENT,
-    CHAINAUDIT.name: CHAINAUDIT,
-    CHAINSCOUT.name: CHAINSCOUT,
 }
 
 
-def get_scenario(name: str) -> ControlScenario:
-    if name not in _SCENARIOS:
+def get_scenario(name: str) -> Scenario:
+    try:
+        return _SCENARIOS[name]
+    except KeyError:
         known = ", ".join(sorted(_SCENARIOS))
-        raise KeyError(f"unknown scenario: {name}, known: {known}")
-    return _SCENARIOS[name]
+        raise KeyError(f"unknown scenario {name!r}, known: {known}") from None
 
 
 def known_scenarios() -> tuple[str, ...]:

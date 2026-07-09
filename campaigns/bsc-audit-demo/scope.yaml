@@ -1,6 +1,0 @@
-# Deny-by-default. Only the canonical resource ids listed here are authorized.
-# A resource id is opaque to the engine; for an EVM contract it is
-# evm_contract:<chain>:<lowercase_address>, matching the inventory target id.
-resources:
-  - evm_contract:bsc:0x1234567890abcdef1234567890abcdef12345678
-max_tier: recon

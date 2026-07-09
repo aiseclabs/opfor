@@ -1,106 +1,26 @@
-"""The opfor command line."""
+"""The command line entry point.
+
+Minimal for now, it lists the registered scenarios. Running a campaign lands here
+once the campaign loader and a real scenario ship, so the surface stays honest
+about what it can do rather than pretending a run path that is not built yet.
+"""
 
 from __future__ import annotations
 
 import argparse
-import sys
 
-from opfor.runner import run_campaign
 from opfor.scenarios.registry import known_scenarios
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="opfor", description="Universal offensive-security engine")
-    sub = parser.add_subparsers(dest="command", required=True)
-
-    run = sub.add_parser("run", help="run a campaign")
-    run.add_argument("campaign", help="path to a campaign directory")
-    run.add_argument("--run-dir", default=None, help="where to write state, ledger, report")
-    run.add_argument("--resume", action="store_true", help="resume from the last checkpoint")
-    run.add_argument("--budget", type=int, default=50, help="max steps")
-    run.add_argument("--max-workers", type=int, default=16, help="max concurrent tasks per round")
-    run.add_argument(
-        "--confidence-floor", type=float, default=0.0,
-        help="drop tasks the planner scored below this confidence (0..1); 0 keeps all",
-    )
-    run.add_argument(
-        "--collaborator-url", default=None,
-        help="externally reachable base URL for out-of-band callbacks (blind SSRF); "
-        "required for external targets to reach opfor's listener",
-    )
-    run.add_argument(
-        "--model",
-        default="claude-sonnet-4-6",
-        help="model id for finding triage (needs ANTHROPIC_API_KEY)",
-    )
-    run.add_argument(
-        "--triage",
-        action="store_true",
-        help="model triage of findings, rules each one real or a false positive",
-    )
-    run.add_argument(
-        "--triage-backend",
-        choices=("auto", "api", "cli"),
-        default="auto",
-        help="model backend for triage: 'api' (ANTHROPIC_API_KEY), 'cli' (claude "
-        "CLI on your subscription, no key), or 'auto' (api if a key is set, else cli)",
-    )
-
-    sub.add_parser("scenarios", help="list registered scenarios")
-
-    new = sub.add_parser("new-campaign", help="scaffold a new campaign directory")
-    new.add_argument("name", help="campaign / org name (becomes the directory)")
-    new.add_argument("--domain", required=True, help="a confirmed root domain in scope")
-    new.add_argument("--org", default=None, help="org keyword seed (defaults to name)")
-    new.add_argument("--vantage", default="public", help="public / vpn / internal / whitelisted-ip")
-    new.add_argument("--dir", default="campaigns", help="base directory to create the campaign under")
-
+    parser.add_argument("command", choices=("scenarios",), help="what to do")
     args = parser.parse_args(argv)
-
     if args.command == "scenarios":
         for name in known_scenarios():
             print(name)
-        return 0
-
-    if args.command == "new-campaign":
-        from opfor.scaffold import new_campaign
-
-        path = new_campaign(args.name, domain=args.domain, org=args.org, vantage=args.vantage, base_dir=args.dir)
-        print(f"created campaign: {path}")
-        print(f"  edit {path}/scope.yaml and {path}/inventory.md, then: opfor run {path}")
-        return 0
-
-    if args.command == "run":
-        triage_complete = None
-        if args.triage:
-            import os
-
-            from opfor.agent.providers import anthropic_complete, claude_cli_complete
-
-            backend = args.triage_backend
-            if backend == "auto":
-                backend = "api" if os.environ.get("ANTHROPIC_API_KEY") else "cli"
-            if backend == "api":
-                triage_complete = anthropic_complete(args.model, max_tokens=4096)
-            else:
-                triage_complete = claude_cli_complete()
-        result = run_campaign(
-            args.campaign,
-            run_dir=args.run_dir,
-            resume=args.resume,
-            budget=args.budget,
-            confidence_floor=args.confidence_floor,
-            max_workers=args.max_workers,
-            collaborator_url=args.collaborator_url,
-            triage_complete=triage_complete,
-        )
-        print(f"stopped after {result.steps} steps: {result.stopped_reason}")
-        print(f"report: {result.workspace.report_file}")
-        print(f"ledger: {result.workspace.ledger_file}")
-        return 0
-
-    return 1
+    return 0
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    raise SystemExit(main())

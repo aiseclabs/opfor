@@ -77,6 +77,28 @@ class Endpoint:
 
 
 @dataclass(frozen=True, kw_only=True)
+class ApiSpec:
+    """The interface surface parsed from an exposed API specification. `paths` are the
+    operations the specification declares, so a single exposed spec expands into the whole
+    unauthenticated API surface rather than one finding."""
+
+    base: str
+    paths: tuple[str, ...] = ()
+    count: int = 0
+
+
+@dataclass(frozen=True, kw_only=True)
+class GraphqlSchema:
+    """The result of a GraphQL introspection probe. `enabled` is True when introspection
+    answered, which itself maps the whole API, and `operations` are the query and mutation
+    fields it named."""
+
+    enabled: bool
+    operations: tuple[str, ...] = ()
+    count: int = 0
+
+
+@dataclass(frozen=True, kw_only=True)
 class GithubOrg:
     """A GitHub organization that matched the org name. `login` is its handle."""
 

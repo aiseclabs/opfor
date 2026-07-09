@@ -10,15 +10,23 @@ the domain name for scope. A source error becomes a loud `Failed`, never an empt
 
 from __future__ import annotations
 
+import json
 import re
+from urllib.parse import urlparse
 
 from opfor.core import Capability, Done, Fact, Failed, Node, Outcome, Phase, Task, World
 from opfor.scenarios.attacksurface import config
+from opfor.scenarios.attacksurface.sources.domains import (
+    operations_from_introspection,
+    paths_from_openapi,
+)
 from opfor.scenarios.attacksurface.types import (
+    ApiSpec,
     DomainData,
     Endpoint,
     GithubOrg,
     GithubRepo,
+    GraphqlSchema,
     Http,
     Resolved,
 )
@@ -314,6 +322,65 @@ def _home_paths(body: str, *, limit: int = 20) -> list[str]:
         if len(out) >= limit:
             break
     return out
+
+
+class ExpandSpec(Capability):
+    """ENRICH: parse an exposed API specification into the operations it declares.
+
+    A single exposed OpenAPI or Swagger document maps a whole unauthenticated API, so this
+    fetches the full document, the probe kept only a head, and records the declared paths.
+    Fetching the target's own file is a scoped recon act, so it carries the host for scope.
+    """
+
+    name = "endpoint_expand_spec"
+    phase = Phase.ENRICH
+    osint = False
+
+    def __init__(self, fetch_doc_fn) -> None:
+        self._fetch = fetch_doc_fn
+
+    def run(self, task: Task, world: World) -> Outcome:
+        endpoint = world.node(task.node).payload
+        host = urlparse(endpoint.url).hostname or ""
+        try:
+            document = self._fetch(host, endpoint.path)
+        except Exception as exc:
+            return Failed(reason=f"spec fetch {type(exc).__name__}: {exc}")
+        try:
+            parsed = json.loads(document.get("text") or "")
+        except Exception:
+            parsed = {}
+        paths = paths_from_openapi(parsed)
+        payload = ApiSpec(base=endpoint.url, paths=tuple(paths), count=len(paths))
+        return Done(facts=(Fact(kind="api_spec", about=task.node, payload=payload),))
+
+
+class GraphqlIntrospect(Capability):
+    """ENRICH: introspect an open GraphQL endpoint into the operations it exposes.
+
+    Introspection enabled in production maps the entire API, so this sends one read-only
+    introspection query and records whether it answered and the operations it named.
+    Sending the query touches the target, so it carries the host for scope.
+    """
+
+    name = "endpoint_graphql"
+    phase = Phase.ENRICH
+    osint = False
+
+    def __init__(self, introspect_fn) -> None:
+        self._introspect = introspect_fn
+
+    def run(self, task: Task, world: World) -> Outcome:
+        endpoint = world.node(task.node).payload
+        host = urlparse(endpoint.url).hostname or ""
+        try:
+            schema = self._introspect(host, endpoint.path)
+        except Exception as exc:
+            return Failed(reason=f"graphql introspection {type(exc).__name__}: {exc}")
+        operations = operations_from_introspection(schema) if schema else []
+        payload = GraphqlSchema(enabled=bool(schema), operations=tuple(operations),
+                                count=len(operations))
+        return Done(facts=(Fact(kind="graphql", about=task.node, payload=payload),))
 
 
 class GithubRepos(Capability):

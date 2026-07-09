@@ -15,6 +15,7 @@ real seams.
 from __future__ import annotations
 
 from pathlib import Path
+from urllib.parse import urlparse
 
 import yaml
 
@@ -26,7 +27,9 @@ from opfor.scenarios.attacksurface.capabilities import (
     DomainPivot,
     DomainRegistrant,
     Endpoints,
+    ExpandSpec,
     GithubRepos,
+    GraphqlIntrospect,
     HttpDomain,
     ResolveDomain,
     Subdomains,
@@ -86,6 +89,41 @@ def _endpoints_rule(world: World) -> list[Task]:
     return tasks
 
 
+def _is_spec_endpoint(endpoint) -> bool:
+    """Whether an endpoint looks like a JSON API specification worth parsing."""
+    path = endpoint.path.lower()
+    return (("openapi" in path or "swagger" in path or "api-docs" in path)
+            and "json" in (endpoint.content_type or "").lower())
+
+
+def _spec_rule(world: World) -> list[Task]:
+    """Parse every reachable API specification endpoint that has not been parsed yet."""
+    tasks: list[Task] = []
+    for node in world.nodes("endpoint"):
+        endpoint = node.payload
+        if world.has_fact(node.id, "api_spec") or endpoint.auth_required:
+            continue
+        if not _is_spec_endpoint(endpoint):
+            continue
+        host = urlparse(endpoint.url).hostname or ""
+        tasks.append(Task(capability="endpoint_expand_spec", node=node.id, scope_host=host))
+    return tasks
+
+
+def _graphql_rule(world: World) -> list[Task]:
+    """Introspect every reachable GraphQL endpoint that has not been introspected yet."""
+    tasks: list[Task] = []
+    for node in world.nodes("endpoint"):
+        endpoint = node.payload
+        if world.has_fact(node.id, "graphql") or endpoint.auth_required:
+            continue
+        if not endpoint.path.lower().rstrip("/").endswith("/graphql"):
+            continue
+        host = urlparse(endpoint.url).hostname or ""
+        tasks.append(Task(capability="endpoint_graphql", node=node.id, scope_host=host))
+    return tasks
+
+
 def build(
     *,
     search_fn=github_src.search_orgs,
@@ -96,6 +134,8 @@ def build(
     resolve_fn=domain_src.resolve_host,
     probe_fn=domain_src.http_probe,
     fetch_fn=domain_src.fetch_url,
+    fetch_doc_fn=domain_src.fetch_document,
+    introspect_fn=domain_src.graphql_introspect,
 ) -> Scenario:
     # The registrant pivot is the reliable core, but its provider has no keyless mode, so
     # the real seam turns on only when a key is set. A test passes its own fake to wire it
@@ -112,6 +152,8 @@ def build(
         ResolveDomain(resolve_fn),
         HttpDomain(probe_fn),
         Endpoints(fetch_fn),
+        ExpandSpec(fetch_doc_fn),
+        GraphqlIntrospect(introspect_fn),
         GithubRepos(repos_fn),
     ]
     map_rules = [
@@ -139,6 +181,8 @@ def build(
                 each("domain", run="domain_resolve", unless_fact="resolved"),
                 _http_rule,
                 _endpoints_rule,
+                _spec_rule,
+                _graphql_rule,
                 each("github_org", run="github_repos", unless_fact="repos"),
             ],
         }),

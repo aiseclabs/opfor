@@ -353,11 +353,107 @@ def fetch_url(name: str, addresses, path: str) -> dict:
             "server": "", "title": "", "body": ""}
 
 
-def _connect(name: str, ip: str, scheme: str, path: str) -> tuple:
-    """One GET to ip, with SNI and Host set to name, returning status and shape.
+# --- self-declared interfaces: an app maps its own API --------------------
+
+_DOCUMENT_LIMIT = 2_000_000
+# A compact introspection query, enough to name the query and mutation operations without
+# pulling the full type graph. When introspection answers, the surface is already mapped.
+_INTROSPECTION = (
+    '{"query":"{ __schema { queryType { name fields { name } } '
+    'mutationType { name fields { name } } } }"}'
+)
+
+
+def fetch_document(name: str, path: str) -> dict:
+    """Full GET of one document on a name, no body cap, for parsing a spec.
+
+    Resolves over DNS-over-HTTPS then connects to a public address with SNI, the same way
+    the probe does, so it works where the local resolver does not. A host with no public
+    address is not reachable, reported as an empty document rather than raised.
+    """
+    public = public_addresses(resolve_host(name).get("addresses", ()))
+    if not public:
+        return {"status": None, "content_type": "", "text": ""}
+    ip = public[0]
+    for scheme in ("https", "http"):
+        try:
+            status, _, content_type, body = _connect(name, ip, scheme, path, read_limit=_DOCUMENT_LIMIT)
+        except Exception:
+            continue
+        return {"status": status, "content_type": content_type, "text": body}
+    return {"status": None, "content_type": "", "text": ""}
+
+
+def graphql_introspect(name: str, path: str = "/graphql") -> dict | None:
+    """Introspect a GraphQL endpoint, returning the schema data or None when it is off.
+
+    Introspection is a read, one POST with a query, no mutation, so it stays a recon act.
+    A None result means introspection is disabled or the endpoint did not answer, not that
+    the check failed silently, the capability turns a raised error into a loud failure.
+    """
+    public = public_addresses(resolve_host(name).get("addresses", ()))
+    if not public:
+        return None
+    ip = public[0]
+    body = _INTROSPECTION.encode("utf-8")
+    for scheme in ("https", "http"):
+        try:
+            status, _, _, text = _connect(name, ip, scheme, path, read_limit=_DOCUMENT_LIMIT,
+                                          method="POST", payload=body, content_type="application/json")
+        except Exception:
+            continue
+        if status and 200 <= status < 300:
+            try:
+                data = json.loads(text)
+            except Exception:
+                return None
+            return data.get("data") if isinstance(data, dict) and "data" in data else data
+    return None
+
+
+def paths_from_openapi(doc) -> list[str]:
+    """Declared operations of an OpenAPI or Swagger document, each as `METHODS path`.
+
+    Both OpenAPI 3 and Swagger 2 carry a `paths` map, so this reads that map and names the
+    HTTP methods under each path. A document without a `paths` map declares nothing here.
+    """
+    if not isinstance(doc, dict):
+        return []
+    paths = doc.get("paths")
+    if not isinstance(paths, dict):
+        return []
+    verbs = ("get", "post", "put", "delete", "patch", "head", "options")
+    out: list[str] = []
+    for path, item in paths.items():
+        methods = [m.upper() for m in item if m.lower() in verbs] if isinstance(item, dict) else []
+        out.append(f"{','.join(sorted(methods))} {path}" if methods else str(path))
+    return sorted(out)
+
+
+def operations_from_introspection(data) -> list[str]:
+    """Query and mutation operation names from a GraphQL introspection result."""
+    schema = (data or {}).get("__schema") if isinstance(data, dict) else None
+    if not isinstance(schema, dict):
+        return []
+    out: list[str] = []
+    for key, kind in (("queryType", "query"), ("mutationType", "mutation")):
+        node = schema.get(key) or {}
+        for field in (node.get("fields") or []):
+            name = field.get("name") if isinstance(field, dict) else None
+            if name:
+                out.append(f"{kind}:{name}")
+    return sorted(out)
+
+
+def _connect(name: str, ip: str, scheme: str, path: str, *, read_limit: int = _BODY_HEAD,
+             method: str = "GET", payload: bytes | None = None,
+             content_type: str = "") -> tuple:
+    """One request to ip, with SNI and Host set to name, returning status and shape.
 
     Certificate validation is off on purpose, a recon probe records what a server serves,
-    a self-signed or mismatched certificate is itself signal, not a reason to skip.
+    a self-signed or mismatched certificate is itself signal, not a reason to skip. The
+    read limit is a full document when a caller needs to parse a body such as a spec, and
+    a payload turns the request into a POST for a GraphQL introspection.
     """
     if scheme == "https":
         context = ssl.create_default_context()
@@ -369,10 +465,13 @@ def _connect(name: str, ip: str, scheme: str, path: str) -> tuple:
         conn.sock = sock
     else:
         conn = http.client.HTTPConnection(ip, 80, timeout=_TIMEOUT)
+    headers = {"Host": name, "User-Agent": _UA}
+    if content_type:
+        headers["Content-Type"] = content_type
     try:
-        conn.request("GET", path or "/", headers={"Host": name, "User-Agent": _UA})
+        conn.request(method, path or "/", body=payload, headers=headers)
         resp = conn.getresponse()
-        body = resp.read(_BODY_HEAD).decode("utf-8", "replace")
+        body = resp.read(read_limit).decode("utf-8", "replace")
         return resp.status, resp.getheader("Server", "") or "", resp.getheader("Content-Type", "") or "", body
     finally:
         conn.close()

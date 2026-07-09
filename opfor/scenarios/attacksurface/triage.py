@@ -58,8 +58,47 @@ class SurfaceTriage(Triage):
         findings.extend(self._roots(world))
         findings.extend(self._domains(world))
         findings.extend(self._endpoints(world))
+        findings.extend(self._interfaces(world))
         findings.extend(self._github(world))
         return findings
+
+    def _interfaces(self, world: World) -> list[Finding]:
+        """Report the API surface an app declared about itself, a parsed specification and
+        an open GraphQL introspection, each mapping a whole unauthenticated interface."""
+        out: list[Finding] = []
+        for fact in world.facts("api_spec"):
+            spec = fact.payload
+            if spec.count == 0:
+                continue
+            out.append(Finding(
+                id=f"finding:api_surface:{spec.base}",
+                title=f"Unauthenticated API specification maps {spec.count} operation(s)",
+                severity="MEDIUM",
+                where=spec.base,
+                evidence=f"parsed the exposed specification, it declares {spec.count} operations",
+                data={"kind": "api_surface", "count": spec.count, "paths": list(spec.paths)[:200],
+                      "poc": f"curl -s {spec.base} , then exercise the declared operations it maps"},
+            ))
+        for fact in world.facts("graphql"):
+            schema = fact.payload
+            # Introspection that named no operation is not usable introspection, an endpoint
+            # can answer a POST yet refuse the schema, so this reports only a real surface.
+            if not schema.enabled or schema.count == 0:
+                continue
+            node = world.node(fact.about)
+            url = node.payload.url if node else "(graphql)"
+            out.append(Finding(
+                id=f"finding:graphql:{url}",
+                title=f"GraphQL introspection enabled, {schema.count} operation(s)",
+                severity="MEDIUM",
+                where=url,
+                evidence="introspection returned the schema, which maps the whole API",
+                data={"kind": "graphql", "count": schema.count,
+                      "operations": list(schema.operations)[:200],
+                      "poc": f"curl -s -X POST {url} -H 'content-type: application/json' "
+                             "-d '{\"query\":\"{__schema{queryType{name}}}\"}'"},
+            ))
+        return out
 
     def _roots(self, world: World) -> list[Finding]:
         """Report each associated root the run discovered beyond the operator's hints,

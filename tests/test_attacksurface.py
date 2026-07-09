@@ -68,6 +68,7 @@ ENDPOINTS = {
     "https://admin.example.com/.env": {"status": 200, "body": "db_password=secret\napi_key=abc"},
     "https://admin.example.com/metrics": {"status": 401, "body": "unauthorized"},
     "https://admin.example.com/admin": {"status": 200, "body": "admin panel please sign in"},
+    "https://admin.example.com/graphql": {"status": 200, "ct": "application/json", "body": '{"data":{}}'},
     "https://example.com/robots.txt": {"status": 200, "body": "user-agent: *"},
 }
 
@@ -109,6 +110,22 @@ def _reverse(term, api_key=""):
     return dict(WHOIS.get(term, {}))
 
 
+# A full API specification fetch and a GraphQL introspection, the app declaring its own
+# interface surface. Only the two hosts that expose one answer.
+def _fetch_doc(name, path):
+    if name == "spa.example.com" and path == "/openapi.json":
+        return {"status": 200, "content_type": "application/json",
+                "text": '{"openapi":"3.0.0","paths":{"/users":{"get":{}},"/orders":{"get":{},"post":{}}}}'}
+    return {"status": None, "content_type": "", "text": ""}
+
+
+def _introspect(name, path="/graphql"):
+    if name == "admin.example.com":
+        return {"__schema": {"queryType": {"name": "Query", "fields": [{"name": "me"}, {"name": "users"}]},
+                             "mutationType": {"name": "Mutation", "fields": [{"name": "login"}]}}}
+    return None
+
+
 def _enumerate(domain):
     return set(CRT.get(domain, set()))
 
@@ -123,7 +140,8 @@ def _probe(name, addresses=()):
 
 def _scenario():
     return build(search_fn=_search, repos_fn=_repos, enumerate_fn=_enumerate,
-                 pivot_fn=_pivot, resolve_fn=_resolve, probe_fn=_probe, fetch_fn=_fetch)
+                 pivot_fn=_pivot, resolve_fn=_resolve, probe_fn=_probe, fetch_fn=_fetch,
+                 fetch_doc_fn=_fetch_doc, introspect_fn=_introspect)
 
 
 def _seed(*, domains=(ROOT,), classes=()):
@@ -284,7 +302,8 @@ def test_total_resolution_failure_reports_incomplete_not_dangling():
         return {"resolvable": False, "addresses": ()}
 
     scenario = build(search_fn=_search, repos_fn=_repos, enumerate_fn=_enumerate,
-                     pivot_fn=_pivot, resolve_fn=none_resolve, probe_fn=_probe, fetch_fn=_fetch)
+                     pivot_fn=_pivot, resolve_fn=none_resolve, probe_fn=_probe, fetch_fn=_fetch,
+                 fetch_doc_fn=_fetch_doc, introspect_fn=_introspect)
     world = _seed(classes=("domain",))
     report = run(scenario, world, scope=Scope(max_tier="recon", hosts=(ROOT,)), budget=Budget(500))
     kinds = {f.data.get("kind") for f in report.findings}
@@ -366,7 +385,8 @@ def test_pivot_failure_still_closes_and_is_loud():
         raise TimeoutError("certspotter slow")
 
     scenario = build(search_fn=_search, repos_fn=_repos, enumerate_fn=_enumerate,
-                     pivot_fn=boom, resolve_fn=_resolve, probe_fn=_probe, fetch_fn=_fetch)
+                     pivot_fn=boom, resolve_fn=_resolve, probe_fn=_probe, fetch_fn=_fetch,
+                 fetch_doc_fn=_fetch_doc, introspect_fn=_introspect)
     world = _seed()
     report = run(scenario, world, scope=Scope(max_tier="recon", hosts=(ROOT,)), budget=Budget(500))
     assert report.closed
@@ -376,7 +396,8 @@ def test_pivot_failure_still_closes_and_is_loud():
 def _with_reverse(reverse_fn=_reverse):
     return build(search_fn=_search, repos_fn=_repos, enumerate_fn=_enumerate,
                  pivot_fn=_pivot, reverse_whois_fn=reverse_fn, resolve_fn=_resolve,
-                 probe_fn=_probe, fetch_fn=_fetch)
+                 probe_fn=_probe, fetch_fn=_fetch,
+                 fetch_doc_fn=_fetch_doc, introspect_fn=_introspect)
 
 
 def test_registrant_pivot_is_off_without_a_key():
@@ -426,6 +447,67 @@ def test_roots_from_reverse_whois_reads_both_shapes():
     assert roots_from_reverse_whois(as_records, "Acme") == {
         "example.io": "registration record names Acme"
     }
+
+
+def test_openapi_spec_is_expanded_into_its_operations():
+    report = _run(_seed())
+    api = [f for f in report.findings if f.data.get("kind") == "api_surface"]
+    assert api and api[0].where == "https://spa.example.com/openapi.json"
+    assert api[0].data["count"] == 2
+    assert "GET /users" in api[0].data["paths"]
+
+
+def test_graphql_introspection_is_reported():
+    report = _run(_seed())
+    gql = [f for f in report.findings if f.data.get("kind") == "graphql"]
+    assert gql and gql[0].where == "https://admin.example.com/graphql"
+    assert gql[0].data["count"] == 3
+    assert "query:me" in gql[0].data["operations"]
+
+
+def test_graphql_without_operations_is_not_reported():
+    # an endpoint can answer the POST yet name no operation, which is not usable
+    # introspection, so it must not become a finding
+    def empty(name, path="/graphql"):
+        return {"__schema": {"queryType": {"fields": []}}}
+
+    scenario = build(search_fn=_search, repos_fn=_repos, enumerate_fn=_enumerate, pivot_fn=_pivot,
+                     resolve_fn=_resolve, probe_fn=_probe, fetch_fn=_fetch,
+                     fetch_doc_fn=_fetch_doc, introspect_fn=empty)
+    world = _seed()
+    report = run(scenario, world, scope=Scope(max_tier="recon", hosts=(ROOT,)), budget=Budget(2000))
+    assert not any(f.data.get("kind") == "graphql" for f in report.findings)
+
+
+def test_spec_fetch_failure_still_closes_and_is_loud():
+    def boom(name, path):
+        raise TimeoutError("spec slow")
+
+    scenario = build(search_fn=_search, repos_fn=_repos, enumerate_fn=_enumerate, pivot_fn=_pivot,
+                     resolve_fn=_resolve, probe_fn=_probe, fetch_fn=_fetch,
+                     fetch_doc_fn=boom, introspect_fn=_introspect)
+    world = _seed()
+    report = run(scenario, world, scope=Scope(max_tier="recon", hosts=(ROOT,)), budget=Budget(2000))
+    assert report.closed
+    assert any("failed" in n and "endpoint_expand_spec" in n for n in report.notes)
+
+
+def test_paths_from_openapi_names_methods():
+    from opfor.scenarios.attacksurface.sources.domains import paths_from_openapi
+
+    doc = {"paths": {"/a": {"get": {}, "post": {}}, "/b": {"get": {}}}}
+    assert set(paths_from_openapi(doc)) == {"GET,POST /a", "GET /b"}
+    assert paths_from_openapi({}) == []
+    assert paths_from_openapi({"paths": "not a map"}) == []
+
+
+def test_operations_from_introspection_reads_query_and_mutation():
+    from opfor.scenarios.attacksurface.sources.domains import operations_from_introspection
+
+    data = {"__schema": {"queryType": {"fields": [{"name": "me"}]},
+                         "mutationType": {"fields": [{"name": "login"}]}}}
+    assert operations_from_introspection(data) == ["mutation:login", "query:me"]
+    assert operations_from_introspection({}) == []
 
 
 def test_subdomains_from_vt_reads_relationship_ids():

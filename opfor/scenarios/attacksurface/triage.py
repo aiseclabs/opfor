@@ -46,10 +46,25 @@ class SurfaceTriage(Triage):
 
     def judge(self, world: World) -> list[Finding]:
         findings: list[Finding] = []
+        findings.extend(self._roots(world))
         findings.extend(self._domains(world))
         findings.extend(self._endpoints(world))
         findings.extend(self._github(world))
         return findings
+
+    def _roots(self, world: World) -> list[Finding]:
+        """Report each associated root the run discovered beyond the operator's hints,
+        an INFO inventory line carrying the evidence that attributes it to the target."""
+        out: list[Finding] = []
+        for node in world.nodes("domain"):
+            data = node.payload
+            if data.name != data.root or data.source == "hint":
+                continue
+            out.append(self._finding("root", data.root, "INFO",
+                f"Associated root domain {data.root}",
+                data.evidence or "discovered as an associated root",
+                {"source": data.source, "confidence": data.confidence}))
+        return out
 
     def _endpoints(self, world: World) -> list[Finding]:
         """Judge each unauthenticated interface: a matched detector is an exposure with a

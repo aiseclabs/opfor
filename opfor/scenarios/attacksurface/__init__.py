@@ -22,6 +22,7 @@ from opfor.core import Phase, RuleSet, Scenario, Task, World, each
 from opfor.scenarios.attacksurface.capabilities import (
     DiscoverDomains,
     DiscoverGithub,
+    DomainPivot,
     Endpoints,
     GithubRepos,
     HttpDomain,
@@ -84,6 +85,7 @@ def build(
     search_fn=github_src.search_orgs,
     repos_fn=github_src.org_repos,
     enumerate_fn=domain_src.subdomains,
+    pivot_fn=domain_src.cert_sibling_roots,
     resolve_fn=domain_src.resolve_host,
     probe_fn=domain_src.http_probe,
     fetch_fn=domain_src.fetch_url,
@@ -95,6 +97,7 @@ def build(
         capabilities=(
             DiscoverDomains(),
             DiscoverGithub(search_fn),
+            DomainPivot(pivot_fn),
             Subdomains(enumerate_fn),
             ResolveDomain(resolve_fn),
             HttpDomain(probe_fn),
@@ -107,8 +110,10 @@ def build(
                      where=lambda p: _enabled(p, "domain")),
                 each("org", run="discover_github", unless_fact="github_discovered",
                      where=lambda p: _enabled(p, "github")),
+                each("domain", run="domain_pivot", unless_fact="pivoted",
+                     where=lambda p: p.name == p.root),
                 each("domain", run="domain_subdomains", unless_fact="enumerated",
-                     where=lambda p: p.source == "hint"),
+                     where=lambda p: p.name == p.root),
             ],
             Phase.ENRICH: [
                 each("domain", run="domain_resolve", unless_fact="resolved"),

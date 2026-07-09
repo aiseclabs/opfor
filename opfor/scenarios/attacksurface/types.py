@@ -26,12 +26,17 @@ class Org:
 
 @dataclass(frozen=True, kw_only=True)
 class DomainData:
-    """A domain or subdomain node. `root` is the seed root it descends from, `source`
-    is how it was found, a hint from the operator or certificate transparency."""
+    """A domain or subdomain node. `root` is the registrable root it belongs to,
+    `source` is how it was found, an operator hint, a certificate-transparency
+    subdomain, or a certificate-SAN sibling root. `confidence` records how sure
+    ownership is, `evidence` is the one-line reason, so an attributed root carries its
+    proof rather than a guess."""
 
     name: str
     root: str
     source: str
+    confidence: str = "confirmed"
+    evidence: str = ""
 
 
 @dataclass(frozen=True, kw_only=True)

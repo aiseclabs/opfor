@@ -91,6 +91,15 @@ def _fetch(name, addresses, path):
             "server": d.get("server", ""), "title": "", "body": d["body"].lower()}
 
 
+# Certificate-SAN sibling roots per known root. example.com and example.net are bundled
+# on one dedicated cert, evidence they share an owner. example.net pivots no further.
+SIBLINGS = {ROOT: {"example.net": "shares a certificate with example.com, 2 roots on the cert"}}
+
+
+def _pivot(domain):
+    return dict(SIBLINGS.get(domain, {}))
+
+
 def _enumerate(domain):
     return set(CRT.get(domain, set()))
 
@@ -105,7 +114,7 @@ def _probe(name, addresses=()):
 
 def _scenario():
     return build(search_fn=_search, repos_fn=_repos, enumerate_fn=_enumerate,
-                 resolve_fn=_resolve, probe_fn=_probe, fetch_fn=_fetch)
+                 pivot_fn=_pivot, resolve_fn=_resolve, probe_fn=_probe, fetch_fn=_fetch)
 
 
 def _seed(*, domains=(ROOT,), classes=()):
@@ -254,7 +263,7 @@ def test_total_resolution_failure_reports_incomplete_not_dangling():
         return {"resolvable": False, "addresses": ()}
 
     scenario = build(search_fn=_search, repos_fn=_repos, enumerate_fn=_enumerate,
-                     resolve_fn=none_resolve, probe_fn=_probe, fetch_fn=_fetch)
+                     pivot_fn=_pivot, resolve_fn=none_resolve, probe_fn=_probe, fetch_fn=_fetch)
     world = _seed(classes=("domain",))
     report = run(scenario, world, scope=Scope(max_tier="recon", hosts=(ROOT,)), budget=Budget(500))
     kinds = {f.data.get("kind") for f in report.findings}
@@ -267,7 +276,7 @@ def test_github_search_failure_still_closes():
         raise TimeoutError("github slow")
 
     scenario = build(search_fn=boom, repos_fn=_repos, enumerate_fn=_enumerate,
-                     resolve_fn=_resolve, probe_fn=_probe)
+                     pivot_fn=_pivot, resolve_fn=_resolve, probe_fn=_probe)
     world = _seed()
     report = run(scenario, world, scope=Scope(max_tier="recon", hosts=(ROOT,)), budget=Budget(500))
     assert report.closed
@@ -284,3 +293,60 @@ def test_no_hint_domains_still_closes_via_github():
     assert report.closed
     assert world.nodes("domain") == ()
     assert world.nodes("github_org")
+
+
+def test_cert_san_pivot_discovers_a_sibling_root_with_evidence():
+    world = _seed()
+    _run(world)
+    net = world.node("domain:example.net")
+    assert net is not None
+    assert net.payload.root == "example.net"
+    assert net.payload.source == "cert-san"
+    assert net.payload.confidence == "confirmed"
+    assert "shares a certificate" in net.payload.evidence
+
+
+def test_discovered_root_is_an_info_finding_carrying_its_evidence():
+    report = _run(_seed())
+    roots = [f for f in report.findings if f.data.get("kind") == "root"]
+    assert [f.where for f in roots] == ["example.net"]
+    assert roots[0].severity == "INFO"
+    assert "shares a certificate" in roots[0].evidence
+
+
+def test_hint_root_is_not_reported_as_a_discovered_root():
+    report = _run(_seed())
+    assert "example.com" not in {f.where for f in report.findings if f.data.get("kind") == "root"}
+
+
+def test_registrable_root_keeps_multi_label_suffixes():
+    from opfor.scenarios.attacksurface.sources.domains import registrable_root
+
+    assert registrable_root("api.example.com") == "example.com"
+    assert registrable_root("example.com") == "example.com"
+    assert registrable_root("a.b.example.co.uk") == "example.co.uk"
+
+
+def test_shared_certificate_is_not_treated_as_ownership_evidence():
+    from opfor.scenarios.attacksurface.sources.domains import sibling_roots_from_issuances
+
+    # a dedicated cert bundling two roots yields the sibling
+    dedicated = [{"dns_names": ["example.com", "www.example.net"]}]
+    assert sibling_roots_from_issuances(dedicated, "example.com") == {
+        "example.net": "shares a certificate with example.com, 2 roots on the cert"
+    }
+    # a multi-tenant cert bundling many unrelated roots proves nothing, so it is skipped
+    shared = [{"dns_names": ["example.com", "a.org", "b.org", "c.org", "d.org", "e.org", "f.org"]}]
+    assert sibling_roots_from_issuances(shared, "example.com") == {}
+
+
+def test_pivot_failure_still_closes_and_is_loud():
+    def boom(domain):
+        raise TimeoutError("certspotter slow")
+
+    scenario = build(search_fn=_search, repos_fn=_repos, enumerate_fn=_enumerate,
+                     pivot_fn=boom, resolve_fn=_resolve, probe_fn=_probe, fetch_fn=_fetch)
+    world = _seed()
+    report = run(scenario, world, scope=Scope(max_tier="recon", hosts=(ROOT,)), budget=Budget(500))
+    assert report.closed
+    assert any("failed" in n and "domain_pivot" in n for n in report.notes)

@@ -41,7 +41,8 @@ class DiscoverDomains(Capability):
         org = world.node(task.node).payload
         found = tuple(
             Node(id=f"domain:{d}", type="domain",
-                 payload=DomainData(name=d, root=d, source="hint"))
+                 payload=DomainData(name=d, root=d, source="hint",
+                                    confidence="confirmed", evidence="operator hint"))
             for d in org.domains
         )
         return Done(facts=(Fact(kind="domains_discovered", about=task.node, yields=found),))
@@ -68,6 +69,37 @@ class DiscoverGithub(Capability):
             for o in orgs
         )
         return Done(facts=(Fact(kind="github_discovered", about=task.node, yields=found),))
+
+
+class DomainPivot(Capability):
+    """MAP: sibling root domains that share a certificate with a known root.
+
+    A certificate names every host its holder proved control of, so a root bundled on
+    the same certificate as a confirmed root is owned by the same party. This grows the
+    set of roots from evidence, not from guessing a brand across every suffix, and since
+    MAP loops to quiescence a newly found root pivots again, a snowball. It reads a
+    public log, so it is osint.
+    """
+
+    name = "domain_pivot"
+    phase = Phase.MAP
+
+    def __init__(self, pivot_fn) -> None:
+        self._pivot = pivot_fn
+
+    def run(self, task: Task, world: World) -> Outcome:
+        name = world.node(task.node).payload.name
+        try:
+            siblings = self._pivot(name)
+        except Exception as exc:
+            return Failed(reason=f"cert pivot {type(exc).__name__}: {exc}")
+        found = tuple(
+            Node(id=f"domain:{root}", type="domain",
+                 payload=DomainData(name=root, root=root, source="cert-san",
+                                    confidence="confirmed", evidence=evidence))
+            for root, evidence in sorted(siblings.items())
+        )
+        return Done(facts=(Fact(kind="pivoted", about=task.node, yields=found),))
 
 
 class Subdomains(Capability):

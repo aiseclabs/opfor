@@ -331,7 +331,9 @@ class Endpoints(Capability):
         seed = list(task.params.get("paths") or [])
         for fact in world.facts("candidates", task.node):
             seed += list(fact.payload.paths)
-        candidates = self._clean(seed)
+        suffixes = tuple(task.params.get("static_suffixes") or ())
+        prefixes = tuple(task.params.get("static_prefixes") or ())
+        candidates = self._clean(seed, suffixes, prefixes)
         baseline = self._baseline(name, addresses)
         endpoints: list[Node] = []
         for path in candidates:
@@ -358,10 +360,10 @@ class Endpoints(Capability):
             endpoints.append(Node(id=f"endpoint:{name}{path}", type="endpoint", payload=payload))
         return Done(facts=(Fact(kind="endpoints", about=task.node, yields=tuple(endpoints)),))
 
-    def _clean(self, paths) -> list[str]:
+    def _clean(self, paths, suffixes, prefixes) -> list[str]:
         out: list[str] = []
         for path in paths:
-            if not path or not path.startswith("/") or _is_static_asset(path):
+            if not path or not path.startswith("/") or _is_static_asset(path, suffixes, prefixes):
                 continue
             if path not in out:
                 out.append(path)
@@ -389,18 +391,11 @@ def _safe(thunk):
         return None
 
 
-# Static assets served by a web app, not interfaces, so they are not probed as candidates
-# and not reported. Kept beside triage's own list because both judge the same shape.
-_STATIC_SUFFIXES = (
-    ".js", ".mjs", ".css", ".map", ".ico", ".png", ".jpg", ".jpeg", ".gif", ".svg",
-    ".webp", ".avif", ".woff", ".woff2", ".ttf", ".eot", ".otf", ".mp4", ".webm",
-)
-_STATIC_PREFIXES = ("/_next/static/", "/static/", "/assets/", "/_nuxt/")
-
-
-def _is_static_asset(path: str) -> bool:
+def _is_static_asset(path: str, suffixes, prefixes) -> bool:
+    """Whether a path is a static asset, given the suffix and prefix lists the planner
+    handed in from knowledge, so the capability itself reads no knowledge file."""
     lowered = path.lower().split("?")[0]
-    return lowered.endswith(_STATIC_SUFFIXES) or lowered.startswith(_STATIC_PREFIXES)
+    return lowered.endswith(tuple(suffixes)) or lowered.startswith(tuple(prefixes))
 
 
 def _distinct(result: dict, baseline: dict) -> bool:

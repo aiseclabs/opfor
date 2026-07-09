@@ -1,0 +1,76 @@
+# Interface classification knowledge, read by triage and handed to the endpoint probe. It
+# decides three things about a reachable path, all deterministically and cheaply, the common
+# cases a model need not be paid to judge.
+#
+#   expected_public   a path meant to be public, so reaching it is inventory, not a finding.
+#   static_assets     a file a web app serves, not an interface, so it is neither probed nor
+#                     reported. A single-page app links dozens of hashed bundles, and each
+#                     would otherwise bury the real routes. Matched by url suffix or by path
+#                     prefix.
+#   protected         a reachable response that is really the app enforcing auth, a redirect
+#                     whose target names a login flow, or a body that plainly refuses. These
+#                     suppress the weak unauthenticated-interface line only. They never
+#                     suppress a detector match, which asserts an exposure on content.
+#
+# These lists are the cheap first pass. They are English and pattern based, so by design they
+# miss other languages and novel phrasing. The model layer is meant to judge what they do not
+# cover, so this file stays curated to high-confidence, common markers rather than grown to
+# chase every case, a short reliable list beats a long noisy one. All values are matched
+# lowercased. Adding a marker is a data change here.
+
+expected_public:
+  - /robots.txt
+  - /sitemap.xml
+  - /.well-known/security.txt
+
+static_assets:
+  suffixes:
+    - .js
+    - .mjs
+    - .css
+    - .map
+    - .ico
+    - .png
+    - .jpg
+    - .jpeg
+    - .gif
+    - .svg
+    - .webp
+    - .avif
+    - .woff
+    - .woff2
+    - .ttf
+    - .eot
+    - .otf
+    - .mp4
+    - .webm
+  prefixes:
+    - /_next/static/
+    - /static/
+    - /assets/
+    - /_nuxt/
+
+protected:
+  # Substrings of a 3xx redirect target that name a login or identity flow.
+  login_locations:
+    - login
+    - signin
+    - sign-in
+    - /sso
+    - /auth
+    - /account
+    - oauth
+    - openid
+  # Substrings of a response body that plainly refuse access, a strong refusal only, so a
+  # public page that merely links a login does not get suppressed.
+  refusal_bodies:
+    - unauthorized
+    - forbidden
+    - authentication required
+    - access denied
+    - not authorized
+    - please log in
+    - please sign in
+    - you must be logged in
+    - requires authentication
+    - login required

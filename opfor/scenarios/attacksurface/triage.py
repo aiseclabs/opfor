@@ -23,24 +23,18 @@ from opfor.core import Finding, Triage, World
 from opfor.scenarios.attacksurface.types import DomainData
 
 
-class SurfaceTriage(Triage):
-    # Paths expected to be public, so a reachable one is inventory, not a finding.
-    _EXPECTED_PUBLIC = frozenset({"/robots.txt", "/sitemap.xml", "/.well-known/security.txt"})
-    # A static asset served by a web app is not an interface. A single-page app links dozens
-    # of hashed bundles from its home page, so counting each as an unauthenticated interface
-    # would bury the real routes. A matched exposure detector still fires, this only quiets
-    # the plain inventory line for an asset.
-    _STATIC_SUFFIXES = (
-        ".js", ".mjs", ".css", ".map", ".ico", ".png", ".jpg", ".jpeg", ".gif", ".svg",
-        ".webp", ".avif", ".woff", ".woff2", ".ttf", ".eot", ".otf", ".mp4", ".webm",
-    )
-    _STATIC_PREFIXES = ("/_next/static/", "/static/", "/assets/", "/_nuxt/")
+def _load(path: Path) -> dict:
+    """Read one knowledge yaml file into a dict, an empty one when it holds nothing."""
+    return yaml.safe_load(path.read_text(encoding="utf-8")) or {}
 
+
+class SurfaceTriage(Triage):
     def __init__(self, content_root: str | Path) -> None:
         knowledge = Path(content_root) / "knowledge"
-        takeover = yaml.safe_load((knowledge / "takeover.yaml").read_text(encoding="utf-8")) or {}
-        interesting = yaml.safe_load((knowledge / "interesting.yaml").read_text(encoding="utf-8")) or {}
-        exposures = yaml.safe_load((knowledge / "exposures.yaml").read_text(encoding="utf-8")) or {}
+        takeover = _load(knowledge / "takeover.yaml")
+        interesting = _load(knowledge / "interesting.yaml")
+        exposures = _load(knowledge / "exposures.yaml")
+        interfaces = _load(knowledge / "interfaces.yaml")
         self._takeover = [
             (str(e["service"]), str(e["signature"]).lower())
             for e in (takeover.get("services") or [])
@@ -52,6 +46,13 @@ class SurfaceTriage(Triage):
         for detector in self._detectors:
             if detector.get("body_regex"):
                 detector["_body_re"] = re.compile(str(detector["body_regex"]), re.IGNORECASE)
+        self._expected_public = frozenset(str(p).lower() for p in (interfaces.get("expected_public") or []))
+        static = interfaces.get("static_assets") or {}
+        self._static_suffixes = tuple(str(s).lower() for s in (static.get("suffixes") or []))
+        self._static_prefixes = tuple(str(p).lower() for p in (static.get("prefixes") or []))
+        protected = interfaces.get("protected") or {}
+        self._login_locations = tuple(str(s).lower() for s in (protected.get("login_locations") or []))
+        self._refusal_bodies = tuple(str(s).lower() for s in (protected.get("refusal_bodies") or []))
 
     def judge(self, world: World) -> list[Finding]:
         findings: list[Finding] = []
@@ -133,7 +134,7 @@ class SurfaceTriage(Triage):
                     data={"kind": "exposure", "detector": detector["id"], "status": ep.status,
                           "poc": str(detector.get("poc", "")).format(url=ep.url)},
                 ))
-            elif (ep.path not in self._EXPECTED_PUBLIC and not self._is_static_asset(ep.path)
+            elif (ep.path.lower() not in self._expected_public and not self._is_static_asset(ep.path)
                   and not self._is_protected(ep)):
                 out.append(Finding(
                     id=f"finding:unauth:{ep.url}",
@@ -146,31 +147,21 @@ class SurfaceTriage(Triage):
                 ))
         return out
 
-    # A redirect whose target names a login flow is the app enforcing auth, not an open
-    # interface, and a body carrying a plain refusal is the same. These suppress the weak
-    # INFO line, they never suppress a detector match, which asserts an exposure on content.
-    _LOGIN_LOCATION = ("login", "signin", "sign-in", "/sso", "/auth", "/account", "oauth", "openid")
-    _AUTH_BODY = (
-        "unauthorized", "forbidden", "authentication required", "access denied",
-        "not authorized", "please log in", "please sign in", "you must be logged in",
-        "requires authentication", "login required",
-    )
-
     def _is_protected(self, ep) -> bool:
         """Whether a reachable response is really the app enforcing auth rather than an open
         interface, a redirect to a login flow or a body that plainly refuses access."""
         if ep.status is not None and 300 <= ep.status < 400:
             location = (ep.location or "").lower()
-            if any(hint in location for hint in self._LOGIN_LOCATION):
+            if any(hint in location for hint in self._login_locations):
                 return True
         body = ep.body or ""
-        return any(signal in body for signal in self._AUTH_BODY)
+        return any(signal in body for signal in self._refusal_bodies)
 
     def _is_static_asset(self, path: str) -> bool:
         """Whether a path is a web app's static asset rather than an interface."""
         lowered = path.lower().split("?")[0]
-        return (lowered.endswith(self._STATIC_SUFFIXES)
-                or any(lowered.startswith(prefix) for prefix in self._STATIC_PREFIXES))
+        return (lowered.endswith(self._static_suffixes)
+                or lowered.startswith(self._static_prefixes))
 
     def _match(self, ep) -> dict | None:
         for detector in self._detectors:

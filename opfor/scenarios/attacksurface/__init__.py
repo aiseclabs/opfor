@@ -48,6 +48,15 @@ _PATHS = yaml.safe_load(
 ) or {}
 _PROBE_PATHS = [str(p) for p in (_PATHS.get("paths") or [])]
 
+# The endpoint probe reads no knowledge file, so the planner loads the static-asset lists
+# here and hands them to it, the same way it hands the probe path list.
+_INTERFACES = yaml.safe_load(
+    (Path(__file__).resolve().parent / "knowledge" / "interfaces.yaml").read_text(encoding="utf-8")
+) or {}
+_STATIC = _INTERFACES.get("static_assets") or {}
+_STATIC_SUFFIXES = [str(s) for s in (_STATIC.get("suffixes") or [])]
+_STATIC_PREFIXES = [str(p) for p in (_STATIC.get("prefixes") or [])]
+
 
 def _enabled(org, asset_class: str) -> bool:
     """Whether an asset class runs, given the org's optional class restriction."""
@@ -111,7 +120,9 @@ def _endpoints_rule(world: World) -> list[Task]:
         if world.has_fact(node.id, "endpoints"):
             continue
         tasks.append(Task(capability="domain_endpoints", node=node.id,
-                          params={"paths": _PROBE_PATHS}, scope_host=node.payload.name))
+                          params={"paths": _PROBE_PATHS, "static_suffixes": _STATIC_SUFFIXES,
+                                  "static_prefixes": _STATIC_PREFIXES},
+                          scope_host=node.payload.name))
     return tasks
 
 

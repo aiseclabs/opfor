@@ -459,6 +459,22 @@ def test_brute_force_failure_still_closes_and_is_loud():
     assert any("failed" in n and "domain_bruteforce" in n for n in report.notes)
 
 
+def test_subdomains_from_vt_reads_relationship_ids():
+    from opfor.scenarios.attacksurface.sources.domains import subdomains_from_vt
+
+    page = {"data": [{"id": "api.example.com"}, {"id": "*.mail.example.com"},
+                     {"id": "unrelated.test"}]}
+    assert subdomains_from_vt(page, "example.com") == {"api.example.com", "mail.example.com"}
+
+
+def test_virustotal_is_skipped_without_a_key(monkeypatch):
+    from opfor.scenarios.attacksurface.sources import domains as d
+
+    monkeypatch.delenv("OPFOR_VIRUSTOTAL_KEY", raising=False)
+    # no key means the source contributes nothing and makes no network call
+    assert d.virustotal_subdomains("example.com") == set()
+
+
 def test_brute_hits_drops_the_wildcard_catch_all():
     from opfor.scenarios.attacksurface.sources.domains import brute_hits
 

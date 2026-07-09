@@ -40,22 +40,27 @@ _CERTSPOTTER_PAGES = 12
 
 
 def subdomains(domain: str) -> set[str]:
-    """Certificate-transparency subdomains of a domain, the union of certspotter and crt.sh.
+    """Passive subdomains of a domain, the union of certificate transparency and VirusTotal.
 
-    Both are public logs of issued certificates, so they name hosts without touching the
-    target. Each source is best effort, an individual failure is tolerated so one dead
-    source does not blind the other, and only when every source fails is the failure
-    raised, so an empty result means no certificates rather than a dead source.
+    certspotter and crt.sh read public certificate logs, VirusTotal joins when a key is
+    set and is the reliable passive source, since a keyless source is throttled by shared
+    address. All are public reads that never touch the target. Each source is best effort,
+    an individual failure is tolerated so one dead source does not blind the rest, and only
+    when every source fails is the failure raised, so an empty result means no records
+    rather than a dead source.
     """
+    sources = [certspotter_subdomains, crt_subdomains]
+    if config.virustotal_key():
+        sources.append(virustotal_subdomains)
     names: set[str] = set()
     errors: list[str] = []
-    for source in (certspotter_subdomains, crt_subdomains):
+    for source in sources:
         try:
             names |= source(domain)
         except Exception as exc:
             errors.append(f"{source.__name__}: {exc}")
-    if not names and len(errors) == 2:
-        raise RuntimeError("all certificate-transparency sources failed: " + ", ".join(errors))
+    if not names and len(errors) == len(sources):
+        raise RuntimeError("all passive subdomain sources failed: " + ", ".join(errors))
     return names
 
 
@@ -106,6 +111,43 @@ def crt_subdomains(domain: str) -> set[str]:
             name = line.strip().lower().lstrip("*.")
             if name and name.endswith("." + domain) and _looks_like_host(name):
                 names.add(name)
+    return names
+
+
+_VT_PAGES = 10  # cap on cursor pages, each up to the page limit, bounds a large domain
+
+
+def virustotal_subdomains(domain: str) -> set[str]:
+    """Subdomains of a domain from VirusTotal, paged over the relationship cursor.
+
+    A key buys a real per-account quota rather than the shared-address throttling the
+    keyless passive sources suffer, so this is the reliable free passive source. It returns
+    an empty set when no key is set, so the union simply runs without it.
+    """
+    key = config.virustotal_key()
+    if not key:
+        return set()
+    headers = {"User-Agent": _UA, "Accept": "application/json", "x-apikey": key}
+    names: set[str] = set()
+    url = f"https://www.virustotal.com/api/v3/domains/{domain}/subdomains?limit=40"
+    for _ in range(_VT_PAGES):
+        request = urllib.request.Request(url, headers=headers)
+        with urllib.request.urlopen(request, timeout=_TIMEOUT) as resp:
+            data = json.loads(resp.read().decode("utf-8", "replace"))
+        names |= subdomains_from_vt(data, domain)
+        url = str((data.get("links") or {}).get("next") or "")
+        if not url:
+            break
+    return names
+
+
+def subdomains_from_vt(data, domain: str) -> set[str]:
+    """Subdomains from one VirusTotal relationship page, each item id is a subdomain."""
+    names: set[str] = set()
+    for item in data.get("data", []) or []:
+        name = str(item.get("id", "")).strip().lower().lstrip("*.")
+        if name and name.endswith("." + domain) and _looks_like_host(name):
+            names.add(name)
     return names
 
 

@@ -30,6 +30,17 @@ def certspotter_token() -> str:
     return os.environ.get("OPFOR_CERTSPOTTER_KEY", "")
 
 
+def virustotal_key() -> str:
+    """A VirusTotal API key, empty when unset.
+
+    The subdomains endpoint has no keyless mode, and a key buys a real per-account quota
+    rather than the shared-address throttling the keyless passive sources suffer, so with
+    a key it is the reliable free passive source, joined into the union. A free account
+    provides one.
+    """
+    return os.environ.get("OPFOR_VIRUSTOTAL_KEY", "")
+
+
 def reverse_whois_key() -> str:
     """A reverse-WHOIS provider key, empty when unset.
 

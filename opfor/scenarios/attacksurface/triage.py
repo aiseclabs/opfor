@@ -133,7 +133,8 @@ class SurfaceTriage(Triage):
                     data={"kind": "exposure", "detector": detector["id"], "status": ep.status,
                           "poc": str(detector.get("poc", "")).format(url=ep.url)},
                 ))
-            elif ep.path not in self._EXPECTED_PUBLIC and not self._is_static_asset(ep.path):
+            elif (ep.path not in self._EXPECTED_PUBLIC and not self._is_static_asset(ep.path)
+                  and not self._is_protected(ep)):
                 out.append(Finding(
                     id=f"finding:unauth:{ep.url}",
                     title=f"Unauthenticated interface reachable at {ep.path}",
@@ -144,6 +145,26 @@ class SurfaceTriage(Triage):
                           "poc": f"curl -s {ep.url} , confirm this should be public"},
                 ))
         return out
+
+    # A redirect whose target names a login flow is the app enforcing auth, not an open
+    # interface, and a body carrying a plain refusal is the same. These suppress the weak
+    # INFO line, they never suppress a detector match, which asserts an exposure on content.
+    _LOGIN_LOCATION = ("login", "signin", "sign-in", "/sso", "/auth", "/account", "oauth", "openid")
+    _AUTH_BODY = (
+        "unauthorized", "forbidden", "authentication required", "access denied",
+        "not authorized", "please log in", "please sign in", "you must be logged in",
+        "requires authentication", "login required",
+    )
+
+    def _is_protected(self, ep) -> bool:
+        """Whether a reachable response is really the app enforcing auth rather than an open
+        interface, a redirect to a login flow or a body that plainly refuses access."""
+        if ep.status is not None and 300 <= ep.status < 400:
+            location = (ep.location or "").lower()
+            if any(hint in location for hint in self._LOGIN_LOCATION):
+                return True
+        body = ep.body or ""
+        return any(signal in body for signal in self._AUTH_BODY)
 
     def _is_static_asset(self, path: str) -> bool:
         """Whether a path is a web app's static asset rather than an interface."""

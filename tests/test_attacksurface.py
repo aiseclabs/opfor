@@ -73,9 +73,12 @@ ENDPOINTS = {
     "https://admin.example.com/.git/config": {"status": 200, "body": "[core]\n\trepositoryformatversion = 0"},
     "https://admin.example.com/.env": {"status": 200, "body": "db_password=secret\napi_key=abc"},
     "https://admin.example.com/metrics": {"status": 401, "body": "unauthorized"},
-    "https://admin.example.com/admin": {"status": 200, "body": "admin panel please sign in"},
+    "https://admin.example.com/admin": {"status": 200, "body": "admin dashboard overview"},
     "https://admin.example.com/graphql": {"status": 200, "ct": "application/json", "body": '{"data":{}}'},
     "https://admin.example.com/api/secret": {"status": 200, "body": "secret payload"},
+    # a login redirect and a refusal body, both reachable but really protected
+    "https://admin.example.com/portal": {"status": 302, "loc": "https://admin.example.com/login", "body": ""},
+    "https://admin.example.com/private": {"status": 200, "body": "Unauthorized"},
     "https://api.example.com/v2/balance": {"status": 200, "body": "balance"},
     "https://www.example.com/legacy": {"status": 200, "body": "legacy console"},
     "https://example.com/secret-panel": {"status": 200, "body": "hidden panel"},
@@ -99,7 +102,8 @@ def _fetch(name, addresses, path):
         return {"status": 404, "url": url, "content_type": "", "server": "", "title": "", "body": ""}
     d = ENDPOINTS.get(url, {"status": 404, "body": ""})
     return {"status": d["status"], "url": url, "content_type": d.get("ct", ""),
-            "server": d.get("server", ""), "title": "", "body": d["body"].lower()}
+            "server": d.get("server", ""), "title": "", "body": d["body"].lower(),
+            "location": d.get("loc", "")}
 
 
 # Certificate-SAN sibling roots per known root. example.com and example.net are bundled
@@ -132,6 +136,7 @@ def _fetch_doc(name, path):
     if name == "admin.example.com" and path == "/app.js":
         return {"status": 200, "content_type": "application/javascript",
                 "text": ('const API="/api";fetch("/api/secret");const css="/main.css";'
+                         'fetch("/portal");fetch("/private");'
                          'fetch("https://api.example.com/v2/balance");')}
     return {"status": None, "content_type": "", "text": ""}
 
@@ -551,6 +556,20 @@ def test_javascript_endpoint_extraction_finds_a_hidden_api():
     world = _seed()
     _run(world)
     assert world.node("endpoint:admin.example.com/api/secret") is not None
+
+
+def test_login_redirect_is_not_an_unauthenticated_finding():
+    # /portal is reachable but 302s to a login flow, so it is protected, not open
+    world = _seed()
+    report = _run(world)
+    assert world.node("endpoint:admin.example.com/portal") is not None
+    assert not any(f.where.endswith("/portal") for f in report.findings)
+
+
+def test_refusal_body_is_not_an_unauthenticated_finding():
+    # /private answers 200 but the body plainly refuses, so it is not an open interface
+    report = _run(_seed())
+    assert not any(f.where.endswith("/private") for f in report.findings)
 
 
 def test_cross_host_javascript_path_is_probed_on_the_sibling_host():

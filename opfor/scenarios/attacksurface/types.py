@@ -84,6 +84,7 @@ class Endpoint:
     server: str = ""
     title: str = ""
     body: str = ""
+    location: str = ""
 
 
 @dataclass(frozen=True, kw_only=True)

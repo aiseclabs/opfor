@@ -326,7 +326,7 @@ def http_probe(name: str, addresses=()) -> dict:
     ip = public[0]
     for scheme in ("https", "http"):
         try:
-            status, server, _, body = _connect(name, ip, scheme, "/")
+            status, server, _, body, _location = _connect(name, ip, scheme, "/")
         except Exception:
             continue
         return _result(True, status, f"{scheme}://{name}/", server, body)
@@ -342,15 +342,15 @@ def fetch_url(name: str, addresses, path: str) -> dict:
     ip = public[0]
     for scheme in ("https", "http"):
         try:
-            status, server, content_type, body = _connect(name, ip, scheme, path)
+            status, server, content_type, body, location = _connect(name, ip, scheme, path)
         except Exception:
             continue
         match = _TITLE.search(body)
         return {"status": status, "url": f"{scheme}://{name}{path}", "content_type": content_type,
                 "server": server, "title": match.group(1).strip()[:200] if match else "",
-                "body": body.lower()}
+                "body": body.lower(), "location": location}
     return {"status": None, "url": f"https://{name}{path}", "content_type": "",
-            "server": "", "title": "", "body": ""}
+            "server": "", "title": "", "body": "", "location": ""}
 
 
 # --- self-declared interfaces: an app maps its own API --------------------
@@ -377,7 +377,7 @@ def fetch_document(name: str, path: str) -> dict:
     ip = public[0]
     for scheme in ("https", "http"):
         try:
-            status, _, content_type, body = _connect(name, ip, scheme, path, read_limit=_DOCUMENT_LIMIT)
+            status, _, content_type, body, _location = _connect(name, ip, scheme, path, read_limit=_DOCUMENT_LIMIT)
         except Exception:
             continue
         return {"status": status, "content_type": content_type, "text": body}
@@ -398,8 +398,8 @@ def graphql_introspect(name: str, path: str = "/graphql") -> dict | None:
     body = _INTROSPECTION.encode("utf-8")
     for scheme in ("https", "http"):
         try:
-            status, _, _, text = _connect(name, ip, scheme, path, read_limit=_DOCUMENT_LIMIT,
-                                          method="POST", payload=body, content_type="application/json")
+            status, _, _, text, _location = _connect(name, ip, scheme, path, read_limit=_DOCUMENT_LIMIT,
+                                                      method="POST", payload=body, content_type="application/json")
         except Exception:
             continue
         if status and 200 <= status < 300:
@@ -591,7 +591,9 @@ def _connect(name: str, ip: str, scheme: str, path: str, *, read_limit: int = _B
         conn.request(method, path or "/", body=payload, headers=headers)
         resp = conn.getresponse()
         body = resp.read(read_limit).decode("utf-8", "replace")
-        return resp.status, resp.getheader("Server", "") or "", resp.getheader("Content-Type", "") or "", body
+        return (resp.status, resp.getheader("Server", "") or "",
+                resp.getheader("Content-Type", "") or "", body,
+                resp.getheader("Location", "") or "")
     finally:
         conn.close()
 

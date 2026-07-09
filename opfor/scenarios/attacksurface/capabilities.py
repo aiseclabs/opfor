@@ -353,6 +353,7 @@ class Endpoints(Capability):
                 server=str(result.get("server", "")),
                 title=str(result.get("title", "")),
                 body=str(result.get("body", "")),
+                location=str(result.get("location", "")),
             )
             endpoints.append(Node(id=f"endpoint:{name}{path}", type="endpoint", payload=payload))
         return Done(facts=(Fact(kind="endpoints", about=task.node, yields=tuple(endpoints)),))

@@ -53,6 +53,39 @@ def _enabled(org, asset_class: str) -> bool:
     return not org.classes or asset_class in org.classes
 
 
+def inventory(world: World) -> list[tuple[str, list[str]]]:
+    """The run's raw inventory as headed line groups for a report, read from the world.
+
+    This is the full picture behind the findings, every root, live host, dangling name,
+    and unauthenticated interface, so a report carries the map and not only the issues.
+    """
+    domains = world.nodes("domain")
+    roots = sorted((n.payload for n in domains if n.payload.name == n.payload.root),
+                   key=lambda p: p.root)
+    live: list[str] = []
+    dangling: list[str] = []
+    for node in sorted(domains, key=lambda n: n.payload.name):
+        payload = node.payload
+        http = world.latest("http", node.id)
+        resolved = world.latest("resolved", node.id)
+        if http is not None and http.payload.alive:
+            title = f" {http.payload.title}" if http.payload.title else ""
+            live.append(f"- `{payload.name}` {http.payload.status}{title}")
+        elif resolved is not None and not resolved.payload.resolvable and payload.source == "passive":
+            dangling.append(f"- `{payload.name}`")
+    endpoints = sorted((n.payload for n in world.nodes("endpoint") if not n.payload.auth_required),
+                       key=lambda p: p.url)
+    orgs = sorted(world.nodes("github_org"), key=lambda n: n.payload.login)
+    return [
+        (f"Root domains ({len(roots)})",
+         [f"- `{r.root}` ({r.source})" + (f", {r.evidence}" if r.evidence else "") for r in roots]),
+        (f"Live hosts ({len(live)})", live),
+        (f"Dangling names ({len(dangling)})", dangling),
+        (f"Unauthenticated interfaces ({len(endpoints)})", [f"- `{e.url}`" for e in endpoints]),
+        (f"GitHub orgs ({len(orgs)})", [f"- `{n.payload.login}` {n.payload.url}" for n in orgs]),
+    ]
+
+
 def _http_rule(world: World) -> list[Task]:
     """Probe every resolvable domain that has no HTTP fact yet.
 

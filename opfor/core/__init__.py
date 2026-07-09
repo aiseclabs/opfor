@@ -13,6 +13,7 @@ from opfor.core.capability import Capability, Done, Failed, Later, Outcome, Task
 from opfor.core.engine import run
 from opfor.core.ledger import Event, Ledger
 from opfor.core.phase import Phase
+from opfor.core.render import markdown
 from opfor.core.result import Finding, Report
 from opfor.core.rules import Planner, Rule, RuleSet, each
 from opfor.core.scenario import Scenario
@@ -46,5 +47,6 @@ __all__ = [
     "Triage",
     "World",
     "each",
+    "markdown",
     "run",
 ]

@@ -583,3 +583,17 @@ def test_robots_and_sitemap_parsing():
     assert paths == ["/admin", "/public"]
     assert sitemaps == ["https://h/sm.xml"]
     assert sitemap_paths("<urlset><url><loc>https://h.test/a</loc></url></urlset>", "h.test") == ["/a"]
+
+
+def test_inventory_lists_roots_live_hosts_and_interfaces():
+    from opfor.scenarios.attacksurface import inventory
+
+    world = _seed()
+    _run(world)
+    sections = inventory(world)
+    headings = [h for h, _ in sections]
+    text = "\n".join(line for _, body in sections for line in body)
+    assert any(h.startswith("Root domains") for h in headings)
+    assert any(h.startswith("Unauthenticated interfaces") for h in headings)
+    assert "example.net" in text        # a discovered sibling root
+    assert "admin.example.com" in text   # a live host

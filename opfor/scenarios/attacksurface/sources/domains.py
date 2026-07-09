@@ -445,6 +445,111 @@ def operations_from_introspection(data) -> list[str]:
     return sorted(out)
 
 
+# --- candidate interface paths: robots, sitemap, javascript, passive urls ---
+
+_SCRIPT_SRC = re.compile(r'<script[^>]+src\s*=\s*["\']([^"\']+)', re.IGNORECASE)
+_JS_PATH = re.compile(r"""["'`](/[A-Za-z0-9_.\-/]{1,160})["'`]""")
+_LOC = re.compile(r"<loc>\s*([^<\s]+)\s*</loc>", re.IGNORECASE)
+
+
+def script_sources(body: str, host: str) -> list[str]:
+    """Same-host JavaScript URLs a page loads, as paths, deduped in document order.
+
+    A single-page app hardcodes its API routes in these bundles, so they are the first
+    step to reading the app's own interface surface rather than guessing it.
+    """
+    out: list[str] = []
+    for src in _SCRIPT_SRC.findall(body or ""):
+        path = same_host_path(src, host)
+        if path and path.split("?")[0].lower().endswith(".js") and path not in out:
+            out.append(path)
+    return out
+
+
+def paths_in_javascript(text: str) -> list[str]:
+    """Path-like strings from a JavaScript body, deduped in appearance order.
+
+    A bundle names the API routes it calls, so this reads them out. It is noisy by nature,
+    a string that looks like a path is not always one, so the caller probes each to confirm
+    rather than trusting it.
+    """
+    out: list[str] = []
+    for match in _JS_PATH.findall(text or ""):
+        path = match.split("?")[0]
+        if path.startswith("//") or len(path) < 2 or path in out:
+            continue
+        # A path with no letter is a version or an index fragment such as /1 or /0/0, not a
+        # route, so it is dropped before it becomes a wasted probe.
+        if not any(c.isalpha() for c in path):
+            continue
+        out.append(path)
+    return out
+
+
+def robots_entries(text: str) -> tuple[list[str], list[str]]:
+    """The rule paths and the sitemap urls declared in a robots.txt.
+
+    A Disallow or Allow line names a path the site itself knows about, often one it would
+    rather not be crawled, so it is a strong candidate. A Sitemap line points at a listing
+    to read for more.
+    """
+    paths: list[str] = []
+    sitemaps: list[str] = []
+    for line in (text or "").splitlines():
+        line = line.strip()
+        low = line.lower()
+        if low.startswith(("disallow:", "allow:")):
+            value = line.split(":", 1)[1].strip().split("#")[0].strip()
+            if value.startswith("/") and value not in paths:
+                paths.append(value)
+        elif low.startswith("sitemap:"):
+            value = line.split(":", 1)[1].strip()
+            if value:
+                sitemaps.append(value)
+    return paths, sitemaps
+
+
+def sitemap_paths(text: str, host: str) -> list[str]:
+    """Same-host url paths listed in a sitemap.xml body, deduped."""
+    out: list[str] = []
+    for loc in _LOC.findall(text or ""):
+        path = same_host_path(loc, host)
+        if path and path not in out:
+            out.append(path)
+    return out
+
+
+def wayback_paths(host: str) -> set[str]:
+    """Historical url paths for a host from the Wayback Machine CDX index, a passive read.
+
+    It names paths that once existed without touching the target. It is one source in a
+    union, so the caller tolerates its failure rather than letting it block the others.
+    """
+    url = (f"http://web.archive.org/cdx/search/cdx?url={urllib.parse.quote(host)}/*"
+           "&output=json&fl=original&collapse=urlkey&limit=2000")
+    request = urllib.request.Request(url, headers={"User-Agent": _UA, "Accept": "application/json"})
+    with urllib.request.urlopen(request, timeout=_TIMEOUT) as resp:
+        rows = json.loads(resp.read().decode("utf-8", "replace"))
+    out: set[str] = set()
+    for row in rows[1:] if rows and isinstance(rows[0], list) else []:
+        path = same_host_path(str(row[0]), host)
+        if path:
+            out.add(path)
+    return out
+
+
+def same_host_path(url: str, host: str) -> str | None:
+    """The path of a url when it is relative or points at host, else None. Query and
+    fragment are dropped, since a path is what a probe needs."""
+    url = (url or "").strip()
+    if url.startswith("/") and not url.startswith("//"):
+        return url.split("#")[0].split("?")[0]
+    parsed = urllib.parse.urlparse(url)
+    if parsed.scheme in ("http", "https") and parsed.hostname == host:
+        return parsed.path or "/"
+    return None
+
+
 def _connect(name: str, ip: str, scheme: str, path: str, *, read_limit: int = _BODY_HEAD,
              method: str = "GET", payload: bytes | None = None,
              content_type: str = "") -> tuple:

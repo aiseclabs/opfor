@@ -63,13 +63,18 @@ def _repos(login, token=""):
 
 
 # Interface probes per absolute url. Anything absent answers 404 and is skipped.
+# /api/secret is only reachable by reading it out of a JavaScript bundle, /legacy only by a
+# passive url source, /secret-panel only from robots.txt, so each proves one candidate source.
 ENDPOINTS = {
     "https://admin.example.com/.git/config": {"status": 200, "body": "[core]\n\trepositoryformatversion = 0"},
     "https://admin.example.com/.env": {"status": 200, "body": "db_password=secret\napi_key=abc"},
     "https://admin.example.com/metrics": {"status": 401, "body": "unauthorized"},
     "https://admin.example.com/admin": {"status": 200, "body": "admin panel please sign in"},
     "https://admin.example.com/graphql": {"status": 200, "ct": "application/json", "body": '{"data":{}}'},
-    "https://example.com/robots.txt": {"status": 200, "body": "user-agent: *"},
+    "https://admin.example.com/api/secret": {"status": 200, "body": "secret payload"},
+    "https://www.example.com/legacy": {"status": 200, "body": "legacy console"},
+    "https://example.com/secret-panel": {"status": 200, "body": "hidden panel"},
+    "https://example.com/robots.txt": {"status": 200, "body": "user-agent: *\ndisallow: /secret-panel"},
 }
 
 
@@ -110,12 +115,18 @@ def _reverse(term, api_key=""):
     return dict(WHOIS.get(term, {}))
 
 
-# A full API specification fetch and a GraphQL introspection, the app declaring its own
-# interface surface. Only the two hosts that expose one answer.
+# A full document fetch, the app declaring itself. spa serves an OpenAPI spec, admin serves
+# a home page linking a JavaScript bundle that hardcodes an API path only readable from it.
 def _fetch_doc(name, path):
     if name == "spa.example.com" and path == "/openapi.json":
         return {"status": 200, "content_type": "application/json",
                 "text": '{"openapi":"3.0.0","paths":{"/users":{"get":{}},"/orders":{"get":{},"post":{}}}}'}
+    if name == "admin.example.com" and path == "/":
+        return {"status": 200, "content_type": "text/html",
+                "text": '<html><body><script src="/app.js"></script></body></html>'}
+    if name == "admin.example.com" and path == "/app.js":
+        return {"status": 200, "content_type": "application/javascript",
+                "text": 'const API="/api";fetch("/api/secret");const css="/main.css";'}
     return {"status": None, "content_type": "", "text": ""}
 
 
@@ -124,6 +135,10 @@ def _introspect(name, path="/graphql"):
         return {"__schema": {"queryType": {"name": "Query", "fields": [{"name": "me"}, {"name": "users"}]},
                              "mutationType": {"name": "Mutation", "fields": [{"name": "login"}]}}}
     return None
+
+
+def _wayback(host):
+    return {"/legacy"} if host == "www.example.com" else set()
 
 
 def _enumerate(domain):
@@ -138,10 +153,18 @@ def _probe(name, addresses=()):
     return HTTP.get(name, {"alive": False, "status": None, "url": "", "server": "", "title": "", "body": ""})
 
 
+def _make(**over):
+    """Build the scenario with every seam faked, so no test touches the network. A test
+    overrides one seam to drive a failure or a variant."""
+    seams = dict(search_fn=_search, repos_fn=_repos, enumerate_fn=_enumerate, pivot_fn=_pivot,
+                 resolve_fn=_resolve, probe_fn=_probe, fetch_fn=_fetch, fetch_doc_fn=_fetch_doc,
+                 introspect_fn=_introspect, wayback_fn=_wayback)
+    seams.update(over)
+    return build(**seams)
+
+
 def _scenario():
-    return build(search_fn=_search, repos_fn=_repos, enumerate_fn=_enumerate,
-                 pivot_fn=_pivot, resolve_fn=_resolve, probe_fn=_probe, fetch_fn=_fetch,
-                 fetch_doc_fn=_fetch_doc, introspect_fn=_introspect)
+    return _make()
 
 
 def _seed(*, domains=(ROOT,), classes=()):
@@ -301,9 +324,7 @@ def test_total_resolution_failure_reports_incomplete_not_dangling():
     def none_resolve(name):
         return {"resolvable": False, "addresses": ()}
 
-    scenario = build(search_fn=_search, repos_fn=_repos, enumerate_fn=_enumerate,
-                     pivot_fn=_pivot, resolve_fn=none_resolve, probe_fn=_probe, fetch_fn=_fetch,
-                 fetch_doc_fn=_fetch_doc, introspect_fn=_introspect)
+    scenario = _make(resolve_fn=none_resolve)
     world = _seed(classes=("domain",))
     report = run(scenario, world, scope=Scope(max_tier="recon", hosts=(ROOT,)), budget=Budget(500))
     kinds = {f.data.get("kind") for f in report.findings}
@@ -315,8 +336,7 @@ def test_github_search_failure_still_closes():
     def boom(name, token=""):
         raise TimeoutError("github slow")
 
-    scenario = build(search_fn=boom, repos_fn=_repos, enumerate_fn=_enumerate,
-                     pivot_fn=_pivot, resolve_fn=_resolve, probe_fn=_probe)
+    scenario = _make(search_fn=boom)
     world = _seed()
     report = run(scenario, world, scope=Scope(max_tier="recon", hosts=(ROOT,)), budget=Budget(500))
     assert report.closed
@@ -384,9 +404,7 @@ def test_pivot_failure_still_closes_and_is_loud():
     def boom(domain):
         raise TimeoutError("certspotter slow")
 
-    scenario = build(search_fn=_search, repos_fn=_repos, enumerate_fn=_enumerate,
-                     pivot_fn=boom, resolve_fn=_resolve, probe_fn=_probe, fetch_fn=_fetch,
-                 fetch_doc_fn=_fetch_doc, introspect_fn=_introspect)
+    scenario = _make(pivot_fn=boom)
     world = _seed()
     report = run(scenario, world, scope=Scope(max_tier="recon", hosts=(ROOT,)), budget=Budget(500))
     assert report.closed
@@ -394,10 +412,7 @@ def test_pivot_failure_still_closes_and_is_loud():
 
 
 def _with_reverse(reverse_fn=_reverse):
-    return build(search_fn=_search, repos_fn=_repos, enumerate_fn=_enumerate,
-                 pivot_fn=_pivot, reverse_whois_fn=reverse_fn, resolve_fn=_resolve,
-                 probe_fn=_probe, fetch_fn=_fetch,
-                 fetch_doc_fn=_fetch_doc, introspect_fn=_introspect)
+    return _make(reverse_whois_fn=reverse_fn)
 
 
 def test_registrant_pivot_is_off_without_a_key():
@@ -471,9 +486,7 @@ def test_graphql_without_operations_is_not_reported():
     def empty(name, path="/graphql"):
         return {"__schema": {"queryType": {"fields": []}}}
 
-    scenario = build(search_fn=_search, repos_fn=_repos, enumerate_fn=_enumerate, pivot_fn=_pivot,
-                     resolve_fn=_resolve, probe_fn=_probe, fetch_fn=_fetch,
-                     fetch_doc_fn=_fetch_doc, introspect_fn=empty)
+    scenario = _make(introspect_fn=empty)
     world = _seed()
     report = run(scenario, world, scope=Scope(max_tier="recon", hosts=(ROOT,)), budget=Budget(2000))
     assert not any(f.data.get("kind") == "graphql" for f in report.findings)
@@ -483,9 +496,7 @@ def test_spec_fetch_failure_still_closes_and_is_loud():
     def boom(name, path):
         raise TimeoutError("spec slow")
 
-    scenario = build(search_fn=_search, repos_fn=_repos, enumerate_fn=_enumerate, pivot_fn=_pivot,
-                     resolve_fn=_resolve, probe_fn=_probe, fetch_fn=_fetch,
-                     fetch_doc_fn=boom, introspect_fn=_introspect)
+    scenario = _make(fetch_doc_fn=boom)
     world = _seed()
     report = run(scenario, world, scope=Scope(max_tier="recon", hosts=(ROOT,)), budget=Budget(2000))
     assert report.closed
@@ -526,3 +537,49 @@ def test_virustotal_is_skipped_without_a_key(monkeypatch):
     assert d.virustotal_subdomains("example.com") == set()
 
 
+
+
+def test_javascript_endpoint_extraction_finds_a_hidden_api():
+    # /api/secret is only named inside a script bundle, never linked, so finding it proves
+    # the endpoint discovery reads the app's own JavaScript
+    world = _seed()
+    _run(world)
+    assert world.node("endpoint:admin.example.com/api/secret") is not None
+
+
+def test_wayback_passive_urls_become_candidates():
+    world = _seed()
+    _run(world)
+    assert world.node("endpoint:www.example.com/legacy") is not None
+
+
+def test_robots_disallow_paths_become_candidates():
+    world = _seed()
+    _run(world)
+    assert world.node("endpoint:example.com/secret-panel") is not None
+
+
+def test_javascript_and_url_parsing():
+    from opfor.scenarios.attacksurface.sources.domains import (
+        paths_in_javascript,
+        same_host_path,
+        script_sources,
+    )
+
+    js = 'fetch("/api/v1/users");const a="/static/x.js";x("//cdn/y");u("https://h/z")'
+    got = paths_in_javascript(js)
+    assert "/api/v1/users" in got and "/static/x.js" in got
+    assert not any(p.startswith("//") for p in got)
+    assert script_sources('<script src="/a.js"></script><script src="https://cdn/b.js">', "h.test") == ["/a.js"]
+    assert same_host_path("/p?q=1", "h.test") == "/p"
+    assert same_host_path("https://h.test/x", "h.test") == "/x"
+    assert same_host_path("https://other/x", "h.test") is None
+
+
+def test_robots_and_sitemap_parsing():
+    from opfor.scenarios.attacksurface.sources.domains import robots_entries, sitemap_paths
+
+    paths, sitemaps = robots_entries("User-agent: *\nDisallow: /admin\nAllow: /public\nSitemap: https://h/sm.xml")
+    assert paths == ["/admin", "/public"]
+    assert sitemaps == ["https://h/sm.xml"]
+    assert sitemap_paths("<urlset><url><loc>https://h.test/a</loc></url></urlset>", "h.test") == ["/a"]

@@ -136,6 +136,7 @@ def build(
     fetch_fn=domain_src.fetch_url,
     fetch_doc_fn=domain_src.fetch_document,
     introspect_fn=domain_src.graphql_introspect,
+    wayback_fn=domain_src.wayback_paths,
 ) -> Scenario:
     # The registrant pivot is the reliable core, but its provider has no keyless mode, so
     # the real seam turns on only when a key is set. A test passes its own fake to wire it
@@ -151,7 +152,7 @@ def build(
         Subdomains(enumerate_fn),
         ResolveDomain(resolve_fn),
         HTTPDomain(probe_fn),
-        Endpoints(fetch_fn),
+        Endpoints(fetch_fn, fetch_doc_fn, wayback_fn),
         ExpandSpec(fetch_doc_fn),
         GraphQLIntrospect(introspect_fn),
         GitHubRepos(repos_fn),

@@ -223,6 +223,18 @@ def test_expected_public_path_is_not_a_finding():
     assert not any(f.where.endswith("/robots.txt") for f in report.findings)
 
 
+def test_static_assets_are_not_reported_as_interfaces():
+    import opfor.scenarios.attacksurface as pkg
+    from opfor.scenarios.attacksurface.triage import SurfaceTriage
+
+    triage = SurfaceTriage(pkg.__path__[0])
+    for path in ("/umi.3cbab89e.js", "/main.css", "/favicon.ico",
+                 "/_next/static/chunks/webpack.js", "/assets/logo.svg"):
+        assert triage._is_static_asset(path), path
+    for path in ("/graphql", "/api", "/admin", "/login", "/.git/config"):
+        assert not triage._is_static_asset(path), path
+
+
 def test_soft_200_host_is_not_flooded_with_unauth_findings():
     report = _run(_seed())
     spa = [f for f in report.findings

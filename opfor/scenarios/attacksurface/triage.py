@@ -26,6 +26,15 @@ from opfor.scenarios.attacksurface.types import DomainData
 class SurfaceTriage(Triage):
     # Paths expected to be public, so a reachable one is inventory, not a finding.
     _EXPECTED_PUBLIC = frozenset({"/robots.txt", "/sitemap.xml", "/.well-known/security.txt"})
+    # A static asset served by a web app is not an interface. A single-page app links dozens
+    # of hashed bundles from its home page, so counting each as an unauthenticated interface
+    # would bury the real routes. A matched exposure detector still fires, this only quiets
+    # the plain inventory line for an asset.
+    _STATIC_SUFFIXES = (
+        ".js", ".mjs", ".css", ".map", ".ico", ".png", ".jpg", ".jpeg", ".gif", ".svg",
+        ".webp", ".avif", ".woff", ".woff2", ".ttf", ".eot", ".otf", ".mp4", ".webm",
+    )
+    _STATIC_PREFIXES = ("/_next/static/", "/static/", "/assets/", "/_nuxt/")
 
     def __init__(self, content_root: str | Path) -> None:
         knowledge = Path(content_root) / "knowledge"
@@ -85,7 +94,7 @@ class SurfaceTriage(Triage):
                     data={"kind": "exposure", "detector": detector["id"], "status": ep.status,
                           "poc": str(detector.get("poc", "")).format(url=ep.url)},
                 ))
-            elif ep.path not in self._EXPECTED_PUBLIC:
+            elif ep.path not in self._EXPECTED_PUBLIC and not self._is_static_asset(ep.path):
                 out.append(Finding(
                     id=f"finding:unauth:{ep.url}",
                     title=f"Unauthenticated interface reachable at {ep.path}",
@@ -96,6 +105,12 @@ class SurfaceTriage(Triage):
                           "poc": f"curl -s {ep.url} , confirm this should be public"},
                 ))
         return out
+
+    def _is_static_asset(self, path: str) -> bool:
+        """Whether a path is a web app's static asset rather than an interface."""
+        lowered = path.lower().split("?")[0]
+        return (lowered.endswith(self._STATIC_SUFFIXES)
+                or any(lowered.startswith(prefix) for prefix in self._STATIC_PREFIXES))
 
     def _match(self, ep) -> dict | None:
         for detector in self._detectors:
@@ -157,10 +172,10 @@ class SurfaceTriage(Triage):
                     f"Possible subdomain takeover via {service}",
                     f"live host answers with the {service} unclaimed-service page",
                     {"root": data.root, "source": data.source}))
-            elif resolved_data is not None and not resolved_data.resolvable and data.source == "crt":
+            elif resolved_data is not None and not resolved_data.resolvable and data.source == "passive":
                 out.append(self._finding("dangling", data.name, "LOW",
-                    "Dangling name, certificate exists but it does not resolve",
-                    "a certificate was issued for this name yet DNS returns no address, verify for takeover",
+                    "Dangling name, seen passively but it does not resolve",
+                    "a passive source names this host yet DNS returns no address, verify for takeover",
                     {"root": data.root, "source": data.source}))
 
             keyword = self._interesting(data)

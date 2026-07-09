@@ -139,7 +139,11 @@ class DomainRegistrant(Capability):
 
 
 class Subdomains(Capability):
-    """MAP: certificate transparency subdomains of a domain root, as new domain nodes."""
+    """MAP: passively discovered subdomains of a root, as new domain nodes.
+
+    The source is a union of public passive sources, certificate transparency and a
+    passive-DNS provider, so a name here was seen in the wild without touching the target.
+    """
 
     name = "domain_subdomains"
     phase = Phase.MAP
@@ -152,10 +156,10 @@ class Subdomains(Capability):
         try:
             names = self._enumerate(root)
         except Exception as exc:
-            return Failed(reason=f"crt.sh {type(exc).__name__}: {exc}")
+            return Failed(reason=f"passive enumeration {type(exc).__name__}: {exc}")
         found = tuple(
             Node(id=f"domain:{n}", type="domain",
-                 payload=DomainData(name=n, root=root, source="crt"))
+                 payload=DomainData(name=n, root=root, source="passive"))
             for n in sorted(names) if n != root
         )
         return Done(facts=(Fact(kind="enumerated", about=task.node, yields=found),))

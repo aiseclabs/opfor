@@ -14,6 +14,7 @@ here in triage. No capability reads them.
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import yaml
@@ -23,25 +24,112 @@ from opfor.scenarios.attacksurface.types import DomainData
 
 
 class SurfaceTriage(Triage):
+    # Paths expected to be public, so a reachable one is inventory, not a finding.
+    _EXPECTED_PUBLIC = frozenset({"/robots.txt", "/sitemap.xml", "/.well-known/security.txt"})
+
     def __init__(self, content_root: str | Path) -> None:
         knowledge = Path(content_root) / "knowledge"
         takeover = yaml.safe_load((knowledge / "takeover.yaml").read_text(encoding="utf-8")) or {}
         interesting = yaml.safe_load((knowledge / "interesting.yaml").read_text(encoding="utf-8")) or {}
+        exposures = yaml.safe_load((knowledge / "exposures.yaml").read_text(encoding="utf-8")) or {}
         self._takeover = [
             (str(e["service"]), str(e["signature"]).lower())
             for e in (takeover.get("services") or [])
         ]
         self._keywords = [str(k).lower() for k in (interesting.get("keywords") or [])]
+        self._detectors = list(exposures.get("detectors") or [])
+        # Precompile the body regex a detector may carry, so a match is a strong signal
+        # rather than a bare 200 an app returns for every path.
+        for detector in self._detectors:
+            if detector.get("body_regex"):
+                detector["_body_re"] = re.compile(str(detector["body_regex"]), re.IGNORECASE)
 
     def judge(self, world: World) -> list[Finding]:
         findings: list[Finding] = []
         findings.extend(self._domains(world))
+        findings.extend(self._endpoints(world))
         findings.extend(self._github(world))
         return findings
 
+    def _endpoints(self, world: World) -> list[Finding]:
+        """Judge each unauthenticated interface: a matched detector is an exposure with a
+        PoC, an unmatched one is inventory, the unauthenticated surface worth confirming."""
+        out: list[Finding] = []
+        for node in world.nodes("endpoint"):
+            ep = node.payload
+            if ep.auth_required:
+                continue
+            detector = self._match(ep)
+            if detector is not None:
+                out.append(Finding(
+                    id=f"finding:exposure:{ep.url}",
+                    title=str(detector["title"]),
+                    severity=str(detector["severity"]),
+                    where=ep.url,
+                    evidence=f"HTTP {ep.status} at {ep.path}, matched detector {detector['id']}",
+                    data={"kind": "exposure", "detector": detector["id"], "status": ep.status,
+                          "poc": str(detector.get("poc", "")).format(url=ep.url)},
+                ))
+            elif ep.path not in self._EXPECTED_PUBLIC:
+                out.append(Finding(
+                    id=f"finding:unauth:{ep.url}",
+                    title=f"Unauthenticated interface reachable at {ep.path}",
+                    severity="INFO",
+                    where=ep.url,
+                    evidence=f"HTTP {ep.status} without auth, server {ep.server or 'unknown'}",
+                    data={"kind": "unauth", "status": ep.status,
+                          "poc": f"curl -s {ep.url} , confirm this should be public"},
+                ))
+        return out
+
+    def _match(self, ep) -> dict | None:
+        for detector in self._detectors:
+            path = str(detector.get("path", ""))
+            if path and ep.path != path and not ep.path.endswith(path):
+                continue
+            content_type = detector.get("content_type")
+            if content_type and str(content_type) not in (ep.content_type or "").lower():
+                continue
+            contains = detector.get("body_contains")
+            if contains and str(contains) not in ep.body:
+                continue
+            absent = detector.get("body_absent")
+            if absent and str(absent) in ep.body:
+                continue
+            regex = detector.get("_body_re")
+            if regex is not None and not regex.search(ep.body):
+                continue
+            # A detector must assert something beyond the path, or an app that answers for
+            # every path would match it.
+            if not (contains or detector.get("body_regex") or content_type):
+                continue
+            return detector
+        return None
+
     def _domains(self, world: World) -> list[Finding]:
         out: list[Finding] = []
-        for node in world.nodes("domain"):
+        domains = world.nodes("domain")
+        # A dangling call rests on our resolver working. When almost nothing resolves the
+        # resolver is the problem, not the whole zone, so calling those names dangling
+        # would be a wall of false positives. Above a high failure rate, suppress the
+        # dangling and probing results and say the run is incomplete, a loud caveat rather
+        # than a guess. This trades a little recall for not lying, and it says so.
+        unresolved = sum(
+            1 for n in domains
+            if not ((r := world.latest("resolved", n.id)) is not None and r.payload.resolvable)
+        )
+        if domains and unresolved / len(domains) >= 0.9:
+            return [Finding(
+                id="finding:incomplete:resolution",
+                title=f"Resolution unavailable, {unresolved} of {len(domains)} names did not resolve",
+                severity="INFO",
+                where="(resolver)",
+                evidence="almost nothing resolved, so probing and dangling checks were "
+                         "suppressed to avoid false positives, rerun from a host with a "
+                         "working resolver to assess reachability",
+                data={"kind": "incomplete", "unresolved": unresolved, "domains": len(domains)},
+            )]
+        for node in domains:
             data = node.payload
             http = world.latest("http", node.id)
             resolved = world.latest("resolved", node.id)

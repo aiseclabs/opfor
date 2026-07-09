@@ -16,10 +16,13 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import yaml
+
 from opfor.core import Phase, RuleSet, Scenario, Task, World, each
 from opfor.scenarios.attacksurface.capabilities import (
     DiscoverDomains,
     DiscoverGithub,
+    Endpoints,
     GithubRepos,
     HttpDomain,
     ResolveDomain,
@@ -28,6 +31,11 @@ from opfor.scenarios.attacksurface.capabilities import (
 from opfor.scenarios.attacksurface.sources import domains as domain_src
 from opfor.scenarios.attacksurface.sources import github as github_src
 from opfor.scenarios.attacksurface.triage import SurfaceTriage
+
+_PATHS = yaml.safe_load(
+    (Path(__file__).resolve().parent / "knowledge" / "paths.yaml").read_text(encoding="utf-8")
+) or {}
+_PROBE_PATHS = [str(p) for p in (_PATHS.get("paths") or [])]
 
 
 def _enabled(org, asset_class: str) -> bool:
@@ -53,13 +61,32 @@ def _http_rule(world: World) -> list[Task]:
     return tasks
 
 
+def _endpoints_rule(world: World) -> list[Task]:
+    """Enumerate interfaces on every live domain that has none yet.
+
+    Gated on an alive HTTP result, so only a reachable host is probed, and the task
+    carries the domain name for scope and the knowledge path list for the capability.
+    """
+    tasks: list[Task] = []
+    for node in world.nodes("domain"):
+        http = world.latest("http", node.id)
+        if http is None or not http.payload.alive:
+            continue
+        if world.has_fact(node.id, "endpoints"):
+            continue
+        tasks.append(Task(capability="domain_endpoints", node=node.id,
+                          params={"paths": _PROBE_PATHS}, scope_host=node.payload.name))
+    return tasks
+
+
 def build(
     *,
     search_fn=github_src.search_orgs,
     repos_fn=github_src.org_repos,
-    enumerate_fn=domain_src.crt_subdomains,
+    enumerate_fn=domain_src.subdomains,
     resolve_fn=domain_src.resolve_host,
     probe_fn=domain_src.http_probe,
+    fetch_fn=domain_src.fetch_url,
 ) -> Scenario:
     root = Path(__file__).resolve().parent
     return Scenario(
@@ -71,6 +98,7 @@ def build(
             Subdomains(enumerate_fn),
             ResolveDomain(resolve_fn),
             HttpDomain(probe_fn),
+            Endpoints(fetch_fn),
             GithubRepos(repos_fn),
         ),
         planner=RuleSet({
@@ -85,6 +113,7 @@ def build(
             Phase.ENRICH: [
                 each("domain", run="domain_resolve", unless_fact="resolved"),
                 _http_rule,
+                _endpoints_rule,
                 each("github_org", run="github_repos", unless_fact="repos"),
             ],
         }),

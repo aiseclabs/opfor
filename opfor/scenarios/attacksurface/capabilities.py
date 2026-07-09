@@ -10,15 +10,20 @@ the domain name for scope. A source error becomes a loud `Failed`, never an empt
 
 from __future__ import annotations
 
+import re
+
 from opfor.core import Capability, Done, Fact, Failed, Node, Outcome, Phase, Task, World
 from opfor.scenarios.attacksurface import config
 from opfor.scenarios.attacksurface.types import (
     DomainData,
+    Endpoint,
     GithubOrg,
     GithubRepo,
     Http,
     Resolved,
 )
+
+_LINK = re.compile(r'(?:href|src)\s*=\s*["\']([^"\'#?]+)', re.IGNORECASE)
 
 
 class DiscoverDomains(Capability):
@@ -120,8 +125,10 @@ class HttpDomain(Capability):
 
     def run(self, task: Task, world: World) -> Outcome:
         name = world.node(task.node).payload.name
+        resolved = world.latest("resolved", task.node)
+        addresses = resolved.payload.addresses if resolved else ()
         try:
-            result = self._probe(name)
+            result = self._probe(name, addresses)
         except Exception as exc:
             return Failed(reason=f"http {type(exc).__name__}: {exc}")
         payload = Http(
@@ -133,6 +140,108 @@ class HttpDomain(Capability):
             body=str(result.get("body", "")),
         )
         return Done(facts=(Fact(kind="http", about=task.node, payload=payload),))
+
+
+class Endpoints(Capability):
+    """ENRICH: probe a live host's interface paths, recording which need no auth.
+
+    The path list is knowledge, handed in by the planner, so this capability reads no
+    file. It probes each path plus any same-origin link found on the home page, and
+    records every path that answered, tagging 401 or 403 as auth required. Probing is a
+    scoped recon act, GET only, no payload, so it carries the domain name for scope.
+    """
+
+    name = "domain_endpoints"
+    phase = Phase.ENRICH
+    osint = False
+
+    def __init__(self, fetch_fn) -> None:
+        self._fetch = fetch_fn
+
+    # Unlikely paths, probed first to learn how a host answers a path that does not
+    # exist. A single-page app returns its 200 HTML for these too, which is the catch-all
+    # an endpoint must differ from to count as real.
+    _BASELINE_PATHS = ("/opfor-baseline-6f3a9c2e", "/does-not-exist-8b1d.html")
+
+    def run(self, task: Task, world: World) -> Outcome:
+        node = world.node(task.node)
+        name = node.payload.name
+        resolved = world.latest("resolved", task.node)
+        addresses = resolved.payload.addresses if resolved else ()
+        http = world.latest("http", task.node)
+        paths = list(task.params.get("paths") or [])
+        home_body = http.payload.body if http else ""
+        candidates = list(dict.fromkeys(paths + _home_paths(home_body)))
+        baseline = self._baseline(name, addresses)
+        endpoints: list[Node] = []
+        for path in candidates:
+            try:
+                result = self._fetch(name, addresses, path)
+            except Exception:
+                continue
+            status = result.get("status")
+            if status is None or status == 404:
+                continue
+            if not _distinct(result, baseline):
+                continue
+            payload = Endpoint(
+                url=result.get("url", f"https://{name}{path}"),
+                path=path,
+                status=status,
+                auth_required=status in (401, 403),
+                content_type=str(result.get("content_type", "")),
+                server=str(result.get("server", "")),
+                title=str(result.get("title", "")),
+                body=str(result.get("body", "")),
+            )
+            endpoints.append(Node(id=f"endpoint:{name}{path}", type="endpoint", payload=payload))
+        return Done(facts=(Fact(kind="endpoints", about=task.node, yields=tuple(endpoints)),))
+
+    def _baseline(self, name, addresses) -> dict:
+        """The host's answer to a path that does not exist, its catch-all signature."""
+        for path in self._BASELINE_PATHS:
+            try:
+                result = self._fetch(name, addresses, path)
+            except Exception:
+                continue
+            if result.get("status") is not None:
+                return result
+        return {"status": None, "content_type": "", "body": ""}
+
+
+def _distinct(result: dict, baseline: dict) -> bool:
+    """Whether a response is a real endpoint rather than the host's catch-all.
+
+    When the catch-all is a positive page, a single-page app that answers 200 for every
+    path, an endpoint counts only if it differs in status, in content type, or clearly in
+    body size. When the catch-all was a 404 or a redirect, any answer that got past the
+    404 filter is already a real endpoint.
+    """
+    base_status = baseline.get("status")
+    if base_status is None:
+        return True
+    if result.get("status") != base_status:
+        return True
+    if not (200 <= int(base_status) < 300):
+        return False
+    if _ct_family(result.get("content_type", "")) != _ct_family(baseline.get("content_type", "")):
+        return True
+    return abs(len(result.get("body", "")) - len(baseline.get("body", ""))) > 128
+
+
+def _ct_family(content_type: str) -> str:
+    return (content_type or "").split(";")[0].strip().lower()
+
+
+def _home_paths(body: str, *, limit: int = 20) -> list[str]:
+    """Same-origin absolute paths linked from a home page body, deduped and capped."""
+    out: list[str] = []
+    for href in _LINK.findall(body or ""):
+        if href.startswith("/") and not href.startswith("//") and href not in out:
+            out.append(href)
+        if len(out) >= limit:
+            break
+    return out
 
 
 class GithubRepos(Capability):

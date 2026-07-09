@@ -14,7 +14,8 @@ from opfor.scenarios.attacksurface.types import Org
 ROOT = "example.com"
 
 # Certificate transparency result for the hint root.
-CRT = {ROOT: {"www.example.com", "admin.example.com", "old.example.com", "cdn.example.com"}}
+CRT = {ROOT: {"www.example.com", "admin.example.com", "old.example.com", "cdn.example.com",
+              "spa.example.com", "cf.example.com"}}
 
 # DNS per name, a name absent here is unresolvable. old.example.com is dangling.
 DNS = {
@@ -22,9 +23,12 @@ DNS = {
     "www.example.com": {"resolvable": True, "addresses": ("1.1.1.2",)},
     "admin.example.com": {"resolvable": True, "addresses": ("1.1.1.3",)},
     "cdn.example.com": {"resolvable": True, "addresses": ("1.1.1.4",)},
+    "spa.example.com": {"resolvable": True, "addresses": ("1.1.1.5",)},
+    "cf.example.com": {"resolvable": True, "addresses": ("1.1.1.6",)},
 }
 
-# HTTP per name. cdn points at an unclaimed bucket, admin is a live admin surface.
+# HTTP per name. cdn points at an unclaimed bucket, admin is a live admin surface, spa is
+# a single-page app that answers 200 for every path.
 HTTP = {
     "example.com": {"alive": True, "status": 200, "url": "https://example.com/", "server": "nginx",
                     "title": "home", "body": "welcome"},
@@ -34,6 +38,10 @@ HTTP = {
                           "title": "admin login", "body": "sign in"},
     "cdn.example.com": {"alive": True, "status": 404, "url": "https://cdn.example.com/", "server": "AmazonS3",
                         "title": "", "body": "<html>nosuchbucket</html>"},
+    "spa.example.com": {"alive": True, "status": 200, "url": "https://spa.example.com/", "server": "cf",
+                        "title": "app", "body": "<html>spa app single page</html>"},
+    "cf.example.com": {"alive": True, "status": 200, "url": "https://cf.example.com/", "server": "cf",
+                       "title": "app", "body": "<html>cf</html>"},
 }
 
 # GitHub search and repos, keyed off the org name.
@@ -54,6 +62,35 @@ def _repos(login, token=""):
     return list(GH_REPOS.get(login, []))
 
 
+# Interface probes per absolute url. Anything absent answers 404 and is skipped.
+ENDPOINTS = {
+    "https://admin.example.com/.git/config": {"status": 200, "body": "[core]\n\trepositoryformatversion = 0"},
+    "https://admin.example.com/.env": {"status": 200, "body": "db_password=secret\napi_key=abc"},
+    "https://admin.example.com/metrics": {"status": 401, "body": "unauthorized"},
+    "https://admin.example.com/admin": {"status": 200, "body": "admin panel please sign in"},
+    "https://example.com/robots.txt": {"status": 200, "body": "user-agent: *"},
+}
+
+
+def _fetch(name, addresses, path):
+    url = f"https://{name}{path}"
+    if name == "spa.example.com":
+        # a single-page app: 200 HTML for every path, but a real JSON spec at one path
+        if path == "/openapi.json":
+            return {"status": 200, "url": url, "content_type": "application/json",
+                    "server": "cf", "title": "", "body": '{"openapi":"3.0.0","paths":{}}'}
+        return {"status": 200, "url": url, "content_type": "text/html",
+                "server": "cf", "title": "", "body": "<html>spa app single page</html>"}
+    if name == "cf.example.com":
+        # a host that serves an empty 200 for /.env, the shape that used to false-positive
+        if path == "/.env":
+            return {"status": 200, "url": url, "content_type": "", "server": "cf", "title": "", "body": ""}
+        return {"status": 404, "url": url, "content_type": "", "server": "", "title": "", "body": ""}
+    d = ENDPOINTS.get(url, {"status": 404, "body": ""})
+    return {"status": d["status"], "url": url, "content_type": d.get("ct", ""),
+            "server": d.get("server", ""), "title": "", "body": d["body"].lower()}
+
+
 def _enumerate(domain):
     return set(CRT.get(domain, set()))
 
@@ -62,13 +99,13 @@ def _resolve(name):
     return DNS.get(name, {"resolvable": False, "addresses": ()})
 
 
-def _probe(name):
+def _probe(name, addresses=()):
     return HTTP.get(name, {"alive": False, "status": None, "url": "", "server": "", "title": "", "body": ""})
 
 
 def _scenario():
     return build(search_fn=_search, repos_fn=_repos, enumerate_fn=_enumerate,
-                 resolve_fn=_resolve, probe_fn=_probe)
+                 resolve_fn=_resolve, probe_fn=_probe, fetch_fn=_fetch)
 
 
 def _seed(*, domains=(ROOT,), classes=()):
@@ -120,6 +157,70 @@ def test_domain_interesting_is_medium():
     assert all(f.severity == "MEDIUM" for f in exposed)
 
 
+def test_endpoints_enumerated_and_auth_classified():
+    world = _seed()
+    _run(world)
+    eps = {n.id: n.payload for n in world.nodes("endpoint")}
+    assert "endpoint:admin.example.com/.git/config" in eps
+    assert eps["endpoint:admin.example.com/metrics"].auth_required is True
+    assert eps["endpoint:admin.example.com/.env"].auth_required is False
+
+
+def test_exposed_git_is_high_with_poc():
+    report = _run(_seed())
+    git = [f for f in report.findings if f.data.get("detector") == "exposed-git"]
+    assert git and git[0].severity == "HIGH"
+    assert "admin.example.com/.git/config" in git[0].data["poc"]
+
+
+def test_exposed_env_is_high():
+    report = _run(_seed())
+    assert any(f.data.get("detector") == "exposed-env" and f.severity == "HIGH"
+               for f in report.findings)
+
+
+def test_authenticated_endpoint_is_not_an_unauth_finding():
+    report = _run(_seed())
+    assert not any(f.where.endswith("/metrics") for f in report.findings)
+
+
+def test_unmatched_unauth_interface_is_info():
+    report = _run(_seed())
+    info = [f for f in report.findings
+            if f.data.get("kind") == "unauth" and f.where.endswith("/admin")]
+    assert info and info[0].severity == "INFO"
+
+
+def test_expected_public_path_is_not_a_finding():
+    report = _run(_seed())
+    assert not any(f.where.endswith("/robots.txt") for f in report.findings)
+
+
+def test_soft_200_host_is_not_flooded_with_unauth_findings():
+    report = _run(_seed())
+    spa = [f for f in report.findings
+           if f.where.startswith("https://spa.example.com") and f.data.get("kind") == "unauth"]
+    assert spa == []
+
+
+def test_real_json_spec_on_soft_200_is_still_caught():
+    report = _run(_seed())
+    hits = [f for f in report.findings if f.where == "https://spa.example.com/openapi.json"]
+    assert hits and hits[0].data.get("detector") == "openapi-spec"
+
+
+def test_html_posing_as_swagger_is_not_flagged():
+    report = _run(_seed())
+    assert not any(f.where == "https://spa.example.com/swagger.json" for f in report.findings)
+
+
+def test_empty_env_is_not_a_false_exposure():
+    report = _run(_seed())
+    env = [f for f in report.findings
+           if f.where == "https://cf.example.com/.env" and f.data.get("kind") == "exposure"]
+    assert env == []
+
+
 def test_github_org_is_info_inventory():
     report = _run(_seed())
     gh = [f for f in report.findings if f.data["kind"] == "github_org"]
@@ -144,6 +245,21 @@ def test_http_probe_denied_when_domain_out_of_scope():
     assert report.closed
     assert not world.has_fact("domain:example.com", "http")
     assert any("denied" in n and "domain_http" in n for n in report.notes)
+
+
+def test_total_resolution_failure_reports_incomplete_not_dangling():
+    # when not one name resolves, the resolver is the problem, so the run must say
+    # incomplete rather than call every name dangling
+    def none_resolve(name):
+        return {"resolvable": False, "addresses": ()}
+
+    scenario = build(search_fn=_search, repos_fn=_repos, enumerate_fn=_enumerate,
+                     resolve_fn=none_resolve, probe_fn=_probe, fetch_fn=_fetch)
+    world = _seed(classes=("domain",))
+    report = run(scenario, world, scope=Scope(max_tier="recon", hosts=(ROOT,)), budget=Budget(500))
+    kinds = {f.data.get("kind") for f in report.findings}
+    assert "incomplete" in kinds
+    assert "dangling" not in kinds
 
 
 def test_github_search_failure_still_closes():

@@ -54,6 +54,23 @@ class Http:
 
 
 @dataclass(frozen=True, kw_only=True)
+class Endpoint:
+    """One interface reached on a live host. `auth_required` is True when the server
+    answered 401 or 403, so an endpoint that is reachable without it is an
+    unauthenticated interface, the surface this scenario is about. `body` is a
+    lowercased head kept so a detector can match an exposure signature against it."""
+
+    url: str
+    path: str
+    status: int | None = None
+    auth_required: bool = False
+    content_type: str = ""
+    server: str = ""
+    title: str = ""
+    body: str = ""
+
+
+@dataclass(frozen=True, kw_only=True)
 class GithubOrg:
     """A GitHub organization that matched the org name. `login` is its handle."""
 

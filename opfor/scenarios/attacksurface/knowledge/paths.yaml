@@ -1,0 +1,38 @@
+# Interface paths to probe on a live host, to enumerate the reachable surface. Each is
+# a plain GET, no payload, so probing is recon, not an attack. The list is high signal
+# on purpose, config and version-control leaks, API specs, admin and monitoring
+# interfaces, so a wide run stays small and respectful. The planner reads this and hands
+# it to the endpoint capability, no capability reads the file. Adding a path is a data
+# change here.
+
+paths:
+  - "/robots.txt"
+  - "/sitemap.xml"
+  - "/.well-known/security.txt"
+  - "/.git/config"
+  - "/.git/HEAD"
+  - "/.env"
+  - "/.svn/entries"
+  - "/.DS_Store"
+  - "/config.json"
+  - "/config.php"
+  - "/phpinfo.php"
+  - "/server-status"
+  - "/server-info"
+  - "/actuator"
+  - "/actuator/health"
+  - "/actuator/env"
+  - "/metrics"
+  - "/swagger.json"
+  - "/swagger-ui.html"
+  - "/openapi.json"
+  - "/api-docs"
+  - "/v2/api-docs"
+  - "/graphql"
+  - "/api"
+  - "/admin"
+  - "/login"
+  - "/backup.zip"
+  - "/backup.tar.gz"
+  - "/.aws/credentials"
+  - "/wp-login.php"

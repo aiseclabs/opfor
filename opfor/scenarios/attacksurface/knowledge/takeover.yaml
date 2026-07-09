@@ -1,9 +1,11 @@
-# Subdomain takeover signatures: a service plus the error-page text it serves when a
-# name still points at it but the underlying resource is unclaimed. Triage matches a
-# signature, lowercased, against the lowercased body head of a live host. This is public
-# knowledge, mirrored from the can-i-take-over-xyz catalogue. Adding a service is a data
-# change here, never a code change. A match is a candidate, not a proof, the operator
-# confirms before acting.
+# Subdomain takeover clues, fed to the triage model, never a verdict on their own. A
+# service plus the unclaimed-resource text it serves when a name still points at it but the
+# underlying resource is released. Triage matches a signature, lowercased, against the
+# lowercased body head of a live host and, on a match, adds a clue to that host in the
+# surface the model judges, for example "clue: matched GitHub Pages unclaimed-resource
+# page". Whether it is a real takeover stays the model's call, judged against
+# knowledge/classes/subdomain-takeover.md. This is public knowledge, mirrored from the
+# can-i-take-over-xyz catalogue. Adding a service is a data change here.
 
 services:
   - service: GitHub Pages

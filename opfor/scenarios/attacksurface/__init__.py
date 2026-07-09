@@ -19,7 +19,8 @@ from urllib.parse import urlparse
 
 import yaml
 
-from opfor.core import Phase, RuleSet, Scenario, Task, World, each
+from opfor.core import Phase, Provider, RuleSet, Scenario, Task, World, each, make_provider
+from opfor.core.providers.factory import default_model, role_model, triage_mode
 from opfor.scenarios.attacksurface import config
 from opfor.scenarios.attacksurface.capabilities import (
     DiscoverDomains,
@@ -174,12 +175,35 @@ def build(
     fetch_doc_fn=domain_src.fetch_document,
     introspect_fn=domain_src.graphql_introspect,
     wayback_fn=domain_src.wayback_paths,
+    provider: Provider | None = None,
+    model: str | None = None,
+    challenger: Provider | None = None,
+    challenger_model: str | None = None,
+    judge: Provider | None = None,
+    judge_model: str | None = None,
 ) -> Scenario:
     # The registrant pivot is the reliable core, but its provider has no keyless mode, so
     # the real seam turns on only when a key is set. A test passes its own fake to wire it
     # without a key.
     if reverse_whois_fn is _DEFAULT:
         reverse_whois_fn = domain_src.reverse_whois if config.reverse_whois_key() else None
+
+    # Triage is model-backed. Build the provider the environment selects, keyless on the
+    # operator's Claude Code subscription by default, and let a test inject its own. The
+    # model name defaults to the env-backed default.
+    if provider is None:
+        provider = make_provider()
+    model = model or default_model()
+
+    # In adversarial mode a challenger refutes each finding and a judge breaks the tie, so a
+    # false positive needs the model to survive a skeptic. The roles reuse the base provider
+    # by default, with a per-role model override, and a test wires its own. Standard mode
+    # leaves them off, the recall-safe single-model default.
+    if triage_mode() == "adversarial":
+        if challenger is None:
+            challenger, challenger_model = provider, role_model("challenger", model)
+        if judge is None:
+            judge, judge_model = provider, role_model("judge", model)
 
     root = Path(__file__).resolve().parent
     capabilities = [
@@ -226,7 +250,9 @@ def build(
                 each("github_org", run="github_repos", unless_fact="repos"),
             ],
         }),
-        triage=SurfaceTriage(root),
+        triage=SurfaceTriage(root, provider=provider, model=model,
+                             challenger=challenger, challenger_model=challenger_model,
+                             judge=judge, judge_model=judge_model),
         terminal=Phase.TRIAGE,
     )
 

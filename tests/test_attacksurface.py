@@ -1,14 +1,23 @@
 """attack-surface: an org name expands into ranked assets, driven by fake seams.
 
 Fixtures use the reserved example domain from RFC 2606, so no real target is named in
-the code and nothing here touches a live endpoint.
+the code and nothing here touches a live endpoint. Triage is model-driven, so a
+MockProvider stands in for the model. The deterministic contract the tests hold triage
+to is what it puts in front of the model, the surface it renders and the knowledge it
+selects, and how it maps the reply, never a hardcoded verdict, since the verdict is the
+model's.
 """
 
 from __future__ import annotations
 
-from opfor.core import Budget, Node, Phase, Scope, World, run
+import json
+
+import pytest
+
+from opfor.core import Budget, MockProvider, Node, Phase, Scope, World, run
 from opfor.core.result import CLOSED
 from opfor.scenarios.attacksurface import build
+from opfor.scenarios.attacksurface.triage import TriageError, _finding_from_dict
 from opfor.scenarios.attacksurface.types import Org
 
 ROOT = "example.com"
@@ -165,12 +174,16 @@ def _probe(name, addresses=()):
 
 
 def _make(**over):
-    """Build the scenario with every seam faked, so no test touches the network. A test
-    overrides one seam to drive a failure or a variant."""
+    """Build the scenario with every seam faked, so no test touches the network or the
+    model. A MockProvider stands in for the triage model, returning an empty result by
+    default. A test overrides one seam to drive a failure or a variant, or passes its own
+    provider to drive a canned model reply."""
     seams = dict(search_fn=_search, repos_fn=_repos, enumerate_fn=_enumerate, pivot_fn=_pivot,
                  resolve_fn=_resolve, probe_fn=_probe, fetch_fn=_fetch, fetch_doc_fn=_fetch_doc,
                  introspect_fn=_introspect, wayback_fn=_wayback)
     seams.update(over)
+    seams.setdefault("provider", MockProvider(default='{"findings": []}'))
+    seams.setdefault("model", "test-model")
     return build(**seams)
 
 
@@ -190,6 +203,33 @@ def _run(world, scope=None, budget=500):
                scope=scope or Scope(max_tier="recon", hosts=(ROOT,)), budget=Budget(budget))
 
 
+def _run_capturing(world=None, *, scope=None, budget=2000, **over):
+    """Run the full pipeline and return the report and the scenario, so a test can read the
+    surface prompt the triage model was given off `scenario.triage._provider`."""
+    scenario = _make(**over)
+    world = world if world is not None else _seed()
+    report = run(scenario, world,
+                 scope=scope or Scope(max_tier="recon", hosts=(ROOT,)), budget=Budget(budget))
+    return report, scenario, world
+
+
+def _prompt(scenario) -> str:
+    """The surface report the triage model received in the user message of its first call."""
+    calls = scenario.triage._provider.calls
+    assert calls, "the triage model was not called"
+    return calls[0]["messages"][0].content
+
+
+def _knowledge(scenario) -> str:
+    """The system prompt of the first call, where the selected knowledge classes ride."""
+    calls = scenario.triage._provider.calls
+    assert calls, "the triage model was not called"
+    return calls[0]["system"]
+
+
+# --- the run closes and expands assets -------------------------------------------------
+
+
 def test_run_closes():
     report = _run(_seed())
     assert report.closed
@@ -205,26 +245,104 @@ def test_expands_both_asset_classes_from_the_org():
     assert len(world.nodes("github_repo")) == 2
 
 
-def test_domain_takeover_is_high():
-    report = _run(_seed())
-    takeover = [f for f in report.findings if f.data["kind"] == "takeover"]
-    assert takeover and takeover[0].where == "cdn.example.com"
-    assert takeover[0].severity == "HIGH"
-    assert "Amazon S3" in takeover[0].title
+# --- what triage surfaces to the model -------------------------------------------------
 
 
-def test_domain_dangling_is_low():
-    report = _run(_seed())
-    dangling = [f for f in report.findings if f.data["kind"] == "dangling"]
-    assert [f.where for f in dangling] == ["old.example.com"]
-    assert dangling[0].severity == "LOW"
+def test_takeover_clue_and_class_are_surfaced():
+    _, sc, _ = _run_capturing()
+    p = _prompt(sc)
+    assert "cdn.example.com" in p
+    assert "matched Amazon S3 unclaimed-resource page" in p
+    # the takeover knowledge class is selected by the unclaimed-page signal
+    assert "Subdomain Takeover" in _knowledge(sc)
 
 
-def test_domain_interesting_is_medium():
-    report = _run(_seed())
-    exposed = [f for f in report.findings if f.data["kind"] == "exposed"]
-    assert "admin.example.com" in {f.where for f in exposed}
-    assert all(f.severity == "MEDIUM" for f in exposed)
+def test_dangling_name_is_surfaced():
+    _, sc, _ = _run_capturing()
+    p = _prompt(sc)
+    assert "old.example.com" in p
+    assert "does not resolve, seen only passively" in p
+
+
+def test_interesting_surface_class_is_always_present_with_the_admin_host():
+    _, sc, _ = _run_capturing()
+    assert "https://admin.example.com/admin" in _prompt(sc)
+    assert "Interesting Non-Production" in _knowledge(sc)
+
+
+def test_exposed_git_clue_and_class_are_surfaced():
+    _, sc, _ = _run_capturing()
+    assert "matched exposed-git" in _prompt(sc)
+    assert "Sensitive File Exposure" in _knowledge(sc)
+
+
+def test_exposed_env_clue_is_surfaced():
+    _, sc, _ = _run_capturing()
+    assert "matched exposed-env" in _prompt(sc)
+
+
+def test_authenticated_endpoint_is_excluded_from_the_surface():
+    # /metrics answered 401, so the capability marks it auth_required and triage keeps it
+    # out of the surface the model judges, it is already protected
+    _, sc, world = _run_capturing()
+    eps = {n.id: n.payload for n in world.nodes("endpoint")}
+    assert eps["endpoint:admin.example.com/metrics"].auth_required is True
+    assert "https://admin.example.com/metrics" not in _prompt(sc)
+
+
+def test_reachable_interface_is_surfaced_for_the_model_to_judge():
+    _, sc, _ = _run_capturing()
+    assert "https://admin.example.com/admin" in _prompt(sc)
+
+
+def test_public_by_design_paths_are_explained_to_the_model():
+    # robots.txt is reachable, so it is surfaced, and the knowledge tells the model it is
+    # public by design, the judgment is the model's, not a suppression in code
+    _, sc, _ = _run_capturing()
+    assert "https://example.com/robots.txt" in _prompt(sc)
+    assert "public by design" in _knowledge(sc)
+
+
+def test_login_redirect_location_is_surfaced_for_judgment():
+    # /portal 302s to a login flow, so the redirect target is surfaced for the model to
+    # judge it protected, rather than a keyword rule deciding in code
+    _, sc, world = _run_capturing()
+    assert world.node("endpoint:admin.example.com/portal") is not None
+    assert "redirect to https://admin.example.com/login" in _prompt(sc)
+
+
+def test_refusal_body_is_surfaced_for_judgment():
+    _, sc, _ = _run_capturing()
+    p = _prompt(sc)
+    assert "https://admin.example.com/private" in p
+    assert "unauthorized" in p
+
+
+def test_declared_api_surface_is_surfaced():
+    _, sc, world = _run_capturing()
+    specs = [f.payload for f in world.facts("api_spec")]
+    assert any(s.count == 2 and "GET /users" in s.paths for s in specs)
+    assert "2 operations" in _prompt(sc)
+
+
+def test_graphql_introspection_is_surfaced():
+    _, sc, world = _run_capturing()
+    schemas = [f.payload for f in world.facts("graphql")]
+    assert any(s.enabled and s.count == 3 and "query:me" in s.operations for s in schemas)
+    assert "graphql introspection https://admin.example.com/graphql" in _prompt(sc)
+
+
+def test_graphql_without_operations_is_not_surfaced():
+    # an endpoint can answer the POST yet name no operation, which is not usable
+    # introspection, so it must not reach the model as a declared surface
+    def empty(name, path="/graphql"):
+        return {"__schema": {"queryType": {"fields": []}}}
+
+    _, sc, _ = _run_capturing(introspect_fn=empty)
+    assert "graphql introspection" not in _prompt(sc)
+
+
+# --- deterministic machinery the capability owns ---------------------------------------
 
 
 def test_endpoints_enumerated_and_auth_classified():
@@ -236,71 +354,40 @@ def test_endpoints_enumerated_and_auth_classified():
     assert eps["endpoint:admin.example.com/.env"].auth_required is False
 
 
-def test_exposed_git_is_high_with_poc():
-    report = _run(_seed())
-    git = [f for f in report.findings if f.data.get("detector") == "exposed-git"]
-    assert git and git[0].severity == "HIGH"
-    assert "admin.example.com/.git/config" in git[0].data["poc"]
+def test_static_assets_are_never_probed_into_endpoints():
+    # admin's script names /main.css, a static asset, so it must not become an endpoint
+    world = _seed()
+    _run(world)
+    assert world.node("endpoint:admin.example.com/main.css") is None
 
 
-def test_exposed_env_is_high():
-    report = _run(_seed())
-    assert any(f.data.get("detector") == "exposed-env" and f.severity == "HIGH"
-               for f in report.findings)
+def test_soft_200_host_yields_only_its_real_interface():
+    # spa answers 200 for every path, so the catch-all filter must keep only the real spec
+    world = _seed()
+    _run(world)
+    spa = sorted(n.id for n in world.nodes("endpoint") if "spa.example.com" in n.id)
+    assert spa == ["endpoint:spa.example.com/openapi.json"]
 
 
-def test_authenticated_endpoint_is_not_an_unauth_finding():
-    report = _run(_seed())
-    assert not any(f.where.endswith("/metrics") for f in report.findings)
+def test_html_posing_as_swagger_is_not_an_endpoint():
+    world = _seed()
+    _run(world)
+    assert world.node("endpoint:spa.example.com/swagger.json") is None
 
 
-def test_unmatched_unauth_interface_is_info():
-    report = _run(_seed())
-    info = [f for f in report.findings
-            if f.data.get("kind") == "unauth" and f.where.endswith("/admin")]
-    assert info and info[0].severity == "INFO"
+def test_empty_env_body_yields_no_exposure_clue():
+    # a host that serves an empty 200 for /.env has no KEY=value body, so the deterministic
+    # clue must not fire, the clue asserts on content, not the path
+    from opfor.scenarios.attacksurface.types import Endpoint
+
+    sc = _make()
+    empty = Endpoint(url="https://cf.example.com/.env", path="/.env", status=200, body="")
+    real = Endpoint(url="https://x/.env", path="/.env", status=200, body="db_password=secret\napi_key=abc")
+    assert sc.triage._exposure_clues(empty) == []
+    assert any("exposed-env" in c for c in sc.triage._exposure_clues(real))
 
 
-def test_expected_public_path_is_not_a_finding():
-    report = _run(_seed())
-    assert not any(f.where.endswith("/robots.txt") for f in report.findings)
-
-
-def test_static_assets_are_not_reported_as_interfaces():
-    import opfor.scenarios.attacksurface as pkg
-    from opfor.scenarios.attacksurface.triage import SurfaceTriage
-
-    triage = SurfaceTriage(pkg.__path__[0])
-    for path in ("/umi.3cbab89e.js", "/main.css", "/favicon.ico",
-                 "/_next/static/chunks/webpack.js", "/assets/logo.svg"):
-        assert triage._is_static_asset(path), path
-    for path in ("/graphql", "/api", "/admin", "/login", "/.git/config"):
-        assert not triage._is_static_asset(path), path
-
-
-def test_soft_200_host_is_not_flooded_with_unauth_findings():
-    report = _run(_seed())
-    spa = [f for f in report.findings
-           if f.where.startswith("https://spa.example.com") and f.data.get("kind") == "unauth"]
-    assert spa == []
-
-
-def test_real_json_spec_on_soft_200_is_still_caught():
-    report = _run(_seed())
-    hits = [f for f in report.findings if f.where == "https://spa.example.com/openapi.json"]
-    assert hits and hits[0].data.get("detector") == "openapi-spec"
-
-
-def test_html_posing_as_swagger_is_not_flagged():
-    report = _run(_seed())
-    assert not any(f.where == "https://spa.example.com/swagger.json" for f in report.findings)
-
-
-def test_empty_env_is_not_a_false_exposure():
-    report = _run(_seed())
-    env = [f for f in report.findings
-           if f.where == "https://cf.example.com/.env" and f.data.get("kind") == "exposure"]
-    assert env == []
+# --- structural findings triage mints in code ------------------------------------------
 
 
 def test_github_org_is_info_inventory():
@@ -343,6 +430,15 @@ def test_total_resolution_failure_reports_incomplete_not_dangling():
     assert "dangling" not in kinds
 
 
+def test_resolution_failure_suppresses_the_model_call():
+    # with the resolver down triage does not ask the model to judge an unreachable surface
+    def none_resolve(name):
+        return {"resolvable": False, "addresses": ()}
+
+    _, sc, _ = _run_capturing(_seed(classes=("domain",)), resolve_fn=none_resolve)
+    assert sc.triage._provider.calls == []
+
+
 def test_github_search_failure_still_closes():
     def boom(name, token=""):
         raise TimeoutError("github slow")
@@ -351,8 +447,6 @@ def test_github_search_failure_still_closes():
     world = _seed()
     report = run(scenario, world, scope=Scope(max_tier="recon", hosts=(ROOT,)), budget=Budget(500))
     assert report.closed
-    # the domain class still runs and produces its findings
-    assert any(f.data["kind"] == "takeover" for f in report.findings)
     # the failure is loud in the report, not only in the ledger
     assert any("failed" in n and "discover_github" in n for n in report.notes)
 
@@ -364,6 +458,174 @@ def test_no_hint_domains_still_closes_via_github():
     assert report.closed
     assert world.nodes("domain") == ()
     assert world.nodes("github_org")
+
+
+# --- the triage model reply, mapping and fail-loud -------------------------------------
+
+
+def test_model_findings_are_mapped_to_typed_findings():
+    reply = json.dumps({"findings": [{
+        "category": "sensitive-file-exposure", "title": "Exposed .git config", "severity": "HIGH",
+        "where": "https://admin.example.com/.git/config", "evidence": "a git config section is present",
+        "poc": "curl -s https://admin.example.com/.git/config", "confidence": 0.9,
+    }]})
+    report, _, _ = _run_capturing(provider=MockProvider(responses=[reply]))
+    git = [f for f in report.findings if f.data.get("kind") == "sensitive-file-exposure"]
+    assert git and git[0].severity == "HIGH"
+    assert git[0].where.endswith("/.git/config")
+    assert git[0].data["poc"].startswith("curl")
+    assert git[0].data["confidence"] == 0.9
+
+
+def test_unknown_severity_falls_back_to_class_impact_then_medium():
+    ids = frozenset({"sensitive-file-exposure"})
+    impacts = {"sensitive-file-exposure": "HIGH"}
+    # a known class with a bad severity anchors on the class impact
+    f = _finding_from_dict({"where": "u", "category": "Sensitive-File-Exposure", "severity": "WOBBLY"},
+                           known_ids=ids, impacts=impacts)
+    assert f.severity == "HIGH"
+    # an unknown class with a bad severity falls back to MEDIUM
+    g = _finding_from_dict({"where": "u", "severity": "WOBBLY"}, known_ids=ids, impacts=impacts)
+    assert g.severity == "MEDIUM"
+
+
+def test_finding_without_a_location_is_dropped():
+    assert _finding_from_dict({"severity": "HIGH", "title": "no where"}) is None
+
+
+def test_category_is_normalized_onto_the_known_class_ids():
+    ids = frozenset({"sensitive-file-exposure"})
+    f = _finding_from_dict({"where": "u", "category": "Sensitive-File-Exposure", "severity": "medium"},
+                           known_ids=ids)
+    assert f.data["kind"] == "sensitive-file-exposure"
+    assert f.id == "finding:sensitive-file-exposure:u"
+    # an unrecognized class collapses to other, so the id stays stable for dedup
+    other = _finding_from_dict({"where": "u", "category": "made-up-thing"}, known_ids=ids)
+    assert other.data["kind"] == "other"
+    assert other.id == "finding:other:u"
+
+
+def test_nonjson_reply_fails_loud():
+    sc = _make(provider=MockProvider(responses=["sorry, I cannot help with that"]))
+    with pytest.raises(TriageError):
+        sc.triage._judge_chunk("## host x")
+
+
+def test_missing_findings_key_fails_loud():
+    sc = _make(provider=MockProvider(responses=['{"results": []}']))
+    with pytest.raises(TriageError):
+        sc.triage._judge_chunk("## host x")
+
+
+def test_findings_not_a_list_fails_loud():
+    sc = _make(provider=MockProvider(responses=['{"findings": "nope"}']))
+    with pytest.raises(TriageError):
+        sc.triage._judge_chunk("## host x")
+
+
+def test_empty_findings_is_a_clean_result():
+    sc = _make(provider=MockProvider(responses=['{"findings": []}']))
+    assert sc.triage._judge_chunk("## host x") == []
+
+
+def test_large_surface_is_split_across_calls():
+    # a tiny chunk budget forces the several live hosts to be judged in more than one call,
+    # rather than one giant prompt that could overflow and truncate
+    sc = _make()
+    sc.triage._max_chunk = 40
+    run(sc, _seed(), scope=Scope(max_tier="recon", hosts=(ROOT,)), budget=Budget(2000))
+    assert len(sc.triage._provider.calls) > 1
+
+
+def test_knowledge_and_class_ids_ride_the_system_prompt():
+    _, sc, _ = _run_capturing()
+    system = _knowledge(sc)
+    assert "Class id: sensitive-file-exposure" in system
+    assert "Sensitive File Exposure" in system
+
+
+def test_chunk_failure_is_a_degraded_finding_not_a_crash():
+    class Broken:
+        def complete(self, **kwargs):
+            raise RuntimeError("model down")
+
+    sc = _make(provider=Broken())
+    report = run(sc, _seed(), scope=Scope(max_tier="recon", hosts=(ROOT,)), budget=Budget(2000))
+    # the run still closes, and the failure is a loud finding rather than an uncaught crash
+    assert report.closed
+    assert any(f.data.get("kind") == "degraded" for f in report.findings)
+
+
+# --- the adversarial roles, challenger and judge ---------------------------------------
+
+
+def _two_findings():
+    return json.dumps({"findings": [
+        {"category": "sensitive-file-exposure", "title": "Exposed .git", "severity": "HIGH",
+         "where": "https://a/.git/config", "evidence": "core section present"},
+        {"category": "unauthenticated-interface", "title": "Login redirect", "severity": "INFO",
+         "where": "https://a/portal", "evidence": "302 to /login"},
+    ]})
+
+
+def test_challenger_drops_a_refuted_finding():
+    finder = MockProvider(responses=[_two_findings()])
+    # keep the first, refute the second, in finding order
+    challenger = MockProvider(responses=['{"refuted": false}', '{"refuted": true, "reason": "login flow"}'])
+    sc = _make(provider=finder, challenger=challenger, challenger_model="c")
+    out = sc.triage._judge_chunk("## a\nhost a")
+    assert [f.where for f in out] == ["https://a/.git/config"]
+    # every finding was actually challenged
+    assert len(challenger.calls) == 2
+
+
+def test_challenger_keeps_findings_it_does_not_refute():
+    finder = MockProvider(responses=[_two_findings()])
+    challenger = MockProvider(default='{"refuted": false}')
+    sc = _make(provider=finder, challenger=challenger, challenger_model="c")
+    out = sc.triage._judge_chunk("## a\nhost a")
+    assert len(out) == 2
+
+
+def test_judge_overturns_a_refutation():
+    finder = MockProvider(responses=[_two_findings()])
+    challenger = MockProvider(default='{"refuted": true, "reason": "looks fake"}')
+    # the judge keeps the first, drops the second
+    judge = MockProvider(responses=['{"keep": true}', '{"keep": false}'])
+    sc = _make(provider=finder, challenger=challenger, challenger_model="c",
+               judge=judge, judge_model="j")
+    out = sc.triage._judge_chunk("## a\nhost a")
+    assert [f.where for f in out] == ["https://a/.git/config"]
+    assert len(judge.calls) == 2
+
+
+def test_challenger_failure_keeps_the_finding_recall_safe():
+    class BrokenChallenger:
+        def complete(self, **kwargs):
+            raise RuntimeError("challenger down")
+
+    finder = MockProvider(responses=[_two_findings()])
+    sc = _make(provider=finder, challenger=BrokenChallenger(), challenger_model="c")
+    # a challenger that errors must not drop findings, recall stays first
+    assert len(sc.triage._judge_chunk("## a\nhost a")) == 2
+
+
+def test_standard_mode_leaves_the_roles_off():
+    sc = _make()
+    assert sc.triage._challenger is None
+    assert sc.triage._judge is None
+
+
+def test_adversarial_mode_wires_the_roles_from_the_env(monkeypatch):
+    monkeypatch.setenv("OPFOR_TRIAGE_MODE", "adversarial")
+    monkeypatch.setenv("OPFOR_CHALLENGER_MODEL", "challenger-model")
+    sc = _make()
+    assert sc.triage._challenger is not None
+    assert sc.triage._judge is not None
+    assert sc.triage._challenger_model == "challenger-model"
+
+
+# --- root discovery, pivots, and their evidence ----------------------------------------
 
 
 def test_cert_san_pivot_discovers_a_sibling_root_with_evidence():
@@ -475,32 +737,24 @@ def test_roots_from_reverse_whois_reads_both_shapes():
     }
 
 
+# --- interface enrichment sources ------------------------------------------------------
+
+
 def test_openapi_spec_is_expanded_into_its_operations():
-    report = _run(_seed())
-    api = [f for f in report.findings if f.data.get("kind") == "api_surface"]
-    assert api and api[0].where == "https://spa.example.com/openapi.json"
-    assert api[0].data["count"] == 2
-    assert "GET /users" in api[0].data["paths"]
-
-
-def test_graphql_introspection_is_reported():
-    report = _run(_seed())
-    gql = [f for f in report.findings if f.data.get("kind") == "graphql"]
-    assert gql and gql[0].where == "https://admin.example.com/graphql"
-    assert gql[0].data["count"] == 3
-    assert "query:me" in gql[0].data["operations"]
-
-
-def test_graphql_without_operations_is_not_reported():
-    # an endpoint can answer the POST yet name no operation, which is not usable
-    # introspection, so it must not become a finding
-    def empty(name, path="/graphql"):
-        return {"__schema": {"queryType": {"fields": []}}}
-
-    scenario = _make(introspect_fn=empty)
     world = _seed()
-    report = run(scenario, world, scope=Scope(max_tier="recon", hosts=(ROOT,)), budget=Budget(2000))
-    assert not any(f.data.get("kind") == "graphql" for f in report.findings)
+    _run(world)
+    specs = [f.payload for f in world.facts("api_spec")]
+    hit = [s for s in specs if s.base == "https://spa.example.com/openapi.json"]
+    assert hit and hit[0].count == 2
+    assert "GET /users" in hit[0].paths
+
+
+def test_graphql_introspection_fact_reads_query_and_mutation():
+    world = _seed()
+    _run(world)
+    schemas = [f.payload for f in world.facts("graphql")]
+    hit = [s for s in schemas if s.enabled and s.count == 3]
+    assert hit and "query:me" in hit[0].operations
 
 
 def test_spec_fetch_failure_still_closes_and_is_loud():
@@ -548,28 +802,12 @@ def test_virustotal_is_skipped_without_a_key(monkeypatch):
     assert d.virustotal_subdomains("example.com") == set()
 
 
-
-
 def test_javascript_endpoint_extraction_finds_a_hidden_api():
     # /api/secret is only named inside a script bundle, never linked, so finding it proves
     # the endpoint discovery reads the app's own JavaScript
     world = _seed()
     _run(world)
     assert world.node("endpoint:admin.example.com/api/secret") is not None
-
-
-def test_login_redirect_is_not_an_unauthenticated_finding():
-    # /portal is reachable but 302s to a login flow, so it is protected, not open
-    world = _seed()
-    report = _run(world)
-    assert world.node("endpoint:admin.example.com/portal") is not None
-    assert not any(f.where.endswith("/portal") for f in report.findings)
-
-
-def test_refusal_body_is_not_an_unauthenticated_finding():
-    # /private answers 200 but the body plainly refuses, so it is not an open interface
-    report = _run(_seed())
-    assert not any(f.where.endswith("/private") for f in report.findings)
 
 
 def test_cross_host_javascript_path_is_probed_on_the_sibling_host():
@@ -618,5 +856,3 @@ def test_robots_and_sitemap_parsing():
     assert paths == ["/admin", "/public"]
     assert sitemaps == ["https://h/sm.xml"]
     assert sitemap_paths("<urlset><url><loc>https://h.test/a</loc></url></urlset>", "h.test") == ["/a"]
-
-

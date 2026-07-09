@@ -1,0 +1,53 @@
+---
+title: Sensitive file exposure
+impact: HIGH
+triggers:
+  - /.git
+  - /.env
+  - /.aws
+  - /.ds_store
+  - actuator
+  - /metrics
+  - server-status
+  - phpinfo
+  - /.svn
+  - /.hg
+  - backup
+---
+
+# Sensitive File Exposure
+
+A file or endpoint that leaks source, configuration, credentials, or internal state that
+the server was never meant to hand a visitor. These are high value because they often
+carry secrets directly or map the internals an attacker needs next.
+
+## Signals
+
+Judge on what the body actually contains, not the path alone, since any path can 404 into
+an app shell. Strong signals, by class:
+
+- Version-control metadata. A `/.git/config` that contains a `[core]` section, a
+  `/.git/HEAD` whose body begins `ref:`, or a `/.svn` or `/.hg` equivalent. The whole
+  working tree and its history can be reconstructed from an exposed `.git`, so this is
+  high, often source and secrets in commit history.
+- Environment and credential files. A `/.env` whose body has `KEY=value` lines, a
+  `/.aws/credentials` containing `aws_access_key_id`, a config file with tokens or
+  passwords. High, direct secret exposure.
+- Management and introspection endpoints. A Spring Boot Actuator at `/actuator` answering
+  JSON with a `_links` object, since `/actuator/env` and `/actuator/heapdump` then leak
+  config and memory. High. Prometheus `/metrics` with `# HELP` lines, or an Apache
+  `/server-status` page, leak internal service and request detail, medium.
+- Environment dumps and listings. A `phpinfo()` page leaks the full server config, a
+  directory listing whose body reads `Index of /` exposes files not meant to be listed, a
+  `/.DS_Store` leaks directory names. Grade by what is revealed.
+
+## Not A Finding
+
+A path that 404s, redirects to a login, or answers with the generic app HTML rather than
+the file's real content. The signal is the file's own content, present in the body.
+
+## Evidence And PoC
+
+Quote the body fragment that proves it is the real file, `[core]` for a git config,
+`aws_access_key_id` for a credentials file. The PoC is a safe read, `curl -s <url>`, and a
+note of what it would let an operator reconstruct or inspect, never the exploit itself.

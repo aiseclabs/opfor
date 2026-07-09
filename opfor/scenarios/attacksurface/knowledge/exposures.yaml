@@ -1,86 +1,66 @@
-# Deterministic exposure detectors for unauthenticated interfaces. Triage matches each
-# against an endpoint that answered without auth, and mints a finding with a PoC. The PoC
-# is a safe read command that demonstrates the exposure, not an exploit, so verification
-# stays passive. A detector matches on the path suffix, and any of an optional body
-# signature that must be present, a signature that must be absent, a regex the body must
-# match, and a content type the response must carry, all lowercased. The content type and
-# regex gates exist because a single-page app answers 200 with its HTML for almost any
-# path, so a bare path or keyword match would fire on that HTML. Adding a detector is a
-# data change here. A match is a strong candidate, the operator confirms.
+# Deterministic exposure clues, fed to the triage model, never a verdict on their own.
+# Triage matches each against an endpoint that answered without auth and, on a match, adds
+# a one-line clue to that endpoint in the surface the model judges, for example "clue:
+# matched exposed-git, a git config section is present". The clue directs the model's
+# attention and survives a truncated body snippet, but whether the exposure is real and how
+# severe it is stays the model's call, judged against knowledge/classes. This is the cheap
+# first pass, the model covers what the patterns miss.
+#
+# A clue matches on the path suffix and any of an optional body signature that must be
+# present, a regex the body must match, and a content type the response must carry, all
+# lowercased. The content type and regex gates exist because a single-page app answers 200
+# with its HTML for almost any path, so a bare path match would fire on that HTML. Adding a
+# clue is a data change here.
 
-detectors:
+clues:
   - id: exposed-git
-    title: Exposed Git repository
-    severity: HIGH
+    note: a git config section is present, the working tree may be reconstructable
     path: "/.git/config"
     body_contains: "[core]"
-    poc: "curl -s {url} , then reconstruct the working tree from the exposed objects"
   - id: exposed-git-head
-    title: Exposed Git metadata
-    severity: HIGH
+    note: a git HEAD ref is present
     path: "/.git/HEAD"
     body_regex: "^ref:\\s"
-    poc: "curl -s {url}"
   - id: exposed-env
-    title: Exposed environment file
-    severity: HIGH
+    note: environment-style KEY=value lines are present, inspect for secrets
     path: "/.env"
     body_regex: "(?m)^[a-z_][a-z0-9_]{2,}="
-    poc: "curl -s {url} , inspect for credentials and keys"
   - id: exposed-aws-credentials
-    title: Exposed AWS credentials file
-    severity: HIGH
+    note: an AWS credentials file is present
     path: "/.aws/credentials"
     body_contains: "aws_access_key_id"
-    poc: "curl -s {url}"
   - id: spring-actuator
-    title: Exposed Spring Boot Actuator
-    severity: HIGH
+    note: a Spring Boot Actuator index is present, env and heapdump may follow
     path: "/actuator"
     body_contains: "_links"
     content_type: "json"
-    poc: "curl -s {url}/env and {url}/heapdump , which can leak config and secrets"
   - id: prometheus-metrics
-    title: Exposed Prometheus metrics
-    severity: MEDIUM
+    note: a Prometheus metrics page is present, it leaks internal detail
     path: "/metrics"
     body_contains: "# help"
-    poc: "curl -s {url} , which leaks internal service and infrastructure detail"
   - id: apache-server-status
-    title: Exposed Apache server-status
-    severity: MEDIUM
+    note: an Apache server-status page is present, it leaks live requests
     path: "/server-status"
     body_contains: "apache server status"
-    poc: "curl -s {url} , which leaks live request URLs and client addresses"
   - id: swagger-openapi
-    title: Exposed API specification
-    severity: MEDIUM
+    note: a Swagger specification is present, it maps the API surface
     path: "/swagger.json"
     body_contains: "swagger"
     content_type: "json"
-    poc: "curl -s {url} , which maps the unauthenticated API surface"
   - id: openapi-spec
-    title: Exposed API specification
-    severity: MEDIUM
+    note: an OpenAPI specification is present, it maps the API surface
     path: "/openapi.json"
     body_contains: "openapi"
     content_type: "json"
-    poc: "curl -s {url} , which maps the unauthenticated API surface"
   - id: directory-listing
-    title: Directory listing enabled
-    severity: MEDIUM
+    note: a directory listing is enabled, files not meant to be listed are exposed
     path: ""
     body_contains: "index of /"
-    poc: "browse {url} , which exposes files not meant to be listed"
   - id: phpinfo
-    title: Exposed phpinfo
-    severity: MEDIUM
+    note: a phpinfo page is present, it leaks the full server configuration
     path: "/phpinfo.php"
     body_contains: "phpinfo()"
-    poc: "curl -s {url} , which leaks the full PHP and server configuration"
   - id: ds-store
-    title: Exposed .DS_Store
-    severity: LOW
+    note: a .DS_Store file is present, it leaks directory names
     path: "/.DS_Store"
     body_contains: "bud1"
-    poc: "curl -s {url} , which leaks directory names"

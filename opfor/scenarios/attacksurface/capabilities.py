@@ -24,9 +24,11 @@ from opfor.scenarios.attacksurface.sources.domains import (
     same_host_path,
     script_sources,
     sitemap_paths,
+    urls_in_javascript,
 )
 from opfor.scenarios.attacksurface.types import (
     APISpec,
+    Candidates,
     DomainData,
     Endpoint,
     GitHubOrg,
@@ -227,28 +229,94 @@ class HTTPDomain(Capability):
         return Done(facts=(Fact(kind="http", about=task.node, payload=payload),))
 
 
-class Endpoints(Capability):
-    """ENRICH: probe a live host's interface paths, recording which need no auth.
+class HarvestPaths(Capability):
+    """ENRICH: gather candidate interface paths for a live host from what it reveals.
 
-    The candidate paths come from several sources, the knowledge list the planner hands in,
-    the same-origin links and script bundles on the home page, the robots and sitemap the
-    site declares, and the passive url history. A single-page app hides its API in its
-    JavaScript, so reading the bundles is how the real surface is found rather than guessed.
-    Each answered path is recorded, 401 or 403 tagged as auth required. Probing is a scoped
-    recon act, GET only, no payload, so it carries the domain name for scope.
+    It reads the home page links and script bundles, the robots and sitemap, and the
+    passive url history, and it reads the API paths a script hardcodes. A path a script
+    names by full url on another in-scope host is attributed to that host, so a single-page
+    app that calls its API on a sibling host maps that host's surface too. It records only
+    candidates, the probing and the judgment come later, and it touches the target, so it
+    carries the host for scope. Individual sources are best effort, so it always records a
+    harvested fact, an empty one is a real result rather than a stall.
+    """
+
+    name = "domain_harvest"
+    phase = Phase.ENRICH
+    osint = False
+
+    _MAX_SCRIPTS = 12
+
+    def __init__(self, fetch_fn, fetch_doc_fn, wayback_fn) -> None:
+        self._fetch = fetch_fn
+        self._fetch_doc = fetch_doc_fn
+        self._wayback = wayback_fn
+
+    def run(self, task: Task, world: World) -> Outcome:
+        name = world.node(task.node).payload.name
+        resolved = world.latest("resolved", task.node)
+        addresses = resolved.payload.addresses if resolved else ()
+        by_host: dict[str, set[str]] = {}
+
+        def add(host: str, path: str) -> None:
+            if host and path and path.startswith("/"):
+                by_host.setdefault(host, set()).add(path.split("#")[0].split("?")[0])
+
+        home = _safe(lambda: self._fetch_doc(name, "/").get("text", "")) or ""
+        for path in _home_paths(home):
+            add(name, path)
+        for path in _safe(lambda: self._robots(name, addresses)) or []:
+            add(name, path)
+        for path in _safe(lambda: sitemap_paths(self._fetch_doc(name, "/sitemap.xml").get("text", ""), name)) or []:
+            add(name, path)
+        for script in script_sources(home, name)[:self._MAX_SCRIPTS]:
+            body = _safe(lambda s=script: self._fetch_doc(name, s).get("text", "")) or ""
+            for path in paths_in_javascript(body):
+                add(name, path)
+            for url in urls_in_javascript(body):
+                parsed = urlparse(url)
+                add(parsed.hostname or "", parsed.path or "/")
+        for path in sorted(_safe(lambda: self._wayback(name)) or set()):
+            add(name, path)
+
+        facts = [Fact(kind="harvested", about=task.node)]
+        for host, paths in by_host.items():
+            node_id = f"domain:{host}"
+            if world.node(node_id) is None:
+                continue
+            facts.append(Fact(kind="candidates", about=node_id,
+                              payload=Candidates(source="harvest", paths=tuple(sorted(paths)))))
+        return Done(facts=tuple(facts))
+
+    def _robots(self, name, addresses) -> list[str]:
+        robots = self._fetch(name, addresses, "/robots.txt")
+        if robots.get("status") != 200:
+            return []
+        paths, sitemaps = robots_entries(robots.get("body", ""))
+        for sitemap in sitemaps[:3]:
+            path = same_host_path(sitemap, name)
+            if path:
+                paths += _safe(lambda p=path: sitemap_paths(self._fetch_doc(name, p).get("text", ""), name)) or []
+        return paths
+
+
+class Endpoints(Capability):
+    """ENRICH: probe a host's candidate interface paths, recording which need no auth.
+
+    The candidates are the knowledge list the planner hands in plus everything harvested
+    for this host, its own and any a sibling host's script named for it. Each answered path
+    is recorded, 401 or 403 tagged as auth required. Probing is a scoped recon act, GET
+    only, no payload, so it carries the domain name for scope.
     """
 
     name = "domain_endpoints"
     phase = Phase.ENRICH
     osint = False
 
-    _MAX_SCRIPTS = 12
     _MAX_CANDIDATES = 400
 
-    def __init__(self, fetch_fn, fetch_doc_fn, wayback_fn) -> None:
+    def __init__(self, fetch_fn) -> None:
         self._fetch = fetch_fn
-        self._fetch_doc = fetch_doc_fn
-        self._wayback = wayback_fn
 
     # Unlikely paths, probed first to learn how a host answers a path that does not
     # exist. A single-page app returns its 200 HTML for these too, which is the catch-all
@@ -260,10 +328,10 @@ class Endpoints(Capability):
         name = node.payload.name
         resolved = world.latest("resolved", task.node)
         addresses = resolved.payload.addresses if resolved else ()
-        http = world.latest("http", task.node)
-        seed_paths = list(task.params.get("paths") or [])
-        head_body = http.payload.body if http else ""
-        candidates = self._candidates(name, addresses, seed_paths, head_body)
+        seed = list(task.params.get("paths") or [])
+        for fact in world.facts("candidates", task.node):
+            seed += list(fact.payload.paths)
+        candidates = self._clean(seed)
         baseline = self._baseline(name, addresses)
         endpoints: list[Node] = []
         for path in candidates:
@@ -288,40 +356,6 @@ class Endpoints(Capability):
             )
             endpoints.append(Node(id=f"endpoint:{name}{path}", type="endpoint", payload=payload))
         return Done(facts=(Fact(kind="endpoints", about=task.node, yields=tuple(endpoints)),))
-
-    def _candidates(self, name, addresses, seed_paths, head_body) -> list[str]:
-        """The union of candidate paths to probe, from knowledge and from the site itself.
-
-        Each source is best effort, one dead source does not blind the rest, and the result
-        is deduped, cleared of static assets, and capped so a large site stays bounded.
-        """
-        out: list[str] = list(seed_paths)
-        home = _safe(lambda: self._fetch_doc(name, "/").get("text", "")) or head_body
-        out += _home_paths(home)
-        for source in (self._from_robots, self._from_sitemap, self._from_javascript):
-            out += _safe(lambda src=source: src(name, addresses, home)) or []
-        out += sorted(_safe(lambda: self._wayback(name)) or set())
-        return self._clean(out)
-
-    def _from_robots(self, name, addresses, home) -> list[str]:
-        robots = self._fetch(name, addresses, "/robots.txt")
-        if robots.get("status") != 200:
-            return []
-        paths, sitemaps = robots_entries(robots.get("body", ""))
-        for sitemap in sitemaps[:3]:
-            path = same_host_path(sitemap, name)
-            if path:
-                paths += _safe(lambda p=path: sitemap_paths(self._fetch_doc(name, p).get("text", ""), name)) or []
-        return paths
-
-    def _from_sitemap(self, name, addresses, home) -> list[str]:
-        return sitemap_paths(self._fetch_doc(name, "/sitemap.xml").get("text", ""), name)
-
-    def _from_javascript(self, name, addresses, home) -> list[str]:
-        found: list[str] = []
-        for script in script_sources(home, name)[:self._MAX_SCRIPTS]:
-            found += _safe(lambda s=script: paths_in_javascript(self._fetch_doc(name, s).get("text", ""))) or []
-        return found
 
     def _clean(self, paths) -> list[str]:
         out: list[str] = []

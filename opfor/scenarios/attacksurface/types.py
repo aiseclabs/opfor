@@ -60,6 +60,16 @@ class HTTP:
 
 
 @dataclass(frozen=True, kw_only=True)
+class Candidates:
+    """Candidate interface paths discovered for a host before any probe. `source` names how
+    they were found. A path a script on another host named for this host lands here too, so
+    the probe covers the surface a sibling app revealed."""
+
+    source: str
+    paths: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True, kw_only=True)
 class Endpoint:
     """One interface reached on a live host. `auth_required` is True when the server
     answered 401 or 403, so an endpoint that is reachable without it is an

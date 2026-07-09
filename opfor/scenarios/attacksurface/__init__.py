@@ -30,6 +30,7 @@ from opfor.scenarios.attacksurface.capabilities import (
     ExpandSpec,
     GitHubRepos,
     GraphQLIntrospect,
+    HarvestPaths,
     HTTPDomain,
     ResolveDomain,
     Subdomains,
@@ -104,17 +105,42 @@ def _http_rule(world: World) -> list[Task]:
     return tasks
 
 
-def _endpoints_rule(world: World) -> list[Task]:
-    """Enumerate interfaces on every live domain that has none yet.
-
-    Gated on an alive HTTP result, so only a reachable host is probed, and the task
-    carries the domain name for scope and the knowledge path list for the capability.
-    """
-    tasks: list[Task] = []
+def _live_domains(world: World) -> list:
+    """Every domain that answered HTTP, the hosts worth probing."""
+    live = []
     for node in world.nodes("domain"):
         http = world.latest("http", node.id)
-        if http is None or not http.payload.alive:
+        if http is not None and http.payload.alive:
+            live.append(node)
+    return live
+
+
+def _harvest_rule(world: World) -> list[Task]:
+    """Harvest candidate paths on every live host that has not been harvested yet.
+
+    Harvesting comes before probing so a path a host's script names on a sibling host is
+    recorded against that sibling before its interfaces are enumerated.
+    """
+    tasks: list[Task] = []
+    for node in _live_domains(world):
+        if world.has_fact(node.id, "harvested"):
             continue
+        tasks.append(Task(capability="domain_harvest", node=node.id, scope_host=node.payload.name))
+    return tasks
+
+
+def _endpoints_rule(world: World) -> list[Task]:
+    """Enumerate interfaces on every live domain, once every live host is harvested.
+
+    The barrier holds probing until harvesting is done across all hosts, so a cross-host
+    candidate has landed on its target before that target is probed. Each task carries the
+    domain name for scope and the knowledge path list for the capability.
+    """
+    live = _live_domains(world)
+    if any(not world.has_fact(node.id, "harvested") for node in live):
+        return []
+    tasks: list[Task] = []
+    for node in live:
         if world.has_fact(node.id, "endpoints"):
             continue
         tasks.append(Task(capability="domain_endpoints", node=node.id,
@@ -185,7 +211,8 @@ def build(
         Subdomains(enumerate_fn),
         ResolveDomain(resolve_fn),
         HTTPDomain(probe_fn),
-        Endpoints(fetch_fn, fetch_doc_fn, wayback_fn),
+        HarvestPaths(fetch_fn, fetch_doc_fn, wayback_fn),
+        Endpoints(fetch_fn),
         ExpandSpec(fetch_doc_fn),
         GraphQLIntrospect(introspect_fn),
         GitHubRepos(repos_fn),
@@ -214,6 +241,7 @@ def build(
             Phase.ENRICH: [
                 each("domain", run="domain_resolve", unless_fact="resolved"),
                 _http_rule,
+                _harvest_rule,
                 _endpoints_rule,
                 _spec_rule,
                 _graphql_rule,

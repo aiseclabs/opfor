@@ -13,9 +13,10 @@ from opfor.scenarios.attacksurface.types import Org
 
 ROOT = "example.com"
 
-# Certificate transparency result for the hint root.
+# Certificate transparency result for the hint root. api.example.com is a real host whose
+# only interface is named by a script on admin.example.com, so it proves cross-host harvest.
 CRT = {ROOT: {"www.example.com", "admin.example.com", "old.example.com", "cdn.example.com",
-              "spa.example.com", "cf.example.com"}}
+              "spa.example.com", "cf.example.com", "api.example.com"}}
 
 # DNS per name, a name absent here is unresolvable. old.example.com is dangling.
 DNS = {
@@ -25,6 +26,7 @@ DNS = {
     "cdn.example.com": {"resolvable": True, "addresses": ("1.1.1.4",)},
     "spa.example.com": {"resolvable": True, "addresses": ("1.1.1.5",)},
     "cf.example.com": {"resolvable": True, "addresses": ("1.1.1.6",)},
+    "api.example.com": {"resolvable": True, "addresses": ("1.1.1.7",)},
 }
 
 # HTTP per name. cdn points at an unclaimed bucket, admin is a live admin surface, spa is
@@ -42,6 +44,8 @@ HTTP = {
                         "title": "app", "body": "<html>spa app single page</html>"},
     "cf.example.com": {"alive": True, "status": 200, "url": "https://cf.example.com/", "server": "cf",
                        "title": "app", "body": "<html>cf</html>"},
+    "api.example.com": {"alive": True, "status": 200, "url": "https://api.example.com/", "server": "nginx",
+                        "title": "api", "body": "ok"},
 }
 
 # GitHub search and repos, keyed off the org name.
@@ -72,6 +76,7 @@ ENDPOINTS = {
     "https://admin.example.com/admin": {"status": 200, "body": "admin panel please sign in"},
     "https://admin.example.com/graphql": {"status": 200, "ct": "application/json", "body": '{"data":{}}'},
     "https://admin.example.com/api/secret": {"status": 200, "body": "secret payload"},
+    "https://api.example.com/v2/balance": {"status": 200, "body": "balance"},
     "https://www.example.com/legacy": {"status": 200, "body": "legacy console"},
     "https://example.com/secret-panel": {"status": 200, "body": "hidden panel"},
     "https://example.com/robots.txt": {"status": 200, "body": "user-agent: *\ndisallow: /secret-panel"},
@@ -126,7 +131,8 @@ def _fetch_doc(name, path):
                 "text": '<html><body><script src="/app.js"></script></body></html>'}
     if name == "admin.example.com" and path == "/app.js":
         return {"status": 200, "content_type": "application/javascript",
-                "text": 'const API="/api";fetch("/api/secret");const css="/main.css";'}
+                "text": ('const API="/api";fetch("/api/secret");const css="/main.css";'
+                         'fetch("https://api.example.com/v2/balance");')}
     return {"status": None, "content_type": "", "text": ""}
 
 
@@ -547,6 +553,14 @@ def test_javascript_endpoint_extraction_finds_a_hidden_api():
     assert world.node("endpoint:admin.example.com/api/secret") is not None
 
 
+def test_cross_host_javascript_path_is_probed_on_the_sibling_host():
+    # /v2/balance is named only by a full url inside admin.example.com's script, and it
+    # points at api.example.com, so finding it there proves cross-host harvest
+    world = _seed()
+    _run(world)
+    assert world.node("endpoint:api.example.com/v2/balance") is not None
+
+
 def test_wayback_passive_urls_become_candidates():
     world = _seed()
     _run(world)
@@ -564,12 +578,14 @@ def test_javascript_and_url_parsing():
         paths_in_javascript,
         same_host_path,
         script_sources,
+        urls_in_javascript,
     )
 
-    js = 'fetch("/api/v1/users");const a="/static/x.js";x("//cdn/y");u("https://h/z")'
+    js = 'fetch("/api/v1/users");const a="/static/x.js";x("//cdn/y");u("https://api.h/z")'
     got = paths_in_javascript(js)
     assert "/api/v1/users" in got and "/static/x.js" in got
     assert not any(p.startswith("//") for p in got)
+    assert urls_in_javascript(js) == ["https://api.h/z"]
     assert script_sources('<script src="/a.js"></script><script src="https://cdn/b.js">', "h.test") == ["/a.js"]
     assert same_host_path("/p?q=1", "h.test") == "/p"
     assert same_host_path("https://h.test/x", "h.test") == "/x"

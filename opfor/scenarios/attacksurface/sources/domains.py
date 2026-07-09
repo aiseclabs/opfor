@@ -449,6 +449,7 @@ def operations_from_introspection(data) -> list[str]:
 
 _SCRIPT_SRC = re.compile(r'<script[^>]+src\s*=\s*["\']([^"\']+)', re.IGNORECASE)
 _JS_PATH = re.compile(r"""["'`](/[A-Za-z0-9_.\-/]{1,160})["'`]""")
+_JS_URL = re.compile(r"""["'`](https?://[A-Za-z0-9.\-]+(?:/[A-Za-z0-9_.\-/]{0,200})?)["'`]""")
 _LOC = re.compile(r"<loc>\s*([^<\s]+)\s*</loc>", re.IGNORECASE)
 
 
@@ -483,6 +484,19 @@ def paths_in_javascript(text: str) -> list[str]:
         if not any(c.isalpha() for c in path):
             continue
         out.append(path)
+    return out
+
+
+def urls_in_javascript(text: str) -> list[str]:
+    """Absolute http urls from a JavaScript body, deduped in appearance order.
+
+    A single-page app names the API it calls on a sibling host by full url, so these are
+    how a cross-host interface surface is read out rather than missed.
+    """
+    out: list[str] = []
+    for match in _JS_URL.findall(text or ""):
+        if match not in out:
+            out.append(match)
     return out
 
 

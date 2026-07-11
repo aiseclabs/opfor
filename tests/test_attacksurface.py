@@ -40,6 +40,8 @@ DNS = {
     "api.example.com": {"resolvable": True, "addresses": ("1.1.1.7",)},
     # the wildcard base resolves but serves nothing, so it stays quiet in the surface
     "dev.example.com": {"resolvable": True, "addresses": ("1.1.1.8",)},
+    # an inventory host supplied from a DNS export, hidden behind the *.dev wildcard
+    "api.dev.example.com": {"resolvable": True, "addresses": ("1.1.1.9",)},
     # dangling: answers a CNAME to an unclaimed target but no address, the takeover signal
     "old.example.com": {"resolvable": False, "addresses": (),
                         "cnames": ("old-app.herokuapp.com",)},
@@ -198,10 +200,11 @@ def _scenario():
     return _make()
 
 
-def _seed(*, domains=(ROOT,), classes=()):
+def _seed(*, domains=(ROOT,), hosts=(), classes=()):
     world = World()
     world.add(Node(id="org:ExampleCorp", type="org",
-                   payload=Org(name="ExampleCorp", domains=tuple(domains), classes=tuple(classes))))
+                   payload=Org(name="ExampleCorp", domains=tuple(domains), hosts=tuple(hosts),
+                               classes=tuple(classes))))
     return world
 
 
@@ -278,6 +281,34 @@ def test_wildcard_certificate_is_reported_as_a_blind_spot():
     assert len(blind) == 1
     assert blind[0].severity == "INFO"
     assert "dev.example.com" in blind[0].data["bases"]
+
+
+def test_hosts_from_file_normalizes_a_dns_export(tmp_path):
+    from opfor.scenarios.attacksurface.sources.domains import hosts_from_file
+
+    export = tmp_path / "dns.txt"
+    export.write_text(
+        "# a dns export\n"
+        "\n"
+        "api.dev.example.com\n"
+        "*.sandbox.example.com\n"                                  # wildcard base is a real host
+        "_0007c31f57915f7fdc0b0f3de4b50248.api.hodor.example.com\n"  # ACM record wraps a host
+        "sel._domainkey.example.com\n"                            # DKIM control record, dropped
+        "API.DEV.EXAMPLE.COM\n",                                  # duplicate after lowercasing
+        encoding="utf-8")
+    hosts = hosts_from_file(str(export))
+    assert hosts == ("api.dev.example.com", "api.hodor.example.com", "sandbox.example.com")
+
+
+def test_inventory_hosts_enter_the_surface_as_enriched_leaves():
+    # a DNS-export host is resolved and triaged, but not re-enumerated, since it is a leaf
+    world = _seed(hosts=("api.dev.example.com",))
+    _run(world)
+    node = world.node("domain:api.dev.example.com")
+    assert node.payload.source == "inventory"
+    assert node.payload.root == "example.com"
+    assert world.has_fact(node.id, "resolved")
+    assert not world.has_fact(node.id, "enumerated")
 
 
 def test_wildcard_base_node_is_flagged():

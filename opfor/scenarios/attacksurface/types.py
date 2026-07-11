@@ -17,10 +17,14 @@ class Org:
     """The seed: an organization to map. `name` is what the operator gives, such as a
     company name. `domains` are optional hint roots the operator already knows, since
     discovering domains from a bare name needs a paid source, so hints let a run work
-    with none. `classes` restricts which asset classes run, empty means all of them."""
+    with none. `hosts` are known subdomains from an inventory such as a DNS export, the way
+    to supply hosts a wildcard certificate hides from passive discovery, they enter the
+    surface as leaves and are enriched rather than re-enumerated. `classes` restricts which
+    asset classes run, empty means all of them."""
 
     name: str
     domains: tuple[str, ...] = ()
+    hosts: tuple[str, ...] = ()
     classes: tuple[str, ...] = ()
     whois_terms: tuple[str, ...] = ()
 

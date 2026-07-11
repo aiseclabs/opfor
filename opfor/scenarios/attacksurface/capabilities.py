@@ -20,6 +20,7 @@ from opfor.scenarios.attacksurface.sources.domains import (
     operations_from_introspection,
     paths_from_openapi,
     paths_in_javascript,
+    registrable_root,
     robots_entries,
     same_host_path,
     script_sources,
@@ -54,13 +55,22 @@ class DiscoverDomains(Capability):
 
     def run(self, task: Task, world: World) -> Outcome:
         org = world.node(task.node).payload
-        found = tuple(
+        roots = tuple(
             Node(id=f"domain:{d}", type="domain",
                  payload=DomainData(name=d, root=d, source="hint",
                                     confidence="confirmed", evidence="operator hint"))
             for d in org.domains
         )
-        return Done(facts=(Fact(kind="domains_discovered", about=task.node, yields=found),))
+        # Inventory hosts enter as leaves under their registrable root, not as roots, so the
+        # pivot and subdomain rules, gated on name == root, skip them, and only resolution
+        # and probing enrich them. This is how a DNS export closes the wildcard blind spot.
+        hosts = tuple(
+            Node(id=f"domain:{h}", type="domain",
+                 payload=DomainData(name=h, root=registrable_root(h), source="inventory",
+                                    confidence="confirmed", evidence="operator inventory"))
+            for h in org.hosts
+        )
+        return Done(facts=(Fact(kind="domains_discovered", about=task.node, yields=roots + hosts),))
 
 
 class DiscoverGitHub(Capability):

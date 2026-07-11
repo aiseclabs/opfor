@@ -163,6 +163,39 @@ def _looks_like_host(name: str) -> bool:
     return "@" not in name and " " not in name and all(part for part in name.split("."))
 
 
+def hosts_from_file(path: str) -> tuple[str, ...]:
+    """Read known hosts from a newline-delimited DNS export, normalized to probeable names.
+
+    This is the DNS-export path that closes the wildcard blind spot, the operator supplies
+    the hosts a wildcard certificate hides from passive discovery. A blank line or a `#`
+    comment is skipped. A wildcard base such as *.dev.example.com is the real host dev.example.com.
+    A leading validation label such as the `_<hash>` an ACM record uses wraps a real host,
+    so it is unwrapped. A name with a control label elsewhere, such as a `_domainkey` DKIM
+    record, is not a probeable host and is dropped. The result is sorted and deduplicated."""
+    hosts: set[str] = set()
+    with open(path, encoding="utf-8") as handle:
+        for line in handle:
+            host = _host_from_record(line.strip().lower().rstrip("."))
+            if host:
+                hosts.add(host)
+    return tuple(sorted(hosts))
+
+
+def _host_from_record(name: str) -> str | None:
+    """The probeable host a DNS record name refers to, or None when it names no host."""
+    if not name or name.startswith("#"):
+        return None
+    labels = name.lstrip("*.").split(".")
+    if labels and labels[0].startswith("_"):
+        labels = labels[1:]                       # unwrap a leading validation label
+    if any(label.startswith("_") for label in labels):
+        return None                               # a control record, not a host
+    host = ".".join(labels)
+    if len(labels) < 2 or not _looks_like_host(host):
+        return None
+    return host
+
+
 # --- certificate SAN pivot: sibling roots that share a certificate ----------
 
 # A curated subset of multi-label public suffixes, so registrable-root extraction does

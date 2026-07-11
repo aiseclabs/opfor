@@ -44,14 +44,16 @@ _CERTSPOTTER_PAGES_KEYLESS = 2
 def subdomains(domain: str) -> set[str]:
     """Passive subdomains of a domain, the union of certificate transparency and VirusTotal.
 
-    certspotter and crt.sh read public certificate logs, VirusTotal joins when a key is
-    set and is the reliable passive source, since a keyless source is throttled by shared
-    address. All are public reads that never touch the target. Each source is best effort,
-    an individual failure is tolerated so one dead source does not blind the rest, and only
+    certspotter reads public certificate logs, VirusTotal joins when a key is set and is
+    the reliable passive source, since a keyless source is throttled by shared address.
+    All are public reads that never touch the target. Each source is best effort, an
+    individual failure is tolerated so one dead source does not blind the rest, and only
     when every source fails is the failure raised, so an empty result means no records
-    rather than a dead source.
+    rather than a dead source. crt.sh once joined as a second window on the same logs, but
+    it answered 502 or timed out far more often than it answered, so it was dropped, its
+    data class is already covered by certspotter.
     """
-    sources = [certspotter_subdomains, crt_subdomains]
+    sources = [certspotter_subdomains]
     if config.virustotal_key():
         sources.append(virustotal_subdomains)
     names: set[str] = set()
@@ -115,22 +117,6 @@ def _certspotter_walk(domain: str, *, token: str | None, pages: int) -> set[str]
         after = str(issuances[-1].get("id") or "")
         if not after:
             break
-    return names
-
-
-def crt_subdomains(domain: str) -> set[str]:
-    """Subdomains of a domain seen in certificate transparency, via crt.sh."""
-    url = f"https://crt.sh/?q=%25.{domain}&output=json"
-    request = urllib.request.Request(url, headers={"User-Agent": _UA, "Accept": "application/json"})
-    with urllib.request.urlopen(request, timeout=_TIMEOUT) as resp:
-        rows = json.loads(resp.read().decode("utf-8", "replace"))
-    names: set[str] = set()
-    for row in rows:
-        raw = str(row.get("name_value", "")) + "\n" + str(row.get("common_name", ""))
-        for line in raw.split("\n"):
-            name = line.strip().lower().lstrip("*.")
-            if name and name.endswith("." + domain) and _looks_like_host(name):
-                names.add(name)
     return names
 
 

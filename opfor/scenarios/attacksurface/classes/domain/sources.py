@@ -22,6 +22,7 @@ import urllib.parse
 import urllib.request
 
 from opfor.scenarios.attacksurface import config
+from opfor.scenarios.attacksurface.net import looks_like_host, registrable_root
 
 _UA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
 _TIMEOUT = 12
@@ -114,7 +115,7 @@ def _certspotter_walk(domain: str, *, token: str | None, pages: int) -> set[str]
                 # a wildcard such as *.dev.example.com is kept with its star, not silently
                 # collapsed to the base, so the enumeration can flag it as a blind spot
                 name = str(raw).strip().lower()
-                if name and name.endswith("." + domain) and _looks_like_host(name):
+                if name and name.endswith("." + domain) and looks_like_host(name):
                     names.add(name)
         after = str(issuances[-1].get("id") or "")
         if not after:
@@ -154,13 +155,9 @@ def subdomains_from_vt(data, domain: str) -> set[str]:
     names: set[str] = set()
     for item in data.get("data", []) or []:
         name = str(item.get("id", "")).strip().lower()
-        if name and name.endswith("." + domain) and _looks_like_host(name):
+        if name and name.endswith("." + domain) and looks_like_host(name):
             names.add(name)
     return names
-
-
-def _looks_like_host(name: str) -> bool:
-    return "@" not in name and " " not in name and all(part for part in name.split("."))
 
 
 def hosts_from_file(path: str) -> tuple[str, ...]:
@@ -205,38 +202,17 @@ def _host_from_record(name: str) -> str | None:
     if any(label.startswith("_") for label in labels):
         return None                               # a control record, not a host
     host = ".".join(labels)
-    if len(labels) < 2 or not _looks_like_host(host):
+    if len(labels) < 2 or not looks_like_host(host):
         return None
     return host
 
 
 # --- certificate SAN pivot: sibling roots that share a certificate ----------
 
-# A curated subset of multi-label public suffixes, so registrable-root extraction does
-# not mistake a country second level such as co.uk for a root. A single-label suffix
-# falls through to the two-label default, which is correct for com, io, and the like.
-_MULTI_SUFFIXES = frozenset({
-    "co.uk", "org.uk", "gov.uk", "ac.uk", "co.jp", "or.jp", "ne.jp",
-    "com.cn", "net.cn", "org.cn", "gov.cn", "com.hk", "org.hk",
-    "com.au", "net.au", "org.au", "com.sg", "com.br", "com.tw",
-    "co.kr", "co.in", "co.za", "com.mx", "com.tr", "com.ru",
-})
-
 # A certificate spanning more distinct roots than this is treated as shared multi-tenant
 # infrastructure, a CDN bundling unrelated customers onto one certificate, so it proves
 # no common ownership and is skipped.
 _MAX_CERT_ROOTS = 5
-
-
-def registrable_root(name: str) -> str:
-    """The registrable root of a host, example.com for api.example.com, using a small
-    multi-label suffix set so co.uk and its kind keep three labels."""
-    labels = name.strip(".").lower().split(".")
-    if len(labels) <= 2:
-        return ".".join(labels)
-    if ".".join(labels[-2:]) in _MULTI_SUFFIXES:
-        return ".".join(labels[-3:])
-    return ".".join(labels[-2:])
 
 
 def cert_sibling_roots(domain: str) -> dict[str, str]:
@@ -267,7 +243,7 @@ def sibling_roots_from_issuances(issuances, domain: str) -> dict[str, str]:
     siblings: dict[str, str] = {}
     for issuance in issuances:
         names = [str(n).strip().lower().lstrip("*.") for n in issuance.get("dns_names", [])]
-        roots = {registrable_root(n) for n in names if n and _looks_like_host(n)}
+        roots = {registrable_root(n) for n in names if n and looks_like_host(n)}
         if known not in roots or len(roots) > _MAX_CERT_ROOTS:
             continue
         others = sorted(roots - {known})
@@ -315,7 +291,7 @@ def roots_from_reverse_whois(data, term: str) -> dict[str, str]:
     for entry in data.get("domainsList", []) or []:
         name = entry if isinstance(entry, str) else str(entry.get("domainName", ""))
         name = name.strip().lower().lstrip("*.")
-        if name and _looks_like_host(name):
+        if name and looks_like_host(name):
             roots.setdefault(registrable_root(name),
                              f"registration record names {term}")
     return roots

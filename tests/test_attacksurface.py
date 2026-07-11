@@ -288,7 +288,7 @@ def test_wildcard_certificate_is_reported_as_a_blind_spot():
 
 
 def test_hosts_from_file_normalizes_a_dns_export(tmp_path):
-    from opfor.scenarios.attacksurface.sources.domains import hosts_from_file
+    from opfor.scenarios.attacksurface.classes.domain.sources import hosts_from_file
 
     export = tmp_path / "dns.txt"
     export.write_text(
@@ -317,8 +317,9 @@ def test_inventory_hosts_enter_the_surface_as_enriched_leaves():
 
 def test_wildcard_base_node_is_flagged():
     from opfor.core import Node, World
-    from opfor.scenarios.attacksurface.capabilities import Subdomains
-    from opfor.scenarios.attacksurface.types import DomainData, Org
+    from opfor.scenarios.attacksurface.classes.domain.capabilities import Subdomains
+    from opfor.scenarios.attacksurface.classes.domain.types import DomainData
+    from opfor.scenarios.attacksurface.types import Org
 
     world = World()
     world.add(Node(id="org:x", type="org", payload=Org(name="X", domains=("example.com",))))
@@ -343,7 +344,7 @@ def test_dangling_cname_target_is_surfaced_for_takeover_judgment():
 def test_resolve_host_keeps_cname_and_asks_both_address_families(monkeypatch):
     import urllib.request
 
-    from opfor.scenarios.attacksurface.sources import domains
+    from opfor.scenarios.attacksurface.classes.domain import sources as domains
 
     asked = []
 
@@ -489,7 +490,7 @@ def test_html_posing_as_swagger_is_not_an_endpoint():
 def test_empty_env_body_yields_no_exposure_clue():
     # a host that serves an empty 200 for /.env has no KEY=value body, so the deterministic
     # clue must not fire, the clue asserts on content, not the path
-    from opfor.scenarios.attacksurface.types import Endpoint
+    from opfor.scenarios.attacksurface.classes.domain.types import Endpoint
 
     sc = _make()
     empty = Endpoint(url="https://cf.example.com/.env", path="/.env", status=200, body="")
@@ -790,7 +791,7 @@ def test_hint_root_is_not_reported_as_a_discovered_root():
 
 
 def test_registrable_root_keeps_multi_label_suffixes():
-    from opfor.scenarios.attacksurface.sources.domains import registrable_root
+    from opfor.scenarios.attacksurface.net import registrable_root
 
     assert registrable_root("api.example.com") == "example.com"
     assert registrable_root("example.com") == "example.com"
@@ -798,7 +799,7 @@ def test_registrable_root_keeps_multi_label_suffixes():
 
 
 def test_shared_certificate_is_not_treated_as_ownership_evidence():
-    from opfor.scenarios.attacksurface.sources.domains import sibling_roots_from_issuances
+    from opfor.scenarios.attacksurface.classes.domain.sources import sibling_roots_from_issuances
 
     # a dedicated cert bundling two roots yields the sibling
     dedicated = [{"dns_names": ["example.com", "www.example.net"]}]
@@ -815,7 +816,7 @@ def test_certspotter_token_429_falls_back_to_an_anonymous_walk(monkeypatch):
     import urllib.request
 
     from opfor.scenarios.attacksurface import config
-    from opfor.scenarios.attacksurface.sources import domains
+    from opfor.scenarios.attacksurface.classes.domain import sources as domains
 
     monkeypatch.setattr(config, "certspotter_token", lambda: "spent-token")
 
@@ -848,7 +849,7 @@ def test_certspotter_token_error_that_is_not_429_is_raised(monkeypatch):
     import urllib.request
 
     from opfor.scenarios.attacksurface import config
-    from opfor.scenarios.attacksurface.sources import domains
+    from opfor.scenarios.attacksurface.classes.domain import sources as domains
 
     monkeypatch.setattr(config, "certspotter_token", lambda: "tok")
 
@@ -912,7 +913,7 @@ def test_registrant_pivot_failure_still_closes_and_is_loud():
 
 
 def test_roots_from_reverse_whois_reads_both_shapes():
-    from opfor.scenarios.attacksurface.sources.domains import roots_from_reverse_whois
+    from opfor.scenarios.attacksurface.classes.domain.sources import roots_from_reverse_whois
 
     as_strings = {"domainsList": ["a.example.org", "b.example.net"]}
     assert roots_from_reverse_whois(as_strings, "Acme") == {
@@ -957,7 +958,7 @@ def test_spec_fetch_failure_still_closes_and_is_loud():
 
 
 def test_paths_from_openapi_names_methods():
-    from opfor.scenarios.attacksurface.sources.domains import paths_from_openapi
+    from opfor.scenarios.attacksurface.classes.domain.sources import paths_from_openapi
 
     doc = {"paths": {"/a": {"get": {}, "post": {}}, "/b": {"get": {}}}}
     assert set(paths_from_openapi(doc)) == {"GET,POST /a", "GET /b"}
@@ -966,7 +967,7 @@ def test_paths_from_openapi_names_methods():
 
 
 def test_operations_from_introspection_reads_query_and_mutation():
-    from opfor.scenarios.attacksurface.sources.domains import operations_from_introspection
+    from opfor.scenarios.attacksurface.classes.domain.sources import operations_from_introspection
 
     data = {"__schema": {"queryType": {"fields": [{"name": "me"}]},
                          "mutationType": {"fields": [{"name": "login"}]}}}
@@ -975,7 +976,7 @@ def test_operations_from_introspection_reads_query_and_mutation():
 
 
 def test_subdomains_from_vt_reads_relationship_ids():
-    from opfor.scenarios.attacksurface.sources.domains import subdomains_from_vt
+    from opfor.scenarios.attacksurface.classes.domain.sources import subdomains_from_vt
 
     page = {"data": [{"id": "api.example.com"}, {"id": "*.mail.example.com"},
                      {"id": "unrelated.test"}]}
@@ -984,7 +985,7 @@ def test_subdomains_from_vt_reads_relationship_ids():
 
 
 def test_virustotal_is_skipped_without_a_key(monkeypatch):
-    from opfor.scenarios.attacksurface.sources import domains as d
+    from opfor.scenarios.attacksurface.classes.domain import sources as d
 
     monkeypatch.delenv("OPFOR_VIRUSTOTAL_KEY", raising=False)
     # no key means the source contributes nothing and makes no network call
@@ -1020,7 +1021,7 @@ def test_robots_disallow_paths_become_candidates():
 
 
 def test_javascript_and_url_parsing():
-    from opfor.scenarios.attacksurface.sources.domains import (
+    from opfor.scenarios.attacksurface.classes.domain.sources import (
         paths_in_javascript,
         same_host_path,
         script_sources,
@@ -1039,7 +1040,7 @@ def test_javascript_and_url_parsing():
 
 
 def test_robots_and_sitemap_parsing():
-    from opfor.scenarios.attacksurface.sources.domains import robots_entries, sitemap_paths
+    from opfor.scenarios.attacksurface.classes.domain.sources import robots_entries, sitemap_paths
 
     paths, sitemaps = robots_entries("User-agent: *\nDisallow: /admin\nAllow: /public\nSitemap: https://h/sm.xml")
     assert paths == ["/admin", "/public"]

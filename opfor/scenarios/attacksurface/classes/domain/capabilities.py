@@ -1,11 +1,13 @@
-"""Attack-surface capabilities, grouped by asset class. Each fetches, none judges.
+"""Domain-class capabilities, each fetches, none judges.
 
-Two discovery capabilities expand an org into assets, a domain hint list into domain
-nodes and an org name into GitHub org nodes, so a bare name grows a surface. The rest
-enrich one asset, subdomains and DNS and HTTP for a domain, repositories for a GitHub
-org. Certificate transparency, DNS, and the GitHub API are public reads, so they are
-osint. Only the HTTP probe touches the target, so it is a scoped recon act and carries
-the domain name for scope. A source error becomes a loud `Failed`, never an empty `Done`.
+One discovery capability turns the org's hint roots and inventory hosts into domain
+nodes. The pivots grow the root set from evidence, a certificate SAN sibling and a
+reverse-WHOIS registrant. Subdomains enumerate a root passively. The rest enrich one
+domain, resolution, an HTTP probe, path harvesting, interface probing, and the API
+surface an exposed specification or an open introspection maps. Certificate transparency,
+DNS, and passive sources are public reads, so they are osint. The HTTP probe, harvest, and
+interface probes touch the target, so they are scoped recon acts carrying the host for
+scope. A source error becomes a loud `Failed`, never an empty `Done`.
 """
 
 from __future__ import annotations
@@ -16,38 +18,26 @@ from urllib.parse import urlparse
 
 from opfor.core import Capability, Done, Fact, Failed, Node, Outcome, Phase, Task, World
 from opfor.scenarios.attacksurface import config
-from opfor.scenarios.attacksurface.sources.domains import (
+from opfor.scenarios.attacksurface.net import registrable_root
+from opfor.scenarios.attacksurface.classes.domain.sources import (
     operations_from_introspection,
     paths_from_openapi,
     paths_in_javascript,
-    registrable_root,
     robots_entries,
     same_host_path,
     script_sources,
     sitemap_paths,
     urls_in_javascript,
 )
-from opfor.scenarios.attacksurface.types import (
+from opfor.scenarios.attacksurface.classes.domain.types import (
     APISpec,
     Candidates,
     DomainData,
     Endpoint,
-    GitHubOrg,
-    GitHubRepo,
     GraphQLSchema,
     HTTP,
     Resolved,
 )
-
-def _site_domain(value: str) -> str:
-    """The hostname a website URL or an email address points at, empty when there is none."""
-    value = value.strip().lower()
-    if not value:
-        return ""
-    if "@" in value:
-        return value.rsplit("@", 1)[-1]
-    return urlparse(value if "//" in value else "//" + value).hostname or ""
-
 
 _LINK = re.compile(r'(?:href|src)\s*=\s*["\']([^"\'#?]+)', re.IGNORECASE)
 
@@ -81,43 +71,6 @@ class DiscoverDomains(Capability):
             for h in org.hosts
         )
         return Done(facts=(Fact(kind="domains_discovered", about=task.node, yields=roots + hosts),))
-
-
-class DiscoverGitHub(Capability):
-    """MAP: search GitHub for orgs matching the name, as new github_org nodes."""
-
-    name = "discover_github"
-    phase = Phase.MAP
-
-    def __init__(self, search_fn) -> None:
-        self._search = search_fn
-
-    def run(self, task: Task, world: World) -> Outcome:
-        org = world.node(task.node).payload
-        try:
-            orgs = self._search(org.name, config.github_token())
-        except Exception as exc:
-            return Failed(reason=f"github search {type(exc).__name__}: {exc}")
-        # A name match alone does not prove ownership, so a candidate is attributed by the
-        # domain its profile links to. Linking to an in-scope root confirms it. Linking to a
-        # different registrable root is positive counter-evidence that it belongs to someone
-        # else, so it is dropped. No link leaves it a name match, kept but marked unattributed.
-        targets = set(org.domains) | {registrable_root(h) for h in org.hosts}
-        found = []
-        for o in orgs:
-            site = _site_domain(o.get("blog") or o.get("email") or "")
-            site_root = registrable_root(site) if site else ""
-            if site_root and targets and site_root not in targets:
-                continue
-            attributed = bool(site_root and site_root in targets)
-            evidence = (f"profile links to {site_root}" if attributed
-                        else "account name matches, ownership not established")
-            found.append(Node(id=f"github_org:{o['login']}", type="github_org",
-                              payload=GitHubOrg(login=o["login"], url=o.get("url", ""),
-                                                org_id=o.get("org_id"), name=o.get("name", ""),
-                                                website=o.get("blog", ""), attributed=attributed,
-                                                evidence=evidence)))
-        return Done(facts=(Fact(kind="github_discovered", about=task.node, yields=tuple(found)),))
 
 
 class DomainPivot(Capability):
@@ -426,56 +379,6 @@ class Endpoints(Capability):
         return {"status": None, "content_type": "", "body": ""}
 
 
-def _safe(thunk):
-    """Run a candidate source, returning None on any error so the union tolerates it."""
-    try:
-        return thunk()
-    except Exception:
-        return None
-
-
-def _is_static_asset(path: str, suffixes, prefixes) -> bool:
-    """Whether a path is a static asset, given the suffix and prefix lists the planner
-    handed in from knowledge, so the capability itself reads no knowledge file."""
-    lowered = path.lower().split("?")[0]
-    return lowered.endswith(tuple(suffixes)) or lowered.startswith(tuple(prefixes))
-
-
-def _distinct(result: dict, baseline: dict) -> bool:
-    """Whether a response is a real endpoint rather than the host's catch-all.
-
-    When the catch-all is a positive page, a single-page app that answers 200 for every
-    path, an endpoint counts only if it differs in status, in content type, or clearly in
-    body size. When the catch-all was a 404 or a redirect, any answer that got past the
-    404 filter is already a real endpoint.
-    """
-    base_status = baseline.get("status")
-    if base_status is None:
-        return True
-    if result.get("status") != base_status:
-        return True
-    if not (200 <= int(base_status) < 300):
-        return False
-    if _ct_family(result.get("content_type", "")) != _ct_family(baseline.get("content_type", "")):
-        return True
-    return abs(len(result.get("body", "")) - len(baseline.get("body", ""))) > 128
-
-
-def _ct_family(content_type: str) -> str:
-    return (content_type or "").split(";")[0].strip().lower()
-
-
-def _home_paths(body: str, *, limit: int = 20) -> list[str]:
-    """Same-origin absolute paths linked from a home page body, deduped and capped."""
-    out: list[str] = []
-    for href in _LINK.findall(body or ""):
-        if href.startswith("/") and not href.startswith("//") and href not in out:
-            out.append(href)
-        if len(out) >= limit:
-            break
-    return out
-
-
 class ExpandSpec(Capability):
     """ENRICH: parse an exposed API specification into the operations it declares.
 
@@ -535,26 +438,51 @@ class GraphQLIntrospect(Capability):
         return Done(facts=(Fact(kind="graphql", about=task.node, payload=payload),))
 
 
-class GitHubRepos(Capability):
-    """ENRICH: list a GitHub org's public repositories, as new github_repo nodes."""
+def _safe(thunk):
+    """Run a candidate source, returning None on any error so the union tolerates it."""
+    try:
+        return thunk()
+    except Exception:
+        return None
 
-    name = "github_repos"
-    phase = Phase.ENRICH
 
-    def __init__(self, repos_fn) -> None:
-        self._repos = repos_fn
+def _is_static_asset(path: str, suffixes, prefixes) -> bool:
+    """Whether a path is a static asset, given the suffix and prefix lists the planner
+    handed in from knowledge, so the capability itself reads no knowledge file."""
+    lowered = path.lower().split("?")[0]
+    return lowered.endswith(tuple(suffixes)) or lowered.startswith(tuple(prefixes))
 
-    def run(self, task: Task, world: World) -> Outcome:
-        login = world.node(task.node).payload.login
-        try:
-            repos = self._repos(login, config.github_token())
-        except Exception as exc:
-            return Failed(reason=f"github repos {type(exc).__name__}: {exc}")
-        found = tuple(
-            Node(id=f"github_repo:{r['full_name']}", type="github_repo",
-                 payload=GitHubRepo(full_name=r["full_name"], url=r.get("url", ""),
-                                    language=r.get("language", ""), pushed_at=r.get("pushed_at", ""),
-                                    archived=bool(r.get("archived"))))
-            for r in repos
-        )
-        return Done(facts=(Fact(kind="repos", about=task.node, yields=found),))
+
+def _distinct(result: dict, baseline: dict) -> bool:
+    """Whether a response is a real endpoint rather than the host's catch-all.
+
+    When the catch-all is a positive page, a single-page app that answers 200 for every
+    path, an endpoint counts only if it differs in status, in content type, or clearly in
+    body size. When the catch-all was a 404 or a redirect, any answer that got past the
+    404 filter is already a real endpoint.
+    """
+    base_status = baseline.get("status")
+    if base_status is None:
+        return True
+    if result.get("status") != base_status:
+        return True
+    if not (200 <= int(base_status) < 300):
+        return False
+    if _ct_family(result.get("content_type", "")) != _ct_family(baseline.get("content_type", "")):
+        return True
+    return abs(len(result.get("body", "")) - len(baseline.get("body", ""))) > 128
+
+
+def _ct_family(content_type: str) -> str:
+    return (content_type or "").split(";")[0].strip().lower()
+
+
+def _home_paths(body: str, *, limit: int = 20) -> list[str]:
+    """Same-origin absolute paths linked from a home page body, deduped and capped."""
+    out: list[str] = []
+    for href in _LINK.findall(body or ""):
+        if href.startswith("/") and not href.startswith("//") and href not in out:
+            out.append(href)
+        if len(out) >= limit:
+            break
+    return out

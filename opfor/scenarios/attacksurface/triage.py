@@ -125,7 +125,7 @@ class TriageError(RuntimeError):
 
 
 class SurfaceTriage(Triage):
-    def __init__(self, content_root: str | Path, *, provider: Provider, model: str,
+    def __init__(self, knowledge_dirs, *, provider: Provider, model: str,
                  max_tokens: int = 8192, max_chunk_chars: int = _MAX_CHUNK_CHARS,
                  challenger: Provider | None = None, challenger_model: str | None = None,
                  judge: Provider | None = None, judge_model: str | None = None) -> None:
@@ -140,12 +140,19 @@ class SurfaceTriage(Triage):
         self._challenger_model = challenger_model or model
         self._judge = judge
         self._judge_model = judge_model or model
-        knowledge = Path(content_root) / "knowledge"
-        self._classes = _load_classes(knowledge / "classes")
+        # The judgment knowledge lives with the asset classes that own it, so triage reads
+        # each class's directory and unions the classes, clues, and takeover signatures. A
+        # class that mints only structural findings declares no directory and is absent here.
+        self._classes = []
+        self._clues = []
+        self._takeover = []
+        for directory in knowledge_dirs:
+            directory = Path(directory)
+            self._classes.extend(_load_classes(directory / "classes"))
+            self._clues.extend(_load_clues(directory / "exposures.yaml"))
+            self._takeover.extend(_load_takeover(directory / "takeover.yaml"))
         self._class_ids = frozenset(c["id"] for c in self._classes)
         self._class_impact = {c["id"]: c["impact"] for c in self._classes}
-        self._clues = _load_clues(knowledge / "exposures.yaml")
-        self._takeover = _load_takeover(knowledge / "takeover.yaml")
 
     def judge(self, world: World) -> list[Finding]:
         findings: list[Finding] = []

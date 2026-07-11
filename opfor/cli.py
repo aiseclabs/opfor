@@ -25,9 +25,9 @@ def _resolve_seed(args) -> tuple[str, tuple[str, ...], tuple[str, ...], tuple[st
     root. Fails loud when no seed is given, an empty run is an operator error not a result.
     """
     from opfor.scenarios.attacksurface import config
-    from opfor.scenarios.attacksurface.sources.domains import (
+    from opfor.scenarios.attacksurface.net import registrable_root
+    from opfor.scenarios.attacksurface.classes.domain.sources import (
         hosts_from_file,
-        registrable_root,
         roots_from_file,
     )
 

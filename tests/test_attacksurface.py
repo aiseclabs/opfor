@@ -25,7 +25,9 @@ ROOT = "example.com"
 # Certificate transparency result for the hint root. api.example.com is a real host whose
 # only interface is named by a script on admin.example.com, so it proves cross-host harvest.
 CRT = {ROOT: {"www.example.com", "admin.example.com", "old.example.com", "cdn.example.com",
-              "spa.example.com", "cf.example.com", "api.example.com"}}
+              "spa.example.com", "cf.example.com", "api.example.com",
+              # a wildcard cert, its individual hosts are hidden from certificate transparency
+              "*.dev.example.com"}}
 
 # DNS per name, a name absent here is unresolvable. old.example.com is dangling.
 DNS = {
@@ -36,6 +38,8 @@ DNS = {
     "spa.example.com": {"resolvable": True, "addresses": ("1.1.1.5",)},
     "cf.example.com": {"resolvable": True, "addresses": ("1.1.1.6",)},
     "api.example.com": {"resolvable": True, "addresses": ("1.1.1.7",)},
+    # the wildcard base resolves but serves nothing, so it stays quiet in the surface
+    "dev.example.com": {"resolvable": True, "addresses": ("1.1.1.8",)},
     # dangling: answers a CNAME to an unclaimed target but no address, the takeover signal
     "old.example.com": {"resolvable": False, "addresses": (),
                         "cnames": ("old-app.herokuapp.com",)},
@@ -265,6 +269,32 @@ def test_dangling_name_is_surfaced():
     p = _prompt(sc)
     assert "old.example.com" in p
     assert "does not resolve, seen only passively" in p
+
+
+def test_wildcard_certificate_is_reported_as_a_blind_spot():
+    # *.dev.example.com hides its hosts from CT, the run must say so rather than look clean
+    report = _run(_seed())
+    blind = [f for f in report.findings if f.data.get("kind") == "blindspot"]
+    assert len(blind) == 1
+    assert blind[0].severity == "INFO"
+    assert "dev.example.com" in blind[0].data["bases"]
+
+
+def test_wildcard_base_node_is_flagged():
+    from opfor.core import Node, World
+    from opfor.scenarios.attacksurface.capabilities import Subdomains
+    from opfor.scenarios.attacksurface.types import DomainData, Org
+
+    world = World()
+    world.add(Node(id="org:x", type="org", payload=Org(name="X", domains=("example.com",))))
+    world.add(Node(id="domain:example.com", type="domain",
+                   payload=DomainData(name="example.com", root="example.com", source="hint")))
+    cap = Subdomains(lambda root: {"*.dev.example.com", "api.example.com"})
+    from opfor.core import Task
+    outcome = cap.run(Task(capability="domain_subdomains", node="domain:example.com"), world)
+    nodes = {n.payload.name: n.payload for n in outcome.facts[0].yields}
+    assert nodes["dev.example.com"].wildcard is True
+    assert nodes["api.example.com"].wildcard is False
 
 
 def test_dangling_cname_target_is_surfaced_for_takeover_judgment():
@@ -888,7 +918,8 @@ def test_subdomains_from_vt_reads_relationship_ids():
 
     page = {"data": [{"id": "api.example.com"}, {"id": "*.mail.example.com"},
                      {"id": "unrelated.test"}]}
-    assert subdomains_from_vt(page, "example.com") == {"api.example.com", "mail.example.com"}
+    # a wildcard keeps its star, so the enumeration can flag it rather than lose it
+    assert subdomains_from_vt(page, "example.com") == {"api.example.com", "*.mail.example.com"}
 
 
 def test_virustotal_is_skipped_without_a_key(monkeypatch):

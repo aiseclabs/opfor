@@ -150,6 +150,7 @@ class SurfaceTriage(Triage):
     def judge(self, world: World) -> list[Finding]:
         findings: list[Finding] = []
         findings.extend(self._roots(world))
+        findings.extend(self._wildcards(world))
 
         caveat = self._resolution_caveat(world)
         if caveat is not None:
@@ -429,6 +430,29 @@ class SurfaceTriage(Triage):
                 data={"kind": "root", "source": data.source, "confidence": data.confidence},
             ))
         return out
+
+    def _wildcards(self, world: World) -> list[Finding]:
+        """Report the wildcard certificates the run saw as a named blind spot. A wildcard
+        such as *.dev.example.com covers every host under it, so certificate transparency never
+        names the individual hosts and passive discovery cannot see them. This is a fact
+        about the reach of the run, not a semantic judgment, so it stays in code, and saying
+        it keeps a silent gap from reading as a clean, complete result."""
+        bases = sorted(n.payload.name for n in world.nodes("domain")
+                       if getattr(n.payload, "wildcard", False))
+        if not bases:
+            return []
+        shown = ", ".join(bases[:10]) + (f", and {len(bases) - 10} more" if len(bases) > 10 else "")
+        return [Finding(
+            id="finding:blindspot:wildcard",
+            title=f"Wildcard certificate blind spot, {len(bases)} base(s) hide their subdomains",
+            severity="INFO",
+            where=shown,
+            evidence=f"a wildcard certificate such as *.{bases[0]} covers every hostname under "
+                     "it, so certificate transparency never names the individual hosts and "
+                     "passive discovery cannot see them. Enumerate these bases from DNS or an "
+                     "internal source to close the gap",
+            data={"kind": "blindspot", "bases": bases},
+        )]
 
     def _resolution_caveat(self, world: World) -> Finding | None:
         """When almost nothing resolved the resolver is the problem, not the target, so

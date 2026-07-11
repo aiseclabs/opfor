@@ -38,6 +38,7 @@ class DomainData:
     source: str
     confidence: str = "confirmed"
     evidence: str = ""
+    wildcard: bool = False
 
 
 @dataclass(frozen=True, kw_only=True)

@@ -111,7 +111,9 @@ def _certspotter_walk(domain: str, *, token: str | None, pages: int) -> set[str]
             break
         for issuance in issuances:
             for raw in issuance.get("dns_names", []):
-                name = str(raw).strip().lower().lstrip("*.")
+                # a wildcard such as *.dev.example.com is kept with its star, not silently
+                # collapsed to the base, so the enumeration can flag it as a blind spot
+                name = str(raw).strip().lower()
                 if name and name.endswith("." + domain) and _looks_like_host(name):
                     names.add(name)
         after = str(issuances[-1].get("id") or "")
@@ -151,7 +153,7 @@ def subdomains_from_vt(data, domain: str) -> set[str]:
     """Subdomains from one VirusTotal relationship page, each item id is a subdomain."""
     names: set[str] = set()
     for item in data.get("data", []) or []:
-        name = str(item.get("id", "")).strip().lower().lstrip("*.")
+        name = str(item.get("id", "")).strip().lower()
         if name and name.endswith("." + domain) and _looks_like_host(name):
             names.add(name)
     return names

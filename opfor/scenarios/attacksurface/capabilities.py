@@ -172,10 +172,18 @@ class Subdomains(Capability):
             names = self._enumerate(root)
         except Exception as exc:
             return Failed(reason=f"passive enumeration {type(exc).__name__}: {exc}")
+        # A wildcard such as *.dev.example.com names its base but hides every host under it
+        # from certificate transparency, so the base is recorded once and flagged, and the
+        # flag is what triage reports as a blind spot rather than a silent gap.
+        wildcard: dict[str, bool] = {}
+        for name in names:
+            base = name[2:] if name.startswith("*.") else name
+            if base and base != root:
+                wildcard[base] = wildcard.get(base, False) or name.startswith("*.")
         found = tuple(
-            Node(id=f"domain:{n}", type="domain",
-                 payload=DomainData(name=n, root=root, source="passive"))
-            for n in sorted(names) if n != root
+            Node(id=f"domain:{base}", type="domain",
+                 payload=DomainData(name=base, root=root, source="passive", wildcard=is_wild))
+            for base, is_wild in sorted(wildcard.items())
         )
         return Done(facts=(Fact(kind="enumerated", about=task.node, yields=found),))
 

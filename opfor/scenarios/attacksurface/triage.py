@@ -334,6 +334,8 @@ class SurfaceTriage(Triage):
                 bits.append(f"server {http_data.server}")
         if dangling:
             bits.append("does not resolve, seen only passively")
+        if resolved_data is not None and resolved_data.cnames:
+            bits.append("CNAME to " + ", ".join(resolved_data.cnames))
         line = ", ".join(bits)
         clue = self._takeover_clue(http_data)
         if clue:

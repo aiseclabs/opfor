@@ -196,7 +196,8 @@ class ResolveDomain(Capability):
         except Exception as exc:
             return Failed(reason=f"resolve {type(exc).__name__}: {exc}")
         payload = Resolved(resolvable=bool(result["resolvable"]),
-                           addresses=tuple(result.get("addresses", ())))
+                           addresses=tuple(result.get("addresses", ())),
+                           cnames=tuple(result.get("cnames", ())))
         return Done(facts=(Fact(kind="resolved", about=task.node, payload=payload),))
 
 

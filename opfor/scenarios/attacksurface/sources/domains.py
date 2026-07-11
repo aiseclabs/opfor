@@ -275,30 +275,48 @@ def roots_from_reverse_whois(data, term: str) -> dict[str, str]:
 # --- resolution over DNS-over-HTTPS -----------------------------------------
 
 
-def resolve_host(name: str) -> dict:
-    """Resolve a name to its A records over DNS-over-HTTPS, or mark it unresolvable.
+# DoH answer record types, the numbers RFC 1035 and RFC 3596 assign to A, AAAA, and CNAME.
+_DNS_A = 1
+_DNS_AAAA = 28
+_DNS_CNAME = 5
 
-    An empty answer is a real result, the name has no address, a dangling candidate. The
-    failure is raised only when every resolver errors, so a broken resolver is loud rather
-    than a silent wall of false danglings.
+
+def resolve_host(name: str) -> dict:
+    """Resolve a name over DNS-over-HTTPS to its addresses and its CNAME chain.
+
+    A and AAAA are both asked, so an IPv6-only host is not mistaken for a dangling one.
+    The CNAME chain is kept rather than discarded, since a name that answers a CNAME but no
+    address is the classic dangling-takeover signal, it points at a target that no longer
+    exists. `resolvable` tracks addresses alone, so a CNAME to an unclaimed target reads as
+    unresolvable with its target preserved, exactly the takeover candidate. The failure is
+    raised only when every resolver errors, so a broken resolver is loud rather than a
+    silent wall of false danglings.
     """
     last: Exception | None = None
     for resolver in _DOH_RESOLVERS:
         try:
-            addresses = _doh_a(resolver, name)
-            return {"resolvable": bool(addresses), "addresses": tuple(addresses)}
+            answers = _doh_answers(resolver, name, "A") + _doh_answers(resolver, name, "AAAA")
         except Exception as exc:
             last = exc
+            continue
+        addresses = tuple(dict.fromkeys(
+            str(a["data"]) for a in answers
+            if a.get("type") in (_DNS_A, _DNS_AAAA) and a.get("data")))
+        cnames = tuple(dict.fromkeys(
+            str(a["data"]).strip(".").lower() for a in answers
+            if a.get("type") == _DNS_CNAME and a.get("data")))
+        return {"resolvable": bool(addresses), "addresses": addresses, "cnames": cnames}
     raise RuntimeError(f"all DoH resolvers failed for {name}: {last}")
 
 
-def _doh_a(resolver: str, name: str) -> list[str]:
-    url = f"{resolver}?name={urllib.parse.quote(name)}&type=A"
+def _doh_answers(resolver: str, name: str, rtype: str) -> list[dict]:
+    """The raw DoH answer records for one name and one record type."""
+    url = f"{resolver}?name={urllib.parse.quote(name)}&type={rtype}"
     request = urllib.request.Request(
         url, headers={"Accept": "application/dns-json", "User-Agent": _UA})
     with urllib.request.urlopen(request, timeout=_TIMEOUT) as resp:
         body = json.loads(resp.read().decode("utf-8", "replace"))
-    return [str(a["data"]) for a in body.get("Answer", []) if a.get("type") == 1 and a.get("data")]
+    return body.get("Answer", []) or []
 
 
 def public_addresses(addresses) -> list[str]:

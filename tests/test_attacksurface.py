@@ -36,6 +36,9 @@ DNS = {
     "spa.example.com": {"resolvable": True, "addresses": ("1.1.1.5",)},
     "cf.example.com": {"resolvable": True, "addresses": ("1.1.1.6",)},
     "api.example.com": {"resolvable": True, "addresses": ("1.1.1.7",)},
+    # dangling: answers a CNAME to an unclaimed target but no address, the takeover signal
+    "old.example.com": {"resolvable": False, "addresses": (),
+                        "cnames": ("old-app.herokuapp.com",)},
 }
 
 # HTTP per name. cdn points at an unclaimed bucket, admin is a live admin surface, spa is
@@ -262,6 +265,49 @@ def test_dangling_name_is_surfaced():
     p = _prompt(sc)
     assert "old.example.com" in p
     assert "does not resolve, seen only passively" in p
+
+
+def test_dangling_cname_target_is_surfaced_for_takeover_judgment():
+    # the CNAME target is the most direct takeover evidence, a dangling name pointing at an
+    # unclaimed service, so it must reach the model rather than being reduced to a bool
+    _, sc, _ = _run_capturing()
+    p = _prompt(sc)
+    assert "CNAME to old-app.herokuapp.com" in p
+
+
+def test_resolve_host_keeps_cname_and_asks_both_address_families(monkeypatch):
+    import urllib.request
+
+    from opfor.scenarios.attacksurface.sources import domains
+
+    asked = []
+
+    class _Resp:
+        def __init__(self, payload):
+            self._payload = payload
+
+        def read(self):
+            return json.dumps(self._payload).encode("utf-8")
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+    # a CNAME to an unclaimed target, answered but with no address, is the dangling case
+    def fake_urlopen(request, timeout=0):
+        asked.append(request.full_url)
+        if "type=A" in request.full_url:
+            return _Resp({"Answer": [{"type": 5, "data": "target.s3.amazonaws.com."}]})
+        return _Resp({"Answer": []})
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+    result = domains.resolve_host("dangling.example.com")
+    assert result["resolvable"] is False
+    assert result["addresses"] == ()
+    assert result["cnames"] == ("target.s3.amazonaws.com",)
+    assert any("type=A" in u for u in asked) and any("type=AAAA" in u for u in asked)
 
 
 def test_interesting_surface_class_is_always_present_with_the_admin_host():

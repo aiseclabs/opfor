@@ -44,6 +44,7 @@ class DomainData:
 class Resolved:
     resolvable: bool
     addresses: tuple[str, ...] = ()
+    cnames: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, kw_only=True)

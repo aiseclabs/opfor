@@ -72,12 +72,29 @@ def certspotter_subdomains(domain: str) -> set[str]:
     The free endpoint returns one bounded page, so this follows the `after` cursor to walk
     the log rather than stopping at the first page, which multiplies recall many times over
     on a large log. It stops at a page cap so the walk stays bounded.
+
+    A token raises the page cap, but the rate limit is per account, so a token whose free
+    quota is spent answers 429 while the anonymous per-address bucket is a separate pool
+    that may still answer. So a 429 on the token walk falls back to one keyless walk rather
+    than blinding this source, and only when the keyless walk also fails is the error
+    raised.
     """
-    headers = {"User-Agent": _UA, "Accept": "application/json"}
     token = config.certspotter_token()
+    if not token:
+        return _certspotter_walk(domain, token=None, pages=_CERTSPOTTER_PAGES_KEYLESS)
+    try:
+        return _certspotter_walk(domain, token=token, pages=_CERTSPOTTER_PAGES)
+    except urllib.error.HTTPError as exc:
+        if exc.code != 429:
+            raise
+        return _certspotter_walk(domain, token=None, pages=_CERTSPOTTER_PAGES_KEYLESS)
+
+
+def _certspotter_walk(domain: str, *, token: str | None, pages: int) -> set[str]:
+    """Walk the certspotter issuance log for `domain`, authenticated when a token is given."""
+    headers = {"User-Agent": _UA, "Accept": "application/json"}
     if token:
         headers["Authorization"] = f"Bearer {token}"
-    pages = _CERTSPOTTER_PAGES if token else _CERTSPOTTER_PAGES_KEYLESS
     names: set[str] = set()
     after = ""
     for _ in range(pages):

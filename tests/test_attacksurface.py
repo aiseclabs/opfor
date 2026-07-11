@@ -673,6 +673,57 @@ def test_shared_certificate_is_not_treated_as_ownership_evidence():
     assert sibling_roots_from_issuances(shared, "example.com") == {}
 
 
+def test_certspotter_token_429_falls_back_to_an_anonymous_walk(monkeypatch):
+    import urllib.error
+    import urllib.request
+
+    from opfor.scenarios.attacksurface import config
+    from opfor.scenarios.attacksurface.sources import domains
+
+    monkeypatch.setattr(config, "certspotter_token", lambda: "spent-token")
+
+    class _Resp:
+        def __init__(self, payload):
+            self._payload = payload
+
+        def read(self):
+            return json.dumps(self._payload).encode("utf-8")
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+    # the token walk answers 429 as if its account quota were spent, the anonymous walk
+    # answers with records, so the source recovers rather than going blind
+    def fake_urlopen(request, timeout=0):
+        if request.get_header("Authorization"):
+            raise urllib.error.HTTPError(request.full_url, 429, "Too Many Requests", {}, None)
+        return _Resp([{"dns_names": ["api.example.com", "www.example.com"]}])
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+    assert domains.certspotter_subdomains("example.com") == {"api.example.com", "www.example.com"}
+
+
+def test_certspotter_token_error_that_is_not_429_is_raised(monkeypatch):
+    import urllib.error
+    import urllib.request
+
+    from opfor.scenarios.attacksurface import config
+    from opfor.scenarios.attacksurface.sources import domains
+
+    monkeypatch.setattr(config, "certspotter_token", lambda: "tok")
+
+    # a non-429 stays loud, it is not a quota signal and must not be swallowed as empty
+    def fake_urlopen(request, timeout=0):
+        raise urllib.error.HTTPError(request.full_url, 500, "Server Error", {}, None)
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+    with pytest.raises(urllib.error.HTTPError):
+        domains.certspotter_subdomains("example.com")
+
+
 def test_pivot_failure_still_closes_and_is_loud():
     def boom(domain):
         raise TimeoutError("certspotter slow")

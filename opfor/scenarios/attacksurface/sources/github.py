@@ -26,18 +26,40 @@ def _get(path: str, token: str) -> object:
 
 
 def search_orgs(name: str, token: str = "", *, limit: int = 10) -> list[dict]:
-    """GitHub organizations whose account matches the name, best match first.
+    """GitHub organizations whose account matches the name, each with its attribution
+    evidence, best match first.
 
     The query restricts to org accounts, so a personal user with the name does not
-    pollute the result. The token stays in the request header, never in a returned value.
+    pollute the result. A name match alone does not prove ownership, so each candidate's
+    public profile is fetched for the website and email that tie it to a domain, the
+    evidence attribution needs. A profile that will not load leaves those fields empty,
+    so one bad profile does not drop the candidate. The token stays in the request header,
+    never in a returned value.
     """
     query = urllib.parse.urlencode({"q": f"{name} type:org", "per_page": str(limit)})
     body = _get(f"/search/users?{query}", token)
     items = body.get("items", []) if isinstance(body, dict) else []
-    return [
-        {"login": str(i.get("login", "")), "url": str(i.get("html_url", "")), "org_id": i.get("id")}
-        for i in items if i.get("login")
-    ]
+    out: list[dict] = []
+    for item in items:
+        login = str(item.get("login", ""))
+        if not login:
+            continue
+        profile: dict = {}
+        try:
+            fetched = _get(f"/orgs/{urllib.parse.quote(login)}", token)
+            profile = fetched if isinstance(fetched, dict) else {}
+        except Exception:
+            profile = {}
+        out.append({
+            "login": login,
+            "url": str(item.get("html_url", "")),
+            "org_id": item.get("id"),
+            "name": str(profile.get("name") or ""),
+            "blog": str(profile.get("blog") or ""),
+            "email": str(profile.get("email") or ""),
+            "verified": bool(profile.get("is_verified")),
+        })
+    return out
 
 
 def org_repos(login: str, token: str = "", *, limit: int = 100) -> list[dict]:

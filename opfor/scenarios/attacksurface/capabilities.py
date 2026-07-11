@@ -39,6 +39,16 @@ from opfor.scenarios.attacksurface.types import (
     Resolved,
 )
 
+def _site_domain(value: str) -> str:
+    """The hostname a website URL or an email address points at, empty when there is none."""
+    value = value.strip().lower()
+    if not value:
+        return ""
+    if "@" in value:
+        return value.rsplit("@", 1)[-1]
+    return urlparse(value if "//" in value else "//" + value).hostname or ""
+
+
 _LINK = re.compile(r'(?:href|src)\s*=\s*["\']([^"\'#?]+)', re.IGNORECASE)
 
 
@@ -88,12 +98,26 @@ class DiscoverGitHub(Capability):
             orgs = self._search(org.name, config.github_token())
         except Exception as exc:
             return Failed(reason=f"github search {type(exc).__name__}: {exc}")
-        found = tuple(
-            Node(id=f"github_org:{o['login']}", type="github_org",
-                 payload=GitHubOrg(login=o["login"], url=o.get("url", ""), org_id=o.get("org_id")))
-            for o in orgs
-        )
-        return Done(facts=(Fact(kind="github_discovered", about=task.node, yields=found),))
+        # A name match alone does not prove ownership, so a candidate is attributed by the
+        # domain its profile links to. Linking to an in-scope root confirms it. Linking to a
+        # different registrable root is positive counter-evidence that it belongs to someone
+        # else, so it is dropped. No link leaves it a name match, kept but marked unattributed.
+        targets = set(org.domains) | {registrable_root(h) for h in org.hosts}
+        found = []
+        for o in orgs:
+            site = _site_domain(o.get("blog") or o.get("email") or "")
+            site_root = registrable_root(site) if site else ""
+            if site_root and targets and site_root not in targets:
+                continue
+            attributed = bool(site_root and site_root in targets)
+            evidence = (f"profile links to {site_root}" if attributed
+                        else "account name matches, ownership not established")
+            found.append(Node(id=f"github_org:{o['login']}", type="github_org",
+                              payload=GitHubOrg(login=o["login"], url=o.get("url", ""),
+                                                org_id=o.get("org_id"), name=o.get("name", ""),
+                                                website=o.get("blog", ""), attributed=attributed,
+                                                evidence=evidence)))
+        return Done(facts=(Fact(kind="github_discovered", about=task.node, yields=tuple(found)),))
 
 
 class DomainPivot(Capability):

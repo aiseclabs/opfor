@@ -480,19 +480,38 @@ class SurfaceTriage(Triage):
         )
 
     def _github(self, world: World) -> list[Finding]:
-        """The GitHub org inventory, an INFO line per org with its public repo count. A fact
-        about reachable code surface, not a semantic judgment, so it stays in code."""
+        """The GitHub org inventory. An attributed org, one whose profile ties it to an
+        in-scope domain, is an INFO line with its public repo count. Orgs that only match the
+        name are collapsed into one caveat line rather than passed off as the target's, so a
+        namesake does not read as reachable code surface. A fact about what the run found and
+        how sure it is, not a semantic judgment, so it stays in code."""
         out: list[Finding] = []
+        unattributed: list[str] = []
         for node in world.nodes("github_org"):
-            login = node.payload.login
+            payload = node.payload
+            if not payload.attributed:
+                unattributed.append(payload.login)
+                continue
+            login = payload.login
             repos = [r for r in world.nodes("github_repo") if r.id.startswith(f"github_repo:{login}/")]
             out.append(Finding(
                 id=f"finding:github_org:{login}",
                 title=f"GitHub org {login}, {len(repos)} public repo(s)",
                 severity="INFO",
                 where=login,
-                evidence=f"reachable code surface at {node.payload.url}",
-                data={"kind": "github_org", "login": login, "repos": len(repos), "url": node.payload.url},
+                evidence=payload.evidence or f"reachable code surface at {payload.url}",
+                data={"kind": "github_org", "login": login, "repos": len(repos), "url": payload.url},
+            ))
+        if unattributed:
+            out.append(Finding(
+                id="finding:github_unattributed",
+                title=f"{len(unattributed)} GitHub org(s) match the name but are unattributed",
+                severity="INFO",
+                where=", ".join(sorted(unattributed)[:10]),
+                evidence="the account name matches the target but nothing in the profile ties it to "
+                         "an in-scope domain, so ownership is unverified, confirm before treating a "
+                         "namesake as the target's code surface",
+                data={"kind": "github_unattributed", "logins": sorted(unattributed)},
             ))
         return out
 

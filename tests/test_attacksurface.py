@@ -67,7 +67,11 @@ HTTP = {
 }
 
 # GitHub search and repos, keyed off the org name.
-GH_ORGS = {"ExampleCorp": [{"login": "examplecorp", "url": "https://github.com/examplecorp", "org_id": 7}]}
+GH_ORGS = {"ExampleCorp": [
+    # its profile links to the in-scope root, so it is attributed to the target
+    {"login": "examplecorp", "url": "https://github.com/examplecorp", "org_id": 7,
+     "name": "Example Corp", "blog": "https://example.com", "email": "", "verified": False},
+]}
 GH_REPOS = {
     "examplecorp": [
         {"full_name": "examplecorp/web", "url": "u1", "language": "Go", "pushed_at": "2026-06-01", "archived": False},
@@ -503,6 +507,32 @@ def test_github_org_is_info_inventory():
     assert gh and gh[0].where == "examplecorp"
     assert gh[0].severity == "INFO"
     assert gh[0].data["repos"] == 2
+
+
+def test_github_attribution_keeps_the_owned_drops_the_namesake_flags_the_unproven():
+    # three candidates match the name: one links to the in-scope root, one links to a
+    # different root and is a namesake, one has no link and cannot be proven either way
+    def search(name, token=""):
+        return [
+            {"login": "examplecorp", "url": "u", "org_id": 1, "name": "Example Corp",
+             "blog": "https://example.com", "email": "", "verified": False},
+            {"login": "example-lasers", "url": "u", "org_id": 2, "name": "Example Lasers",
+             "blog": "https://example-lasers.io", "email": "", "verified": False},
+            {"login": "examplish", "url": "u", "org_id": 3, "name": "Examplish",
+             "blog": "", "email": "", "verified": False},
+        ]
+
+    report, _, world = _run_capturing(_seed(), search_fn=search)
+    logins = {n.payload.login for n in world.nodes("github_org")}
+    # the namesake proven to belong elsewhere is dropped, the other two are kept
+    assert logins == {"examplecorp", "examplish"}
+    attributed = {n.payload.login for n in world.nodes("github_org") if n.payload.attributed}
+    assert attributed == {"examplecorp"}
+    # the owned org is its own finding, the unproven one is collapsed into a caveat
+    kinds = {f.data.get("kind") for f in report.findings}
+    assert "github_org" in kinds and "github_unattributed" in kinds
+    caveat = next(f for f in report.findings if f.data.get("kind") == "github_unattributed")
+    assert caveat.data["logins"] == ["examplish"]
 
 
 def test_class_restriction_runs_only_that_class():

@@ -117,11 +117,18 @@ class GraphQLSchema:
 
 @dataclass(frozen=True, kw_only=True)
 class GitHubOrg:
-    """A GitHub organization that matched the org name. `login` is its handle."""
+    """A GitHub organization that matched the org name. `login` is its handle. `attributed`
+    records whether the profile ties it to an in-scope domain, since a name match alone does
+    not prove ownership, and `evidence` is the one-line reason, so a match carries its proof
+    or its caveat rather than being taken on faith."""
 
     login: str
     url: str = ""
     org_id: int | None = None
+    name: str = ""
+    website: str = ""
+    attributed: bool = False
+    evidence: str = ""
 
 
 @dataclass(frozen=True, kw_only=True)

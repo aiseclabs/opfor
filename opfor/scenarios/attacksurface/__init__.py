@@ -19,7 +19,7 @@ from urllib.parse import urlparse
 
 import yaml
 
-from opfor.core import Phase, Provider, RuleSet, Scenario, Task, World, each, make_provider
+from opfor.core import Node, Phase, Provider, RuleSet, Scenario, Task, World, each, make_provider
 from opfor.core.providers.factory import default_model, role_model, triage_mode
 from opfor.scenarios.attacksurface import config
 from opfor.scenarios.attacksurface.capabilities import (
@@ -39,6 +39,7 @@ from opfor.scenarios.attacksurface.capabilities import (
 from opfor.scenarios.attacksurface.sources import domains as domain_src
 from opfor.scenarios.attacksurface.sources import github as github_src
 from opfor.scenarios.attacksurface.triage import SurfaceTriage
+from opfor.scenarios.attacksurface.types import Org
 
 # Sentinel so build can tell an unset reverse-WHOIS seam from one a caller passed, even
 # a fake in a test, and default the real seam to on only when a provider key is set.
@@ -255,6 +256,16 @@ def build(
                              judge=judge, judge_model=judge_model),
         terminal=Phase.TRIAGE,
     )
+
+
+def seed(name: str, *, domains=(), hosts=()) -> World:
+    """Build the seed world for a run, an `Org` node carrying the hint roots and the known
+    inventory hosts. This is the entry a run path uses to turn operator input, whether typed
+    on the command line or loaded from a seed file, into the world the engine drives."""
+    world = World()
+    world.add(Node(id=f"org:{name}", type="org",
+                   payload=Org(name=name, domains=tuple(domains), hosts=tuple(hosts))))
+    return world
 
 
 ATTACKSURFACE = build()

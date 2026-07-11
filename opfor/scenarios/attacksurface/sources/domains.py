@@ -181,6 +181,20 @@ def hosts_from_file(path: str) -> tuple[str, ...]:
     return tuple(sorted(hosts))
 
 
+def roots_from_file(path: str) -> tuple[str, ...]:
+    """Read root domains from a newline-delimited file, each reduced to its registrable
+    root and deduplicated. A subdomain such as www.example.com folds to example.com, so a list
+    that mixes roots and hosts still yields clean roots. Normalization matches
+    `hosts_from_file`, a blank or comment line and a control record are skipped."""
+    roots: set[str] = set()
+    with open(path, encoding="utf-8") as handle:
+        for line in handle:
+            host = _host_from_record(line.strip().lower().rstrip("."))
+            if host:
+                roots.add(registrable_root(host))
+    return tuple(sorted(roots))
+
+
 def _host_from_record(name: str) -> str | None:
     """The probeable host a DNS record name refers to, or None when it names no host."""
     if not name or name.startswith("#"):

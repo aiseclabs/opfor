@@ -50,3 +50,18 @@ def reverse_whois_key() -> str:
     to, so this pivot is the reliable core, wired only when the operator supplies a key.
     """
     return os.environ.get("OPFOR_REVERSE_WHOIS_KEY", "")
+
+
+def roots_file() -> str:
+    """Path to a newline-delimited root-domain seed file, empty when unset."""
+    return os.environ.get("OPFOR_ROOTS_FILE", "")
+
+
+def hosts_file() -> str:
+    """Path to a newline-delimited known-host seed file, a DNS export, empty when unset."""
+    return os.environ.get("OPFOR_HOSTS_FILE", "")
+
+
+def target_name() -> str:
+    """The campaign target name, empty when unset, falls back to the first seed root."""
+    return os.environ.get("OPFOR_TARGET", "")

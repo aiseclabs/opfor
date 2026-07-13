@@ -48,7 +48,10 @@ SYSTEM = (
     '  "severity"  one of INFO, LOW, MEDIUM, HIGH, CRITICAL.\n'
     '  "where"     the URL or host the finding is about, copied from the report.\n'
     '  "evidence"  what in the report shows this is real.\n'
-    '  "poc"       a safe read that demonstrates it, or an empty string.\n'
+    '  "poc"       a single safe, reproducible command that demonstrates the finding, such '
+    'as `curl -s <the exact url>`, using only a read, never an attack, a login, or a state '
+    'change, so an operator can run it by hand and see the same evidence. Empty when no '
+    'command is needed.\n'
     '  "confidence" a number from 0 to 1.\n'
 )
 
@@ -625,9 +628,9 @@ def _finding_from_dict(data: object, *, known_ids: frozenset[str] = frozenset(),
         severity=severity,
         where=where,
         evidence=str(data.get("evidence", "")),
+        poc=str(data.get("poc", "")),
         data={
             "kind": category,
-            "poc": str(data.get("poc", "")),
             "confidence": data.get("confidence"),
         },
     )

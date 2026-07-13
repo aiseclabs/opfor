@@ -30,6 +30,9 @@ class Finding:
     severity: str
     where: str
     evidence: str = ""
+    # A safe, reproducible read that demonstrates the finding, never an attack, so an
+    # operator can confirm it by hand. Empty when the finding needs no command to show.
+    poc: str = ""
     data: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:

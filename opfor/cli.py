@@ -83,6 +83,10 @@ def _print_report(report) -> None:
     order = {"CRITICAL": 0, "HIGH": 1, "MEDIUM": 2, "LOW": 3, "INFO": 4}
     for finding in sorted(report.findings, key=lambda f: order.get(f.severity, 9)):
         print(f"  [{finding.severity}] {finding.title} -> {finding.where}")
+        if finding.evidence:
+            print(f"      evidence: {finding.evidence}")
+        if finding.poc:
+            print(f"      poc: {finding.poc}")
 
 
 def main(argv: list[str] | None = None) -> int:

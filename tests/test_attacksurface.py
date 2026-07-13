@@ -776,8 +776,28 @@ def test_model_findings_are_mapped_to_typed_findings():
     git = [f for f in report.findings if f.data.get("kind") == "sensitive-file-exposure"]
     assert git and git[0].severity == "HIGH"
     assert git[0].where.endswith("/.git/config")
-    assert git[0].data["poc"].startswith("curl")
+    assert git[0].poc.startswith("curl")
     assert git[0].data["confidence"] == 0.9
+
+
+def test_report_prints_the_poc_and_evidence(capsys):
+    from opfor import cli
+    from opfor.core.phase import Phase
+    from opfor.core.result import CLOSED, Finding, Report
+
+    report = Report(
+        scenario="attacksurface", status=CLOSED, reached=Phase.TRIAGE, terminal=Phase.TRIAGE,
+        findings=(Finding(id="f1", title="Exposed .git", severity="HIGH",
+                          where="https://x.example.com/.git/config",
+                          evidence="the response is a git config",
+                          poc="curl -s https://x.example.com/.git/config"),),
+        notes=())
+    cli._print_report(report)
+    out = capsys.readouterr().out
+    # the safe, reproducible command and its evidence ride the report, so an operator can
+    # confirm the finding by hand
+    assert "poc: curl -s https://x.example.com/.git/config" in out
+    assert "evidence: the response is a git config" in out
 
 
 def test_unknown_severity_falls_back_to_class_impact_then_medium():

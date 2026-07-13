@@ -635,6 +635,24 @@ def test_probe_list_includes_product_identity_and_version_paths():
         assert path in planner._PROBE_PATHS
 
 
+def test_batch_one_exposure_coverage_is_loaded():
+    from opfor.scenarios.attacksurface.classes import domain as domain_class
+    from opfor.scenarios.attacksurface.classes.domain import planner
+    from opfor.scenarios.attacksurface.triage import _load_classes, _load_clues
+
+    # new fixed-path leaks are probed, pure data in paths.yaml, no code
+    for path in ("/.ssh/id_rsa", "/web.config", "/backup.sql", "/.git/index", "/.npmrc"):
+        assert path in planner._PROBE_PATHS
+
+    knowledge = domain_class.KNOWLEDGE
+    # new deterministic clues direct the model at the buried signals
+    clue_ids = {c["id"] for c in _load_clues(knowledge / "exposures.yaml")}
+    assert {"exposed-private-key", "exposed-htpasswd", "exposed-sql-dump"} <= clue_ids
+    # new judgment families the model can reach for
+    class_ids = {c["id"] for c in _load_classes(knowledge / "classes")}
+    assert {"cors-misconfiguration", "verbose-error-disclosure"} <= class_ids
+
+
 def test_static_assets_are_never_probed_into_endpoints():
     # admin's script names /main.css, a static asset, so it must not become an endpoint
     world = _seed()

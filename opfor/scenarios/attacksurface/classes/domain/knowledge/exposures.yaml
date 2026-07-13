@@ -64,3 +64,41 @@ clues:
     note: a .DS_Store file is present, it leaks directory names
     path: "/.DS_Store"
     body_contains: "bud1"
+  - id: exposed-private-key
+    note: a PEM private key is present, an immediate credential exposure
+    path: "/.ssh/id_rsa"
+    body_contains: "private key"
+  - id: exposed-npmrc
+    note: an npm config is present, it may carry a registry auth token
+    path: "/.npmrc"
+    body_contains: "_authtoken"
+  - id: exposed-git-credentials
+    note: a git credentials store is present, it embeds credentials in a url
+    path: "/.git-credentials"
+    body_regex: "https?://[^:]+:[^@]+@"
+  - id: exposed-htpasswd
+    note: an htpasswd file is present, it carries user names and password hashes
+    path: "/.htpasswd"
+    body_regex: "(?m)^[a-z0-9_.-]+:\\$"
+  - id: exposed-git-index
+    note: a git index is present, the tree of tracked files can be listed
+    path: "/.git/index"
+    body_contains: "dirc"
+  - id: exposed-appsettings
+    note: a .NET appsettings file is present, it often holds connection strings
+    path: "/appsettings.json"
+    body_contains: "connectionstrings"
+    content_type: "json"
+  - id: exposed-web-config
+    note: a web.config is present, it may hold connection strings and secrets
+    path: "/web.config"
+    body_contains: "<configuration"
+  - id: exposed-actuator-env
+    note: a Spring Boot Actuator env dump is present, it leaks configuration and secrets
+    path: "/actuator/env"
+    body_contains: "propertysources"
+    content_type: "json"
+  - id: exposed-sql-dump
+    note: a SQL dump is present, it may expose the database contents
+    path: "/backup.sql"
+    body_regex: "insert into|create table|-- mysql dump"

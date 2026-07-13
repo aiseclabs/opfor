@@ -48,3 +48,31 @@ paths:
   - "/backup.tar.gz"
   - "/.aws/credentials"
   - "/wp-login.php"
+  # secret and configuration files that carry credentials or connection strings directly
+  - "/.npmrc"
+  - "/.git-credentials"
+  - "/.ssh/id_rsa"
+  - "/.htpasswd"
+  - "/wp-config.php.bak"
+  - "/appsettings.json"
+  - "/web.config"
+  - "/application.properties"
+  - "/credentials.json"
+  - "/config.yaml"
+  # version-control metadata beyond the config, enough to reconstruct the tree
+  - "/.git/index"
+  - "/.git/logs/HEAD"
+  - "/.hg/requires"
+  # debug, routing, and management surfaces that leak internals
+  - "/actuator/mappings"
+  - "/console"
+  - "/rails/info/routes"
+  # database dumps and archive backups left in the web root
+  - "/backup.sql"
+  - "/dump.sql"
+  - "/database.sql"
+  - "/db.sql"
+  - "/www.zip"
+  # further api specification locations
+  - "/v3/api-docs"
+  - "/swagger/v1/swagger.json"

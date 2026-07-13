@@ -13,6 +13,16 @@ triggers:
   - /.svn
   - /.hg
   - backup
+  - /.npmrc
+  - /.ssh
+  - /.htpasswd
+  - /.git-credentials
+  - web.config
+  - appsettings
+  - wp-config
+  - .sql
+  - connectionstrings
+  - private key
 ---
 
 # Sensitive File Exposure
@@ -32,7 +42,11 @@ an app shell. Strong signals, by class:
   high, often source and secrets in commit history.
 - Environment and credential files. A `/.env` whose body has `KEY=value` lines, a
   `/.aws/credentials` containing `aws_access_key_id`, a config file with tokens or
-  passwords. High, direct secret exposure.
+  passwords. High, direct secret exposure. The same class covers a PEM private key, an
+  `.npmrc` or `.git-credentials` with an embedded token, an `.htpasswd` with password
+  hashes, a `web.config` or `appsettings.json` or `application.properties` with a
+  connection string, and a SQL dump or archive backup left in the web root. Grade by the
+  secret revealed, a live credential is critical.
 - Management and introspection endpoints. A Spring Boot Actuator at `/actuator` answering
   JSON with a `_links` object, since `/actuator/env` and `/actuator/heapdump` then leak
   config and memory. High. Prometheus `/metrics` with `# HELP` lines, or an Apache

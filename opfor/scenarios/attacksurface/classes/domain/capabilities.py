@@ -483,7 +483,8 @@ class CveScan(Capability):
                 return Failed(reason=f"cve lookup {type(exc).__name__}: {exc}")
             cves = tuple(
                 CVE(id=str(c.get("id", "")), cvss=c.get("cvss"),
-                    severity=str(c.get("severity", "")), summary=str(c.get("summary", "")))
+                    severity=str(c.get("severity", "")), summary=str(c.get("summary", "")),
+                    references=tuple(str(u) for u in c.get("references", ())))
                 for c in raw if c.get("id"))
         payload = CVEScan(product=product, version=version, cpe=cpe, cves=cves)
         return Done(facts=(Fact(kind="cve_scanned", about=task.node, payload=payload),))

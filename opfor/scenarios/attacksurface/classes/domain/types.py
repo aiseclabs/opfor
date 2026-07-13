@@ -109,6 +109,9 @@ class CVE:
     cvss: float | None = None
     severity: str = ""
     summary: str = ""
+    # Published advisory and reference links from the CVE record, so a proof of concept for
+    # an exploit is anchored to a real source rather than invented.
+    references: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, kw_only=True)

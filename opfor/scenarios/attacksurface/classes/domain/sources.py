@@ -280,6 +280,7 @@ def subdomains_from_dnsdumpster(data, domain: str) -> set[str]:
 
 _NVD_TIMEOUT = 30
 _NVD_MAX = 25
+_NVD_MAX_REFS = 3
 
 
 def nvd_cves(product: str, version: str, cpe: str = "") -> list[dict]:
@@ -321,7 +322,9 @@ def cves_from_nvd(data) -> list[dict]:
         score, severity = _nvd_score(cve.get("metrics") or {})
         descriptions = cve.get("descriptions") or []
         summary = next((str(d.get("value", "")) for d in descriptions if d.get("lang") == "en"), "")
-        out.append({"id": cid, "cvss": score, "severity": severity, "summary": summary[:300]})
+        references = [str(r.get("url", "")) for r in (cve.get("references") or []) if r.get("url")]
+        out.append({"id": cid, "cvss": score, "severity": severity, "summary": summary[:300],
+                    "references": references[:_NVD_MAX_REFS]})
     return out
 
 

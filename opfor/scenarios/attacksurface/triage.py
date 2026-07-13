@@ -57,7 +57,10 @@ SYSTEM = (
     'disclosure, or an open introspection. Prefix "requires authorized exploitation: " and '
     'describe the steps when demonstrating it would take an attack, such as code execution, '
     'an authentication bypass, or an injection, which this reconnaissance run does not '
-    'perform. Empty when no command is needed.\n'
+    'perform, and cite the CVE reference links shown for it so the steps are anchored to a '
+    'published source rather than invented. A safe-read poc must be the exact request that '
+    'produced the evidence in the report, one already made, so it is known to work. Empty '
+    'when no command is needed.\n'
     '  "confidence" a number from 0 to 1.\n'
 )
 
@@ -372,6 +375,8 @@ class SurfaceTriage(Triage):
             line += f"\n  product: {scan.payload.product}{version}"
             for cve in scan.payload.cves[:_MAX_CVES]:
                 line += f"\n  CVE {cve.id} CVSS {cve.cvss} {cve.severity}: {cve.summary}"
+                if cve.references:
+                    line += f"\n    refs: {', '.join(cve.references)}"
         return line
 
     def _endpoint_line(self, ep) -> str:

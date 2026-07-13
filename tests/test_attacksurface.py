@@ -494,7 +494,7 @@ def test_http_probe_tries_every_public_ip_retries_timeouts_and_raises_the_unexpe
         calls.append((ip, scheme))
         if ip == "8.8.8.8":
             raise ConnectionRefusedError()
-        return (200, "nginx", "text/html", "<title>ok</title>", "")
+        return (200, "nginx", "text/html", "<title>ok</title>", "", ())
 
     monkeypatch.setattr(domains, "_connect", refuse_first_ip)
     result = domains.http_probe("host.example.com", ("8.8.8.8", "1.1.1.1"))
@@ -509,7 +509,7 @@ def test_http_probe_tries_every_public_ip_retries_timeouts_and_raises_the_unexpe
         state["n"] += 1
         if state["n"] == 1:
             raise TimeoutError()
-        return (200, "nginx", "text/html", "", "")
+        return (200, "nginx", "text/html", "", "", ())
 
     monkeypatch.setattr(domains, "_connect", timeout_then_ok)
     assert domains.http_probe("host.example.com", ("8.8.8.8",))["alive"] is True
@@ -529,12 +529,33 @@ def test_http_probe_tries_every_public_ip_retries_timeouts_and_raises_the_unexpe
     # the redirect target is captured, so a host fronted by an identity proxy is visible to
     # triage rather than read as a plain live host
     def connect_redirect(name, ip, scheme, path, **kw):
-        return (302, "", "text/html", "", "https://accounts.google.com/o/oauth2/v2/auth")
+        return (302, "", "text/html", "", "https://accounts.google.com/o/oauth2/v2/auth",
+                (("www-authenticate", "Bearer"),))
 
     monkeypatch.setattr(domains, "_connect", connect_redirect)
     redirected = domains.http_probe("host.example.com", ("8.8.8.8",))
     assert redirected["alive"] is True
     assert redirected["location"] == "https://accounts.google.com/o/oauth2/v2/auth"
+    assert redirected["headers"] == (("www-authenticate", "Bearer"),)
+
+
+def test_signal_headers_keeps_identity_drops_noise_and_masks_cookie_value():
+    from opfor.scenarios.attacksurface.classes.domain import sources as domains
+
+    class _Resp:
+        def getheaders(self):
+            return [("Server", "nginx"), ("Date", "Mon"), ("Content-Length", "10"),
+                    ("X-Powered-By", "Express"), ("WWW-Authenticate", "Bearer realm=x"),
+                    ("Set-Cookie", "_gitlab_session=secretvalue; Path=/")]
+
+    hdrs = dict(domains._signal_headers(_Resp()))
+    # identity headers are kept, noise is dropped
+    assert hdrs["x-powered-by"] == "Express"
+    assert hdrs["www-authenticate"] == "Bearer realm=x"
+    assert hdrs["server"] == "nginx"
+    assert "date" not in hdrs and "content-length" not in hdrs
+    # a cookie is reduced to its name, the value is a secret and is dropped
+    assert hdrs["set-cookie"] == "_gitlab_session"
 
 
 def test_static_assets_are_never_probed_into_endpoints():

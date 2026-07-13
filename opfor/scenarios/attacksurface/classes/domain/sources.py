@@ -487,12 +487,12 @@ def http_probe(name: str, addresses=()) -> dict:
         for scheme in ("https", "http"):
             for _ in range(_PROBE_ATTEMPTS):
                 try:
-                    status, server, _, body, location = _connect(name, ip, scheme, "/")
+                    status, server, _, body, location, hdrs = _connect(name, ip, scheme, "/")
                 except TimeoutError:
                     continue
                 except (OSError, http.client.HTTPException):
                     break
-                return _result(True, status, f"{scheme}://{name}/", server, body, location)
+                return _result(True, status, f"{scheme}://{name}/", server, body, location, hdrs)
     return _dead()
 
 
@@ -505,7 +505,7 @@ def fetch_url(name: str, addresses, path: str) -> dict:
     ip = public[0]
     for scheme in ("https", "http"):
         try:
-            status, server, content_type, body, location = _connect(name, ip, scheme, path)
+            status, server, content_type, body, location, _hdrs = _connect(name, ip, scheme, path)
         except Exception:
             continue
         match = _TITLE.search(body)
@@ -540,7 +540,7 @@ def fetch_document(name: str, path: str) -> dict:
     ip = public[0]
     for scheme in ("https", "http"):
         try:
-            status, _, content_type, body, _location = _connect(name, ip, scheme, path, read_limit=_DOCUMENT_LIMIT)
+            status, _, content_type, body, _location, _hdrs = _connect(name, ip, scheme, path, read_limit=_DOCUMENT_LIMIT)
         except Exception:
             continue
         return {"status": status, "content_type": content_type, "text": body}
@@ -561,8 +561,8 @@ def graphql_introspect(name: str, path: str = "/graphql") -> dict | None:
     body = _INTROSPECTION.encode("utf-8")
     for scheme in ("https", "http"):
         try:
-            status, _, _, text, _location = _connect(name, ip, scheme, path, read_limit=_DOCUMENT_LIMIT,
-                                                      method="POST", payload=body, content_type="application/json")
+            status, _, _, text, _location, _hdrs = _connect(name, ip, scheme, path, read_limit=_DOCUMENT_LIMIT,
+                                                             method="POST", payload=body, content_type="application/json")
         except Exception:
             continue
         if status and 200 <= status < 300:
@@ -727,6 +727,38 @@ def same_host_path(url: str, host: str) -> str | None:
     return None
 
 
+# Response headers that carry no identification value and only add noise, dropped from the
+# captured signal set. Everything else a server volunteers is kept, since the point is to
+# let the model and the knowledge judge product and proxy identity, not a fixed keyword list.
+_NOISE_HEADERS = frozenset((
+    "date", "content-length", "content-type", "connection", "keep-alive",
+    "transfer-encoding", "accept-ranges", "cache-control", "expires", "age", "vary",
+    "etag", "last-modified", "content-encoding", "content-language", "pragma",
+    "alt-svc", "report-to", "nel", "strict-transport-security", "content-security-policy",
+))
+_MAX_HEADERS = 24
+_MAX_HEADER_VALUE = 160
+
+
+def _signal_headers(resp) -> tuple:
+    """The response headers worth keeping for identification, name lowercased and value
+    bounded. A `set-cookie` is reduced to its cookie name, since the name is signal and the
+    value is a secret. Noise headers are dropped, everything else a server volunteers is
+    kept for the model to judge."""
+    out: list[tuple[str, str]] = []
+    for raw_name, raw_value in resp.getheaders():
+        name = str(raw_name).strip().lower()
+        if name in _NOISE_HEADERS:
+            continue
+        value = str(raw_value).strip()
+        if name == "set-cookie":
+            value = value.split("=", 1)[0].strip()
+        out.append((name, value[:_MAX_HEADER_VALUE]))
+        if len(out) >= _MAX_HEADERS:
+            break
+    return tuple(out)
+
+
 def _connect(name: str, ip: str, scheme: str, path: str, *, read_limit: int = _BODY_HEAD,
              method: str = "GET", payload: bytes | None = None,
              content_type: str = "") -> tuple:
@@ -756,18 +788,19 @@ def _connect(name: str, ip: str, scheme: str, path: str, *, read_limit: int = _B
         body = resp.read(read_limit).decode("utf-8", "replace")
         return (resp.status, resp.getheader("Server", "") or "",
                 resp.getheader("Content-Type", "") or "", body,
-                resp.getheader("Location", "") or "")
+                resp.getheader("Location", "") or "", _signal_headers(resp))
     finally:
         conn.close()
 
 
-def _result(alive: bool, status, url: str, server: str, body: str, location: str = "") -> dict:
+def _result(alive: bool, status, url: str, server: str, body: str, location: str = "",
+            headers: tuple = ()) -> dict:
     match = _TITLE.search(body)
     return {"alive": alive, "status": status, "url": url, "server": server,
             "title": match.group(1).strip()[:200] if match else "", "body": body.lower(),
-            "location": location}
+            "location": location, "headers": headers}
 
 
 def _dead() -> dict:
     return {"alive": False, "status": None, "url": "", "server": "", "title": "", "body": "",
-            "location": ""}
+            "location": "", "headers": ()}

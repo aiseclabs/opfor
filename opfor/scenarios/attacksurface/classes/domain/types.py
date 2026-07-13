@@ -46,6 +46,7 @@ class HTTP:
     title: str = ""
     body: str = ""
     location: str = ""
+    headers: tuple[tuple[str, str], ...] = ()
 
 
 @dataclass(frozen=True, kw_only=True)

@@ -343,6 +343,8 @@ class SurfaceTriage(Triage):
                 bits.append(f"server {http_data.server}")
             if http_data.location:
                 bits.append(f"redirect to {http_data.location}")
+            for header_name, header_value in http_data.headers:
+                bits.append(f"header {header_name}: {header_value}")
         if dangling:
             bits.append("does not resolve, seen only passively")
         if resolved_data is not None and resolved_data.cnames:

@@ -227,6 +227,7 @@ class HTTPDomain(Capability):
             title=str(result.get("title", "")),
             body=str(result.get("body", "")),
             location=str(result.get("location", "")),
+            headers=tuple((str(k), str(v)) for k, v in result.get("headers", ())),
         )
         return Done(facts=(Fact(kind="http", about=task.node, payload=payload),))
 

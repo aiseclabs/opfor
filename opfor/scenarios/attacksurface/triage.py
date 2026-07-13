@@ -424,7 +424,11 @@ class SurfaceTriage(Triage):
                 continue
             host = urlparse(spec.base).hostname or spec.base
             sample = ", ".join(list(spec.paths)[:_MAX_LIST])
-            out.append((f"api specification {spec.base}, {spec.count} operations\n  operations: {sample}", host))
+            line = f"api specification {spec.base}, {spec.count} operations\n  operations: {sample}"
+            audit = world.latest("spec_audit", fact.about)
+            if audit is not None:
+                line += self._spec_audit_detail(audit.payload)
+            out.append((line, host))
         for fact in world.facts("graphql"):
             schema = fact.payload
             if not schema.enabled or schema.count == 0:
@@ -435,6 +439,34 @@ class SurfaceTriage(Triage):
             sample = ", ".join(list(schema.operations)[:_MAX_LIST])
             out.append((f"graphql introspection {url}, {schema.count} operations\n  operations: {sample}", host))
         return out
+
+    def _spec_audit_detail(self, audit) -> str:
+        """Render the safe read verification of a specification's declared operations.
+
+        A declared operation is not a reachable one, so this separates the GET operations
+        that answered without authentication and returned real content from those the gate
+        refused, and lists the write and templated operations that were not probed and need
+        an authorized confirmation, so the model never grades an unprobed operation as open.
+        """
+        ops = audit.operations
+        verified = [op for op in ops if op.verified]
+        reachable = [op for op in verified
+                     if not op.auth_required and op.distinct and op.status is not None
+                     and 200 <= int(op.status) < 300]
+        gated = [op for op in verified
+                 if op.auth_required or (op.status is not None and 300 <= int(op.status) < 400)]
+        deferred = [op for op in ops if not op.verified]
+        lines = [f"\n  safe-read verification: {len(verified)} of {len(ops)} operations probed by GET"]
+        if reachable:
+            shown = "; ".join(f"GET {op.path} HTTP {op.status} {op.content_type or 'unknown type'}"
+                              for op in reachable[:_MAX_LIST])
+            lines.append(f"    reachable unauthenticated: {shown}")
+        if gated:
+            lines.append(f"    gated by auth or identity redirect: {len(gated)}")
+        if deferred:
+            shown = ", ".join(f"{op.methods} {op.path}".strip() for op in deferred[:_MAX_LIST])
+            lines.append(f"    not probed, needs authorized confirmation: {shown}")
+        return "\n".join(lines)
 
     def _bucket_lines(self, world: World) -> list[tuple[str, str]]:
         """The cloud buckets the run's derived names resolved to, grouped under one storage

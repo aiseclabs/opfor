@@ -132,6 +132,24 @@ def _spec_rule(world: World) -> list[Task]:
     return tasks
 
 
+def _spec_probe_rule(world: World) -> list[Task]:
+    """Verify the operations each exposed specification declares, once per spec.
+
+    Gated on the api_spec fact so it runs after the spec is parsed, and on its own
+    spec_audit fact so it runs once. It probes the target's declared GET operations, a
+    scoped recon act, so it carries the host for scope.
+    """
+    tasks: list[Task] = []
+    for node in world.nodes("endpoint"):
+        if not world.has_fact(node.id, "api_spec"):
+            continue
+        if world.has_fact(node.id, "spec_audit"):
+            continue
+        host = urlparse(node.payload.url).hostname or ""
+        tasks.append(Task(capability="endpoint_probe_spec", node=node.id, scope_host=host))
+    return tasks
+
+
 def _graphql_rule(world: World) -> list[Task]:
     """Introspect every reachable GraphQL endpoint that has not been introspected yet."""
     tasks: list[Task] = []
@@ -256,6 +274,7 @@ def enrich_rules(*, with_cve: bool = False):
         _harvest_rule,
         _endpoints_rule,
         _spec_rule,
+        _spec_probe_rule,
         _graphql_rule,
         _source_map_rule,
         _secret_scan_rule,

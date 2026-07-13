@@ -12,11 +12,22 @@ triggers:
 
 # Zero-Trust Proxy Fronting
 
-A host can sit behind an identity-aware proxy or a zero-trust gateway that authenticates
-every request before the service behind it is reached. Google IAP, Cloudflare Access, Azure
-AD Application Proxy, and an Okta or generic SSO gateway all work this way. The service is
-not directly exposed, the gate is. So this class is how the judge tells a gated host from an
-open one, and a gated host is reported at most as INFO, never as an open interface.
+A host can sit behind a gate that stands in front of the service. Two kinds of gate exist
+and they do not carry the same assurance, so the judge must tell them apart.
+
+A per-request proxy authenticates every request in front of the service, so a host behind
+one is gated on all paths at once. Google IAP, Cloudflare Access, and Azure AD Application
+Proxy are this kind. When the evidence names one, the whole host is gated and reported at
+most as INFO, and its individual interfaces need no separate check.
+
+An application single sign-on is weaker. An Okta or self-hosted SSO login the application
+itself redirects to, an appliance SSO such as a Jamf or a vendor login, only covers the
+paths the application routes through it. It does not prove every interface is gated. An API
+route, a health or metrics path, or a background endpoint may skip the redirect and answer
+directly, and the SSO product itself may carry a known authentication bypass. So for an SSO
+host, a redirect on the root is not a clean bill for the whole host, the individual
+operations still have to be verified, and any operation that answers with content instead
+of the SSO redirect is a gap to raise, not to wave through.
 
 ## How To Identify The Signal
 
@@ -29,19 +40,28 @@ Read the evidence, never guess from a host name.
   Access cookie, or a `WWW-Authenticate` challenge the gateway returns.
 - A login or consent page served for the root itself rather than for one deep path, so the
   whole host sits behind the gate.
+- A proxy assertion header or team cookie names a per-request proxy, so the gate is on all
+  paths. The absence of one, with only an application redirect, points to an SSO that covers
+  only what the application routes.
 
 ## What Rises To A Finding
 
-The proxy being present is not itself a finding, it is the target doing the right thing.
+The gate being present is not itself a finding, it is the target doing the right thing.
 Report INFO to record that the host exists and is gated, so the inventory stays honest.
-Raise above INFO only when the evidence shows the gate is bypassable or misconfigured, for
-example a path that reaches the service without the redirect, a health or metrics route the
-proxy forgot to cover, or an error that leaks internal detail before the gate.
+Raise above INFO when the evidence shows the gate is bypassable or does not cover the whole
+host, for example an operation that answers with content instead of the redirect, a health
+or metrics route the gate forgot to cover, or an error that leaks internal detail before the
+gate. For an application SSO host this bar is lower, since it does not cover every route by
+construction, so a verified operation that answered without the redirect is a real gap, and
+a known authentication bypass in the named SSO product is worth reporting.
 
 ## What Is Not A Finding
 
-- A cleanly gated host where every path redirects to the identity flow. This is protected.
-- A single sign-on login page with no reachable content behind it on the paths seen.
+- A host behind a per-request proxy, Google IAP, Cloudflare Access, or Azure AD Application
+  Proxy, where the proxy header or cookie is present. The whole host is gated.
+- An application SSO host where the operations that were actually probed all redirected to
+  the identity flow and none answered with content. Judge on what was verified, not on the
+  root redirect alone.
 
 ## Evidence And PoC
 

@@ -89,6 +89,40 @@ class APISpec:
 
 
 @dataclass(frozen=True, kw_only=True)
+class SpecOperation:
+    """One operation a specification declares, with the result of a safe read probe.
+
+    `verified` is True when a GET was actually sent, so a declared operation is never read
+    as reachable on the strength of the document alone. `auth_required` is True when that GET
+    was refused with 401 or 403, and `distinct` is True when the answer differed from the
+    host's catch-all, so a single-page app's blanket 200 is not read as real content.
+    `reason` records why an operation was not probed, a write method or a templated path, so
+    an unverified operation is never mistaken for a gated one.
+    """
+
+    path: str
+    methods: str
+    verified: bool = False
+    status: int | None = None
+    auth_required: bool = False
+    distinct: bool = False
+    location: str = ""
+    content_type: str = ""
+    reason: str = ""
+
+
+@dataclass(frozen=True, kw_only=True)
+class SpecAudit:
+    """The safe read audit of the operations an exposed specification declares. Each GET with
+    a concrete path is probed for authorization, a write method or a templated path is
+    recorded declared but unverified, so triage sees which of the declared surface is
+    actually reachable without authentication rather than merely listed."""
+
+    base: str
+    operations: tuple[SpecOperation, ...] = ()
+
+
+@dataclass(frozen=True, kw_only=True)
 class GraphQLSchema:
     """The result of a GraphQL introspection probe. `enabled` is True when introspection
     answered, which itself maps the whole API, and `operations` are the query and mutation

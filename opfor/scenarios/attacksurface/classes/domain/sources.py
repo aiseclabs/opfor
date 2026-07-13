@@ -719,6 +719,20 @@ def paths_from_openapi(doc) -> list[str]:
     return sorted(out)
 
 
+def split_operation(entry: str) -> tuple[tuple[str, ...], str]:
+    """Split a `METHODS path` operation entry into its methods and path.
+
+    `paths_from_openapi` names each operation methods first, `GET,POST /widgets`, so this
+    reverses that. Methods are uppercase letters and commas with no space, so the first
+    space splits them from the path. An entry with no leading methods, a bare path, yields
+    no methods.
+    """
+    head, sep, tail = entry.strip().partition(" ")
+    if sep and head and all(c.isalpha() or c == "," for c in head):
+        return tuple(m for m in head.split(",") if m), tail.strip()
+    return (), entry.strip()
+
+
 def operations_from_introspection(data) -> list[str]:
     """Query and mutation operation names from a GraphQL introspection result."""
     schema = (data or {}).get("__schema") if isinstance(data, dict) else None

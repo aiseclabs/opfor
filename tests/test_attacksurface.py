@@ -1620,3 +1620,63 @@ def test_robots_and_sitemap_parsing():
     assert paths == ["/admin", "/public"]
     assert sitemaps == ["https://h/sm.xml"]
     assert sitemap_paths("<urlset><url><loc>https://h.test/a</loc></url></urlset>", "h.test") == ["/a"]
+
+
+def test_split_operation_separates_methods_from_path():
+    from opfor.scenarios.attacksurface.classes.domain.sources import split_operation
+
+    assert split_operation("GET,POST /widgets") == (("GET", "POST"), "/widgets")
+    assert split_operation("DELETE,GET /jobs/{job_id}") == (("DELETE", "GET"), "/jobs/{job_id}")
+    assert split_operation("/bare-path") == ((), "/bare-path")
+
+
+def test_probe_spec_verifies_reads_defers_writes_and_skips_templated():
+    """A declared operation is not a reachable one, so ProbeSpec fetches each concrete GET
+    and leaves write and templated operations for an authorized confirmation."""
+    from opfor.core import Fact, Node, Task, World
+    from opfor.scenarios.attacksurface.classes.domain.capabilities import ProbeSpec
+    from opfor.scenarios.attacksurface.classes.domain.types import (
+        APISpec, DomainData, Endpoint, Resolved,
+    )
+
+    calls = []
+
+    def fetch(name, addresses, path):
+        calls.append(path)
+        if path.startswith("/opfor-baseline") or path.startswith("/does-not-exist"):
+            return {"status": 404, "content_type": "", "body": "", "location": ""}
+        if path == "/config/all":
+            return {"status": 200, "content_type": "application/json",
+                    "body": '{"ok":true}', "location": ""}
+        if path == "/users":
+            return {"status": 401, "content_type": "", "body": "", "location": ""}
+        return {"status": 404, "content_type": "", "body": "", "location": ""}
+
+    world = World()
+    world.add(Node(id="domain:api.example.com", type="domain",
+                   payload=DomainData(name="api.example.com", root="example.com", source="crt")))
+    world.absorb([Fact(kind="resolved", about="domain:api.example.com",
+                       payload=Resolved(resolvable=True, addresses=("203.0.113.5",), cnames=()))])
+    ep_id = "endpoint:api.example.com/openapi.json"
+    world.add(Node(id=ep_id, type="endpoint",
+                   payload=Endpoint(url="https://api.example.com/openapi.json", path="/openapi.json",
+                                    status=200, auth_required=False, content_type="application/json")))
+    world.absorb([Fact(kind="api_spec", about=ep_id, payload=APISpec(
+        base="https://api.example.com/openapi.json",
+        paths=("GET /config/all", "GET /users", "POST /process", "DELETE,GET /jobs/{job_id}"),
+        count=4))])
+
+    out = ProbeSpec(fetch).run(Task(capability="endpoint_probe_spec", node=ep_id), world)
+
+    facts = [f for f in out.facts if f.kind == "spec_audit"]
+    assert len(facts) == 1
+    ops = {op.path: op for op in facts[0].payload.operations}
+
+    assert ops["/config/all"].verified and ops["/config/all"].status == 200
+    assert not ops["/config/all"].auth_required and ops["/config/all"].distinct
+    assert ops["/users"].verified and ops["/users"].auth_required
+    assert not ops["/process"].verified and "write" in ops["/process"].reason
+    assert not ops["/jobs/{job_id}"].verified and "templated" in ops["/jobs/{job_id}"].reason
+    # A write operation and a templated path are never sent.
+    assert "/process" not in calls
+    assert "/jobs/{job_id}" not in calls

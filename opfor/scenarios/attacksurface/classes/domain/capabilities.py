@@ -27,6 +27,7 @@ from opfor.scenarios.attacksurface.classes.domain.sources import (
     operations_from_introspection,
     paths_from_openapi,
     paths_in_javascript,
+    split_operation,
     robots_entries,
     same_host_path,
     script_sources,
@@ -54,6 +55,8 @@ from opfor.scenarios.attacksurface.classes.domain.types import (
     SecretReport,
     SourceMapLeak,
     SourceMapReport,
+    SpecAudit,
+    SpecOperation,
 )
 
 _LINK = re.compile(r'(?:href|src)\s*=\s*["\']([^"\'#?]+)', re.IGNORECASE)
@@ -441,6 +444,85 @@ class ExpandSpec(Capability):
         paths = paths_from_openapi(parsed)
         payload = APISpec(base=endpoint.url, paths=tuple(paths), count=len(paths))
         return Done(facts=(Fact(kind="api_spec", about=task.node, payload=payload),))
+
+
+class ProbeSpec(Capability):
+    """ENRICH: verify the operations an exposed specification declares by a safe read.
+
+    ExpandSpec records what a specification declares, this checks whether the declaration is
+    reachable. Each declared GET with a concrete path is fetched once, so an operation is
+    never reported reachable on the strength of the document alone. A write method, POST,
+    PUT, PATCH, or DELETE, and a templated path are recorded declared but not probed, since
+    sending them could change state, so that verdict is deferred to an authorized
+    confirmation. Probing is a scoped GET recon act, so it carries the host for scope.
+    """
+
+    name = "endpoint_probe_spec"
+    phase = Phase.ENRICH
+    osint = False
+
+    _MAX_OPERATIONS = 200
+
+    def __init__(self, fetch_fn) -> None:
+        self._fetch = fetch_fn
+
+    def run(self, task: Task, world: World) -> Outcome:
+        spec = world.latest("api_spec", task.node)
+        if spec is None:
+            return Failed(reason="no api_spec fact on the target node")
+        endpoint = world.node(task.node).payload
+        host = urlparse(endpoint.url).hostname or ""
+        addresses = self._addresses(world, host)
+        baseline = self._baseline(host, addresses)
+        operations: list[SpecOperation] = []
+        for entry in list(spec.payload.paths)[: self._MAX_OPERATIONS]:
+            methods, path = split_operation(entry)
+            joined = ",".join(methods)
+            if not path.startswith("/") or "{" in path or "}" in path:
+                operations.append(SpecOperation(path=path, methods=joined,
+                                                reason="templated or relative path, not probed"))
+                continue
+            if "GET" not in methods:
+                operations.append(SpecOperation(path=path, methods=joined,
+                                                reason="write operation, not probed without authorization"))
+                continue
+            try:
+                result = self._fetch(host, addresses, path)
+            except Exception as exc:
+                operations.append(SpecOperation(path=path, methods=joined,
+                                                reason=f"probe error {type(exc).__name__}"))
+                continue
+            status = result.get("status")
+            if status is None:
+                operations.append(SpecOperation(path=path, methods=joined, reason="no response"))
+                continue
+            operations.append(SpecOperation(
+                path=path, methods=joined, verified=True, status=status,
+                auth_required=status in (401, 403),
+                distinct=_distinct(result, baseline),
+                location=str(result.get("location", "")),
+                content_type=str(result.get("content_type", "")),
+            ))
+        payload = SpecAudit(base=endpoint.url, operations=tuple(operations))
+        return Done(facts=(Fact(kind="spec_audit", about=task.node, payload=payload),))
+
+    def _addresses(self, world: World, host: str):
+        """The resolved public addresses of the spec's host, read from its domain node."""
+        for node in world.nodes("domain"):
+            if node.payload.name == host:
+                resolved = world.latest("resolved", node.id)
+                return resolved.payload.addresses if resolved else ()
+        return ()
+
+    def _baseline(self, host, addresses) -> dict:
+        for path in Endpoints._BASELINE_PATHS:
+            try:
+                result = self._fetch(host, addresses, path)
+            except Exception:
+                continue
+            if result.get("status") is not None:
+                return result
+        return {"status": None, "content_type": "", "body": ""}
 
 
 class GraphQLIntrospect(Capability):

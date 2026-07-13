@@ -196,6 +196,12 @@ def _cves(product, version, cpe=""):
     return []
 
 
+def _probe_url(url):
+    # By default every derived bucket name is absent, so the bucket scan is a quiet no-op. A
+    # test that drives a listable bucket overrides this seam.
+    return {"status": 404, "url": url, "content_type": "", "body": ""}
+
+
 def _make(**over):
     """Build the scenario with every seam faked, so no test touches the network or the
     model. A MockProvider stands in for the triage model, returning an empty result by
@@ -203,7 +209,8 @@ def _make(**over):
     provider to drive a canned model reply."""
     seams = dict(search_fn=_search, repos_fn=_repos, enumerate_fn=_enumerate, pivot_fn=_pivot,
                  resolve_fn=_resolve, probe_fn=_probe, fetch_fn=_fetch, fetch_doc_fn=_fetch_doc,
-                 introspect_fn=_introspect, wayback_fn=_wayback, identify_fn=_identify, cve_fn=_cves)
+                 introspect_fn=_introspect, wayback_fn=_wayback, identify_fn=_identify, cve_fn=_cves,
+                 probe_url_fn=_probe_url)
     seams.update(over)
     seams.setdefault("provider", MockProvider(default='{"findings": []}'))
     seams.setdefault("model", "test-model")
@@ -753,6 +760,41 @@ def test_backup_scan_finds_a_twin_of_an_observed_file():
     hits = [h for f in world.facts("backups") for h in f.payload.hits]
     assert any(h.url.endswith("/config.php.bak") and h.size > 0 for h in hits), \
         "expected a backups fact carrying the config.php.bak twin"
+
+
+def test_bucket_candidates_derives_valid_names_and_drops_malformed():
+    from opfor.scenarios.attacksurface.classes.domain import sources as domains
+
+    names = domains.bucket_candidates(["example", "example.com"], ["backup", "assets"])
+    assert "example" in names
+    assert "example-backup" in names        # base joined with an affix
+    assert "backup-example" in names        # affix joined with a base
+    assert "example.backup" in names        # dotted form
+    assert "example.com" in names           # a domain is itself a legal bucket name
+    # a name too short or with an illegal character never becomes a candidate
+    assert domains.bucket_candidates(["ab"], []) == []
+    assert domains.bucket_candidates(["a_b"], []) == []
+    # a public object listing is told apart from a generic 200 page
+    assert domains.bucket_listable("<ListBucketResult><Contents>x</Contents></ListBucketResult>")
+    assert not domains.bucket_listable("<html>welcome</html>")
+
+
+def test_bucket_scan_records_a_listable_and_a_private_bucket():
+    listing = "<ListBucketResult><Contents><Key>dump.sql</Key></Contents></ListBucketResult>"
+
+    def probe_url(url):
+        if "example-backup.s3" in url:
+            return {"status": 200, "url": url, "content_type": "application/xml", "body": listing}
+        if "example.blob.core.windows.net" in url:
+            return {"status": 403, "url": url, "content_type": "application/xml", "body": ""}
+        return {"status": 404, "url": url, "content_type": "", "body": ""}
+
+    report, _scenario, world = _run_capturing(probe_url_fn=probe_url)
+    buckets = [b for f in world.facts("buckets") for b in f.payload.buckets]
+    listable = [b for b in buckets if b.state == "listable"]
+    assert any(b.name == "example-backup" and b.provider == "s3" for b in listable), \
+        "expected the listable example-backup S3 bucket"
+    assert any(b.state == "private" for b in buckets), "expected the private Azure bucket"
 
 
 def test_cve_scan_fails_loud_when_identification_errors():

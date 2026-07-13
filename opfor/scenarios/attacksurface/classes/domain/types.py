@@ -161,6 +161,28 @@ class BackupReport:
 
 
 @dataclass(frozen=True, kw_only=True)
+class Bucket:
+    """One cloud object-storage bucket a derived name resolved to. `state` is `listable` when
+    an anonymous list returned objects, or `private` when the bucket exists but refused the
+    list. An absent name reaches no finding and is not recorded. Whether a listable bucket is
+    the target's and holds sensitive objects is triage's judgment, this is the raw fact."""
+
+    name: str
+    provider: str
+    url: str
+    state: str
+    status: int | None = None
+
+
+@dataclass(frozen=True, kw_only=True)
+class BucketReport:
+    """The cloud buckets a run's derived names resolved to. Empty is a real negative, no
+    derived name resolved to an existing bucket, not a failure."""
+
+    buckets: tuple[Bucket, ...] = ()
+
+
+@dataclass(frozen=True, kw_only=True)
 class CVE:
     """One known vulnerability record from a public database. `cvss` and `severity` are the
     published score, kept as raw facts, whether the CVE truly applies to the exposed surface

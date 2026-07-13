@@ -47,6 +47,7 @@ def build(
     fetch_doc_fn=domain_src.fetch_document,
     introspect_fn=domain_src.graphql_introspect,
     wayback_fn=domain_src.wayback_paths,
+    probe_url_fn=domain_src.fetch_public_url,
     identify_fn=None,
     cve_fn=domain_src.nvd_cves,
     provider: Provider | None = None,
@@ -94,7 +95,7 @@ def build(
         domain.assemble(enumerate_fn=enumerate_fn, pivot_fn=pivot_fn, resolve_fn=resolve_fn,
                         probe_fn=probe_fn, fetch_fn=fetch_fn, fetch_doc_fn=fetch_doc_fn,
                         introspect_fn=introspect_fn, wayback_fn=wayback_fn,
-                        reverse_whois_fn=reverse_whois_fn,
+                        probe_url_fn=probe_url_fn, reverse_whois_fn=reverse_whois_fn,
                         identify_fn=identify_fn, cve_fn=cve_fn),
         github.assemble(search_fn=search_fn, repos_fn=repos_fn),
     ]

@@ -1,0 +1,33 @@
+# Cloud object-storage bucket derivation. A bucket name is guessed from the target's own
+# identity, its org name and root domains, joined with a common affix, then checked
+# anonymously against each provider's public list endpoint. Deriving the name and building
+# the probe url is code, these are the data it derives from, so a new affix or a new provider
+# is a data change here, not a capability change.
+#
+# affixes: joined to each base, so an affix "backup" yields <base>-backup, backup-<base>, and
+#   <base>.backup. The bare base is always tried too.
+affixes:
+  - backup
+  - backups
+  - assets
+  - static
+  - media
+  - data
+  - files
+  - prod
+  - dev
+  - staging
+  - public
+  - uploads
+  - logs
+  - archive
+# providers: each turns a candidate name into a public list url, {bucket} expands to the
+# name. A 200 that returns an object listing reads as listable, a 401 or 403 as an existing
+# private bucket, anything else as absent.
+providers:
+  - name: s3
+    url: "https://{bucket}.s3.amazonaws.com/?list-type=2"
+  - name: gcs
+    url: "https://storage.googleapis.com/{bucket}/"
+  - name: azure
+    url: "https://{bucket}.blob.core.windows.net/?restype=container&comp=list"

@@ -21,6 +21,8 @@ from opfor.scenarios.attacksurface import config
 from opfor.scenarios.attacksurface.net import registrable_root
 from opfor.scenarios.attacksurface.classes.domain.sources import (
     backup_candidates,
+    bucket_candidates,
+    bucket_listable,
     operations_from_introspection,
     paths_from_openapi,
     paths_in_javascript,
@@ -36,6 +38,8 @@ from opfor.scenarios.attacksurface.classes.domain.types import (
     APISpec,
     BackupHit,
     BackupReport,
+    Bucket,
+    BucketReport,
     Candidates,
     CVE,
     CVEScan,
@@ -707,6 +711,74 @@ class BackupScan(Capability):
             if result.get("status") is not None:
                 return result
         return {"status": None, "content_type": "", "body": ""}
+
+
+class BucketScan(Capability):
+    """ENRICH: check cloud object-storage buckets derived from the target's identity.
+
+    A public S3, GCS, or Azure bucket named after the org or a root domain often holds the
+    backups, assets, or logs the target never meant to expose. The candidate names are
+    derived from the org name and the discovered roots joined with common affixes, both handed
+    in as data, and each is checked anonymously against each provider's public list endpoint,
+    also handed in. So the capability holds no name list and no provider of its own. It reads
+    only public cloud endpoints, never the target's own server and never with a credential, so
+    it is osint. It records the buckets that exist, private or listable, whether a listable
+    bucket is the target's and holds sensitive objects is triage's judgment.
+    """
+
+    name = "bucket_scan"
+    phase = Phase.ENRICH
+    osint = True
+
+    _MAX_CANDIDATES = 120
+
+    def __init__(self, probe_url_fn) -> None:
+        self._probe = probe_url_fn
+
+    def run(self, task: Task, world: World) -> Outcome:
+        affixes = tuple(task.params.get("affixes") or ())
+        providers = tuple(task.params.get("providers") or ())
+        names = bucket_candidates(self._bases(world), affixes)[:self._MAX_CANDIDATES]
+        buckets: list[Bucket] = []
+        for provider in providers:
+            pname = str(provider.get("name", ""))
+            template = str(provider.get("url", ""))
+            if not pname or "{bucket}" not in template:
+                continue
+            for name in names:
+                url = template.replace("{bucket}", name)
+                try:
+                    result = self._probe(url)
+                except Exception:
+                    continue
+                status = result.get("status")
+                if status == 200 and bucket_listable(result.get("body", "")):
+                    state = "listable"
+                elif status in (401, 403):
+                    state = "private"
+                else:
+                    continue
+                buckets.append(Bucket(name=name, provider=pname, url=url, state=state,
+                                      status=status))
+        payload = BucketReport(buckets=tuple(buckets))
+        return Done(facts=(Fact(kind="buckets", about=task.node, payload=payload),))
+
+    def _bases(self, world: World) -> list[str]:
+        """The identity strings the bucket names derive from, the org name and each discovered
+        root and its leftmost label, so a bucket named for the brand or a domain is reached."""
+        bases: list[str] = []
+        for node in world.nodes("org"):
+            if node.payload.name:
+                bases.append(node.payload.name)
+        for node in world.nodes("domain"):
+            data = node.payload
+            if data.name != data.root:
+                continue
+            bases.append(data.root)
+            label = data.root.split(".")[0]
+            if label:
+                bases.append(label)
+        return bases
 
 
 def _safe(thunk):

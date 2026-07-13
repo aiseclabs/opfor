@@ -613,6 +613,35 @@ def fetch_url(name: str, addresses, path: str) -> dict:
             "server": "", "title": "", "body": "", "location": ""}
 
 
+_PUBLIC_URL_TIMEOUT = 10
+_PUBLIC_URL_BODY = 4096
+
+
+def fetch_public_url(url: str) -> dict:
+    """Anonymous GET of a public url, for checking a derived cloud-storage endpoint.
+
+    A 403 or a 404 is a meaningful answer, the bucket exists but is private or it does not
+    exist, so an HTTP error is captured as its status rather than raised. A connection error
+    returns a null status, so a single unreachable candidate is skipped by the caller rather
+    than failing the whole scan. It never sends a credential, so it reads only what is public.
+    """
+    request = urllib.request.Request(url, headers={"User-Agent": _UA})
+    try:
+        with urllib.request.urlopen(request, timeout=_PUBLIC_URL_TIMEOUT) as resp:
+            body = resp.read(_PUBLIC_URL_BODY).decode("utf-8", "replace")
+            return {"status": resp.status, "url": url,
+                    "content_type": resp.headers.get("Content-Type", ""), "body": body}
+    except urllib.error.HTTPError as exc:
+        try:
+            body = exc.read(_PUBLIC_URL_BODY).decode("utf-8", "replace")
+        except Exception:
+            body = ""
+        content_type = exc.headers.get("Content-Type", "") if exc.headers else ""
+        return {"status": exc.code, "url": url, "content_type": content_type, "body": body}
+    except Exception:
+        return {"status": None, "url": url, "content_type": "", "body": ""}
+
+
 # --- self-declared interfaces: an app maps its own API --------------------
 
 _DOCUMENT_LIMIT = 2_000_000
@@ -812,6 +841,50 @@ def backup_candidates(path: str, *, append=(), rename=(), swap=()) -> list[str]:
             seen.add(candidate)
             result.append(candidate)
     return result
+
+
+_BUCKET_NAME = re.compile(r"^[a-z0-9][a-z0-9.\-]{1,61}[a-z0-9]$")
+# XML listing roots each provider returns for a public, listable bucket, so a 200 that is an
+# object listing is told apart from a 200 that is a generic page.
+_BUCKET_LISTING_MARKERS = ("<ListBucketResult", "<EnumerationResults", "<Contents>",
+                           "<Blob>", "<Blobs>")
+
+
+def _valid_bucket(name: str) -> bool:
+    """Whether a name is a legal object-storage bucket, the shared 3 to 63 char lowercase
+    rule, so a malformed candidate is dropped before it is ever requested."""
+    return bool(_BUCKET_NAME.match(name)) and ".." not in name
+
+
+def bucket_candidates(bases, affixes) -> list[str]:
+    """Candidate bucket names from the target's identity bases and common affixes, deduped
+    and validated. Deriving the name is the mechanism here, the bases and the affixes are the
+    data the caller hands in, so a new affix is a data change."""
+    names: list[str] = []
+
+    def add(name: str) -> None:
+        name = name.strip(".-").lower()
+        if _valid_bucket(name) and name not in names:
+            names.append(name)
+
+    for base in bases:
+        base = str(base).strip().lower()
+        if not base:
+            continue
+        add(base)
+        for affix in affixes:
+            affix = str(affix).strip().lower()
+            if not affix:
+                continue
+            add(f"{base}-{affix}")
+            add(f"{affix}-{base}")
+            add(f"{base}.{affix}")
+    return names
+
+
+def bucket_listable(body: str) -> bool:
+    """Whether a 200 body is a public object listing rather than a generic page."""
+    return any(marker in (body or "") for marker in _BUCKET_LISTING_MARKERS)
 
 
 def script_sources(body: str, host: str) -> list[str]:

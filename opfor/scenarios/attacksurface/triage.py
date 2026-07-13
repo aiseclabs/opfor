@@ -335,6 +335,9 @@ class SurfaceTriage(Triage):
         for line, host in self._spec_lines(world):
             block(host).append(line)
 
+        for line, host in self._bucket_lines(world):
+            block(host).append(line)
+
         return [f"## {host}\n" + "\n".join(blocks[host]) for host in order if blocks[host]]
 
     def _host_line(self, world: World, node) -> str | None:
@@ -431,6 +434,17 @@ class SurfaceTriage(Triage):
             host = urlparse(url).hostname or url
             sample = ", ".join(list(schema.operations)[:_MAX_LIST])
             out.append((f"graphql introspection {url}, {schema.count} operations\n  operations: {sample}", host))
+        return out
+
+    def _bucket_lines(self, world: World) -> list[tuple[str, str]]:
+        """The cloud buckets the run's derived names resolved to, grouped under one storage
+        block so the model judges which are the target's and which are listable. A bucket name
+        alone proves nothing, the model decides ownership and severity from the evidence."""
+        out: list[tuple[str, str]] = []
+        for fact in world.facts("buckets"):
+            for bucket in fact.payload.buckets:
+                out.append((f"cloud bucket {bucket.url}, provider {bucket.provider}, "
+                            f"{bucket.state}, HTTP {bucket.status}", "cloud storage"))
         return out
 
     def _exposure_clues(self, ep) -> list[str]:

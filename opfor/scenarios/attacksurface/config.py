@@ -27,7 +27,7 @@ def certspotter_token() -> str:
     paging that walks a large log, so a token is a throughput lift that makes a full walk
     reliable, not a requirement. A free account provides one.
     """
-    return os.environ.get("OPFOR_CERTSPOTTER_KEY", "")
+    return os.environ.get("OPFOR_CERTSPOTTER_API_KEY", "")
 
 
 def virustotal_key() -> str:
@@ -38,7 +38,7 @@ def virustotal_key() -> str:
     a key it is the reliable free passive source, joined into the union. A free account
     provides one.
     """
-    return os.environ.get("OPFOR_VIRUSTOTAL_KEY", "")
+    return os.environ.get("OPFOR_VIRUSTOTAL_API_KEY", "")
 
 
 def otx_key() -> str:
@@ -49,18 +49,19 @@ def otx_key() -> str:
     cannot see, so with a key it joins the union. A free account provides one. Without a
     key the source is simply left out of the union.
     """
-    return os.environ.get("OPFOR_OTX_KEY", "")
+    return os.environ.get("OPFOR_OTX_API_KEY", "")
 
 
 def reverse_whois_key() -> str:
-    """A reverse-WHOIS provider key, empty when unset.
+    """The WhoisXML API key for the reverse-WHOIS pivot, empty when unset.
 
-    Reverse-WHOIS has no keyless mode, a provider bills for the bulk registration index,
+    Reverse-WHOIS has no keyless mode, the provider bills for the bulk registration index,
     so without a key the registrant pivot is left out of the run rather than failing per
     root. Ownership by registration is the definitional signal of who a domain belongs
     to, so this pivot is the reliable core, wired only when the operator supplies a key.
+    The variable is named for the provider, like the other source keys, not the pivot.
     """
-    return os.environ.get("OPFOR_REVERSE_WHOIS_KEY", "")
+    return os.environ.get("OPFOR_WHOISXML_API_KEY", "")
 
 
 def roots_file() -> str:

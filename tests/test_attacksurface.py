@@ -1126,7 +1126,7 @@ def test_subdomains_from_vt_reads_relationship_ids():
 def test_virustotal_is_skipped_without_a_key(monkeypatch):
     from opfor.scenarios.attacksurface.classes.domain import sources as d
 
-    monkeypatch.delenv("OPFOR_VIRUSTOTAL_KEY", raising=False)
+    monkeypatch.delenv("OPFOR_VIRUSTOTAL_API_KEY", raising=False)
     # no key means the source contributes nothing and makes no network call
     assert d.virustotal_subdomains("example.com") == set()
 

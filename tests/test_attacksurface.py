@@ -606,6 +606,50 @@ def test_nvd_cves_returns_nothing_for_an_unidentified_product():
     assert domains.nvd_cves("", "1.0") == []
 
 
+def test_nvd_keyword_search_uses_the_product_alone_not_the_version(monkeypatch):
+    """NVD keyword search matches the description text, where a version rarely appears, so
+    the query is the product alone, or a version-bearing product would return nothing."""
+    from opfor.scenarios.attacksurface.classes.domain import sources as domains
+
+    queries = []
+    monkeypatch.setattr(domains, "_nvd_fetch", lambda q: queries.append(q) or [])
+    domains.nvd_cves("litellm", "1.90.0")
+    assert queries == ["keywordSearch=litellm"]
+
+
+def test_nvd_falls_back_to_a_product_keyword_when_the_cpe_match_is_empty(monkeypatch):
+    """A wrong vendor guess or a cve not tagged with the cpe yields an empty cpe match, so
+    the query falls back to a product keyword rather than missing a real advisory."""
+    from opfor.scenarios.attacksurface.classes.domain import sources as domains
+
+    queries = []
+
+    def fake_fetch(query):
+        queries.append(query)
+        if query.startswith("virtualMatchString"):
+            return []
+        return [{"id": "CVE-2026-40217"}]
+
+    monkeypatch.setattr(domains, "_nvd_fetch", fake_fetch)
+    result = domains.nvd_cves("litellm", "1.90.0", cpe="berriai:litellm")
+    assert result == [{"id": "CVE-2026-40217"}]
+    assert len(queries) == 2
+    assert queries[0].startswith("virtualMatchString")
+    assert queries[1] == "keywordSearch=litellm"
+
+
+def test_nvd_cpe_match_with_results_does_not_fall_back(monkeypatch):
+    from opfor.scenarios.attacksurface.classes.domain import sources as domains
+
+    queries = []
+    monkeypatch.setattr(domains, "_nvd_fetch",
+                        lambda q: queries.append(q) or [{"id": "CVE-2020-0001"}])
+    result = domains.nvd_cves("grafana", "9.0.0", cpe="grafana:grafana")
+    assert result == [{"id": "CVE-2020-0001"}]
+    assert len(queries) == 1
+    assert queries[0].startswith("virtualMatchString")
+
+
 def test_nvd_throttle_serializes_calls_to_stay_under_the_rate_limit(monkeypatch):
     from opfor.scenarios.attacksurface.classes.domain import sources as domains
 

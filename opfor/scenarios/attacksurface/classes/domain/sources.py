@@ -317,23 +317,35 @@ def _nvd_wait(interval: float) -> None:
 def nvd_cves(product: str, version: str, cpe: str = "") -> list[dict]:
     """CVEs affecting a product from the NVD 2.0 API, most a bounded page.
 
-    A cpe as a `vendor:product` string with a version matches the affected version set
-    precisely, which the model supplies when it knows the product, and a bare product falls
-    back to a keyword search. Querying NVD is a public read that never touches the target,
-    keyless by default and higher-rate with a key. It returns raw CVE facts, whether a CVE
-    truly applies to the exposed surface and how severe is triage's judgment, not this.
+    A cpe as a `vendor:product` string matches the affected set precisely, including a range
+    the version falls in, which the model supplies when it knows the product. A cpe match
+    that names nothing, a wrong vendor guess or a cve not tagged with the cpe, falls back to
+    a keyword search on the product so a real advisory is not missed. The keyword search uses
+    the product name alone and never the version, since NVD keyword search matches the cve
+    description text, and a version string almost never appears there, so adding it would
+    return nothing. Whether a returned cve applies to this version and how severe is triage's
+    judgment, which reads the version from the surface, not this seam. Querying NVD is a
+    public read that never touches the target, keyless by default and higher-rate with a key.
     """
     if not product:
         return []
+    if cpe:
+        version_field = version or "*"
+        match = urllib.parse.quote(f"cpe:2.3:a:{cpe}:{version_field}:*:*:*:*:*:*:*", safe="")
+        results = _nvd_fetch(f"virtualMatchString={match}")
+        if results:
+            return results
+    return _nvd_fetch(f"keywordSearch={urllib.parse.quote(product)}")
+
+
+def _nvd_fetch(query: str) -> list[dict]:
+    """One NVD 2.0 query, throttled and retried, returning the parsed CVE records. The
+    process-wide throttle serializes concurrent scans under the rate limit, and a 429 is
+    retried with a back-off that honors a Retry-After header before it is raised loud."""
     headers = {"User-Agent": _UA, "Accept": "application/json"}
     key = config.nvd_api_key()
     if key:
         headers["apiKey"] = key
-    if cpe and version:
-        match = urllib.parse.quote(f"cpe:2.3:a:{cpe}:{version}:*:*:*:*:*:*:*", safe="")
-        query = f"virtualMatchString={match}"
-    else:
-        query = f"keywordSearch={urllib.parse.quote((product + ' ' + version).strip())}"
     url = f"https://services.nvd.nist.gov/rest/json/cves/2.0?{query}&resultsPerPage={_NVD_MAX}"
     request = urllib.request.Request(url, headers=headers)
     interval = _NVD_INTERVAL_KEYED if key else _NVD_INTERVAL_KEYLESS
@@ -344,8 +356,6 @@ def nvd_cves(product: str, version: str, cpe: str = "") -> list[dict]:
                 data = json.loads(resp.read().decode("utf-8", "replace"))
             return cves_from_nvd(data)
         except urllib.error.HTTPError as exc:
-            # A rate-limit answer is retried after a back-off, longer each attempt and
-            # honoring a Retry-After header, and only a persistent limit is raised loud.
             if exc.code != 429 or attempt == _NVD_RETRIES - 1:
                 raise
             retry_after = exc.headers.get("Retry-After") if exc.headers else None

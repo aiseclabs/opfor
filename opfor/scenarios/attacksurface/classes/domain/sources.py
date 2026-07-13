@@ -72,33 +72,51 @@ def subdomains(domain: str) -> set[str]:
 def certspotter_subdomains(domain: str) -> set[str]:
     """Subdomains of a domain seen in certificate transparency, via certspotter, paged.
 
-    The free endpoint returns one bounded page, so this follows the `after` cursor to walk
-    the log rather than stopping at the first page, which multiplies recall many times over
-    on a large log. It stops at a page cap so the walk stays bounded.
+    The free endpoint returns one bounded page, so the walk follows the `after` cursor
+    across pages rather than stopping at the first, which multiplies recall many times over
+    on a large log. See `_certspotter_paged` for the page cap and the keyless 429 fallback
+    every certspotter reader shares.
+    """
+    names: set[str] = set()
+    for issuance in _certspotter_paged(domain):
+        for raw in issuance.get("dns_names", []):
+            # a wildcard such as *.dev.example.com is kept with its star, not silently
+            # collapsed to the base, so the enumeration can flag it as a blind spot
+            name = str(raw).strip().lower()
+            if name and name.endswith("." + domain) and looks_like_host(name):
+                names.add(name)
+    return names
+
+
+def _certspotter_paged(domain: str) -> list:
+    """The certspotter issuance walk with its page cap and keyless 429 fallback, returning
+    the raw issuance records so every reader keeps the per-certificate grouping the sibling
+    guard needs.
 
     A token raises the page cap, but the rate limit is per account, so a token whose free
     quota is spent answers 429 while the anonymous per-address bucket is a separate pool
     that may still answer. So a 429 on the token walk falls back to one keyless walk rather
-    than blinding this source, and only when the keyless walk also fails is the error
-    raised.
+    than blinding the source, and only when the keyless walk also fails is the error raised.
     """
     token = config.certspotter_token()
     if not token:
-        return _certspotter_walk(domain, token=None, pages=_CERTSPOTTER_PAGES_KEYLESS)
+        return _certspotter_issuances(domain, token=None, pages=_CERTSPOTTER_PAGES_KEYLESS)
     try:
-        return _certspotter_walk(domain, token=token, pages=_CERTSPOTTER_PAGES)
+        return _certspotter_issuances(domain, token=token, pages=_CERTSPOTTER_PAGES)
     except urllib.error.HTTPError as exc:
         if exc.code != 429:
             raise
-        return _certspotter_walk(domain, token=None, pages=_CERTSPOTTER_PAGES_KEYLESS)
+        return _certspotter_issuances(domain, token=None, pages=_CERTSPOTTER_PAGES_KEYLESS)
 
 
-def _certspotter_walk(domain: str, *, token: str | None, pages: int) -> set[str]:
-    """Walk the certspotter issuance log for `domain`, authenticated when a token is given."""
+def _certspotter_issuances(domain: str, *, token: str | None, pages: int) -> list:
+    """Walk the certspotter issuance log for `domain`, returning the raw records across
+    pages, authenticated when a token is given. The walk follows the `after` cursor between
+    pages and stops at the page cap so it stays bounded."""
     headers = {"User-Agent": _UA, "Accept": "application/json"}
     if token:
         headers["Authorization"] = f"Bearer {token}"
-    names: set[str] = set()
+    records: list = []
     after = ""
     for _ in range(pages):
         url = (f"https://api.certspotter.com/v1/issuances?domain={domain}"
@@ -110,17 +128,11 @@ def _certspotter_walk(domain: str, *, token: str | None, pages: int) -> set[str]
             issuances = json.loads(resp.read().decode("utf-8", "replace"))
         if not issuances:
             break
-        for issuance in issuances:
-            for raw in issuance.get("dns_names", []):
-                # a wildcard such as *.dev.example.com is kept with its star, not silently
-                # collapsed to the base, so the enumeration can flag it as a blind spot
-                name = str(raw).strip().lower()
-                if name and name.endswith("." + domain) and looks_like_host(name):
-                    names.add(name)
+        records.extend(issuances)
         after = str(issuances[-1].get("id") or "")
         if not after:
             break
-    return names
+    return records
 
 
 _VT_PAGES = 10  # cap on cursor pages, each up to the page limit, bounds a large domain
@@ -220,15 +232,12 @@ def cert_sibling_roots(domain: str) -> dict[str, str]:
 
     A certificate names every host its holder proved control of to the certificate
     authority, so a root bundled on the same certificate as a known root is owned by the
-    same party, evidence rather than a guess. The parse and the multi-tenant guard live
-    in `sibling_roots_from_issuances`, so a test drives them without a network call.
+    same party, evidence rather than a guess. The log is paged the same way the subdomain
+    source pages it, so a sibling on a certificate past the first page is not missed. The
+    parse and the multi-tenant guard live in `sibling_roots_from_issuances`, so a test
+    drives them without a network call.
     """
-    url = (f"https://api.certspotter.com/v1/issuances?domain={domain}"
-           "&include_subdomains=true&expand=dns_names")
-    request = urllib.request.Request(url, headers={"User-Agent": _UA, "Accept": "application/json"})
-    with urllib.request.urlopen(request, timeout=_TIMEOUT) as resp:
-        issuances = json.loads(resp.read().decode("utf-8", "replace"))
-    return sibling_roots_from_issuances(issuances, domain)
+    return sibling_roots_from_issuances(_certspotter_paged(domain), domain)
 
 
 def sibling_roots_from_issuances(issuances, domain: str) -> dict[str, str]:

@@ -811,6 +811,44 @@ def test_shared_certificate_is_not_treated_as_ownership_evidence():
     assert sibling_roots_from_issuances(shared, "example.com") == {}
 
 
+def test_cert_sibling_pivot_walks_past_the_first_page(monkeypatch):
+    import urllib.request
+
+    from opfor.scenarios.attacksurface import config
+    from opfor.scenarios.attacksurface.classes.domain import sources as domains
+
+    monkeypatch.setattr(config, "certspotter_token", lambda: None)
+
+    class _Resp:
+        def __init__(self, payload):
+            self._payload = payload
+
+        def read(self):
+            return json.dumps(self._payload).encode("utf-8")
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+    # page one holds only the seed's own cert, the sibling rides a cert reached only once
+    # the walk follows the `after` cursor to the next page, so a single-page fetch misses it
+    pages = {
+        "": [{"id": "1", "dns_names": ["example.com"]}],
+        "1": [{"id": "2", "dns_names": ["example.com", "example.net"]}],
+    }
+
+    def fake_urlopen(request, timeout=0):
+        after = request.full_url.split("after=")[1] if "after=" in request.full_url else ""
+        return _Resp(pages.get(after, []))
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+    assert domains.cert_sibling_roots("example.com") == {
+        "example.net": "shares a certificate with example.com, 2 roots on the cert"
+    }
+
+
 def test_certspotter_token_429_falls_back_to_an_anonymous_walk(monkeypatch):
     import urllib.error
     import urllib.request

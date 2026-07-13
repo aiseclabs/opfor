@@ -444,7 +444,8 @@ class SurfaceTriage(Triage):
         for fact in world.facts("buckets"):
             for bucket in fact.payload.buckets:
                 out.append((f"cloud bucket {bucket.url}, provider {bucket.provider}, "
-                            f"{bucket.state}, HTTP {bucket.status}", "cloud storage"))
+                            f"{bucket.state}, HTTP {bucket.status}, {bucket.evidence}",
+                            "cloud storage"))
         return out
 
     def _exposure_clues(self, ep) -> list[str]:

@@ -762,39 +762,58 @@ def test_backup_scan_finds_a_twin_of_an_observed_file():
         "expected a backups fact carrying the config.php.bak twin"
 
 
-def test_bucket_candidates_derives_valid_names_and_drops_malformed():
+def test_cloud_bucket_from_url_recognizes_provider_forms():
     from opfor.scenarios.attacksurface.classes.domain import sources as domains
 
-    names = domains.bucket_candidates(["example", "example.com"], ["backup", "assets"])
-    assert "example" in names
-    assert "example-backup" in names        # base joined with an affix
-    assert "backup-example" in names        # affix joined with a base
-    assert "example.backup" in names        # dotted form
-    assert "example.com" in names           # a domain is itself a legal bucket name
-    # a name too short or with an illegal character never becomes a candidate
-    assert domains.bucket_candidates(["ab"], []) == []
-    assert domains.bucket_candidates(["a_b"], []) == []
+    s3v = domains.cloud_bucket_from_url("https://my-bucket.s3.amazonaws.com/key.txt")
+    assert s3v["provider"] == "s3" and s3v["bucket"] == "my-bucket"
+    s3r = domains.cloud_bucket_from_url("https://s3.eu-west-1.amazonaws.com/other-bucket/x")
+    assert s3r["provider"] == "s3" and s3r["bucket"] == "other-bucket"
+    gcs = domains.cloud_bucket_from_url("https://storage.googleapis.com/data-bucket/o")
+    assert gcs["provider"] == "gcs" and gcs["bucket"] == "data-bucket"
+    # a bare host, the shape a CNAME takes, is recognized without a scheme
+    cname = domains.cloud_bucket_from_url("assets-bucket.s3.us-east-2.amazonaws.com")
+    assert cname["provider"] == "s3" and cname["bucket"] == "assets-bucket"
+    az = domains.cloud_bucket_from_url("https://acct.blob.core.windows.net/container/blob")
+    assert az["provider"] == "azure" and az["bucket"] == "acct/container"
+    # an azure account with no container cannot be listed, so it is not a bucket here
+    assert domains.cloud_bucket_from_url("acct.blob.core.windows.net") is None
+    # a non-cloud url is not a bucket
+    assert domains.cloud_bucket_from_url("https://example.com/path") is None
+    # the reference extractor keeps only cloud-storage hosts
+    refs = domains.cloud_refs_in_text('a="https://x.s3.amazonaws.com/k"; b="https://example.com/y"')
+    assert refs == ["https://x.s3.amazonaws.com/k"]
     # a public object listing is told apart from a generic 200 page
     assert domains.bucket_listable("<ListBucketResult><Contents>x</Contents></ListBucketResult>")
     assert not domains.bucket_listable("<html>welcome</html>")
 
 
-def test_bucket_scan_records_a_listable_and_a_private_bucket():
+def test_bucket_scan_checks_buckets_the_target_reveals_by_cname():
     listing = "<ListBucketResult><Contents><Key>dump.sql</Key></Contents></ListBucketResult>"
+
+    def resolve(name):
+        base = _resolve(name)
+        if name == "admin.example.com":
+            return {**base, "cnames": ("example-backup.s3.amazonaws.com",)}
+        if name == "www.example.com":
+            return {**base, "cnames": ("example-private.s3.amazonaws.com",)}
+        return base
 
     def probe_url(url):
         if "example-backup.s3" in url:
             return {"status": 200, "url": url, "content_type": "application/xml", "body": listing}
-        if "example.blob.core.windows.net" in url:
+        if "example-private.s3" in url:
             return {"status": 403, "url": url, "content_type": "application/xml", "body": ""}
         return {"status": 404, "url": url, "content_type": "", "body": ""}
 
-    report, _scenario, world = _run_capturing(probe_url_fn=probe_url)
+    report, _scenario, world = _run_capturing(resolve_fn=resolve, probe_url_fn=probe_url)
     buckets = [b for f in world.facts("buckets") for b in f.payload.buckets]
     listable = [b for b in buckets if b.state == "listable"]
-    assert any(b.name == "example-backup" and b.provider == "s3" for b in listable), \
-        "expected the listable example-backup S3 bucket"
-    assert any(b.state == "private" for b in buckets), "expected the private Azure bucket"
+    assert any(b.name == "example-backup" and b.provider == "s3"
+               and b.evidence == "CNAME from admin.example.com" for b in listable), \
+        "expected the listable example-backup S3 bucket discovered by CNAME"
+    assert any(b.name == "example-private" and b.state == "private" for b in buckets), \
+        "expected the private example-private bucket"
 
 
 def test_cve_scan_fails_loud_when_identification_errors():

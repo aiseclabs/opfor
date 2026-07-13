@@ -161,23 +161,33 @@ class BackupReport:
 
 
 @dataclass(frozen=True, kw_only=True)
+class CloudRefs:
+    """The cloud-storage urls a host's pages reference, harvested so a bucket is discovered
+    from what the target itself loads rather than guessed. Empty is a real negative."""
+
+    urls: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True, kw_only=True)
 class Bucket:
-    """One cloud object-storage bucket a derived name resolved to. `state` is `listable` when
+    """One cloud object-storage bucket discovered from evidence, a url the target references or
+    a subdomain CNAME that points at it, `evidence` records which. `state` is `listable` when
     an anonymous list returned objects, or `private` when the bucket exists but refused the
-    list. An absent name reaches no finding and is not recorded. Whether a listable bucket is
-    the target's and holds sensitive objects is triage's judgment, this is the raw fact."""
+    list. Whether a listable bucket holds sensitive objects is triage's judgment, this is the
+    raw fact."""
 
     name: str
     provider: str
     url: str
     state: str
+    evidence: str = ""
     status: int | None = None
 
 
 @dataclass(frozen=True, kw_only=True)
 class BucketReport:
-    """The cloud buckets a run's derived names resolved to. Empty is a real negative, no
-    derived name resolved to an existing bucket, not a failure."""
+    """The cloud buckets the run discovered and checked. Empty is a real negative, no
+    referenced url or CNAME named a reachable bucket, not a failure."""
 
     buckets: tuple[Bucket, ...] = ()
 

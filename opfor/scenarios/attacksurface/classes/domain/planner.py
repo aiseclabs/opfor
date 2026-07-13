@@ -46,11 +46,6 @@ _BACKUP_APPEND = [str(s) for s in (_BACKUPS.get("append") or [])]
 _BACKUP_RENAME = [str(s) for s in (_BACKUPS.get("rename") or [])]
 _BACKUP_SWAP = [str(s) for s in (_BACKUPS.get("swap") or [])]
 
-# Cloud bucket affixes and provider list endpoints for the bucket scan, loaded here and handed
-# to the capability, so no capability reads a knowledge file.
-_BUCKETS = yaml.safe_load((_KNOWLEDGE / "buckets.yaml").read_text(encoding="utf-8")) or {}
-_BUCKET_AFFIXES = [str(s) for s in (_BUCKETS.get("affixes") or [])]
-_BUCKET_PROVIDERS = [dict(p) for p in (_BUCKETS.get("providers") or [])]
 
 
 def _live_domains(world: World) -> list:
@@ -197,18 +192,24 @@ def _backup_rule(world: World) -> list[Task]:
 
 
 def _bucket_rule(world: World) -> list[Task]:
-    """Check cloud buckets derived from the target's identity, once per run on the org node.
-    It runs in ENRICH, after MAP has discovered the roots the names derive from. It hands the
-    capability the affixes and provider endpoints, so it reads no knowledge file, and it reads
-    only public cloud endpoints, so it needs no scope host."""
+    """Check the cloud buckets the target reveals, once per run on the org node.
+
+    It waits until every domain is resolved and every live host is harvested, so the CNAME and
+    referenced-url evidence the scan reads is complete before it fires, not empty because it
+    ran before any host was probed. It reads only public cloud endpoints, so it needs no scope
+    host."""
+    domains = world.nodes("domain")
+    if not domains or any(not world.has_fact(node.id, "resolved") for node in domains):
+        return []
+    if any(not world.has_fact(node.id, "harvested") for node in _live_domains(world)):
+        return []
     tasks: list[Task] = []
     for node in world.nodes("org"):
         if not class_enabled(node.payload, "domain"):
             continue
         if world.has_fact(node.id, "buckets"):
             continue
-        tasks.append(Task(capability="bucket_scan", node=node.id,
-                          params={"affixes": _BUCKET_AFFIXES, "providers": _BUCKET_PROVIDERS}))
+        tasks.append(Task(capability="bucket_scan", node=node.id))
     return tasks
 
 

@@ -21,8 +21,9 @@ from opfor.scenarios.attacksurface import config
 from opfor.scenarios.attacksurface.net import registrable_root
 from opfor.scenarios.attacksurface.classes.domain.sources import (
     backup_candidates,
-    bucket_candidates,
     bucket_listable,
+    cloud_bucket_from_url,
+    cloud_refs_in_text,
     operations_from_introspection,
     paths_from_openapi,
     paths_in_javascript,
@@ -41,6 +42,7 @@ from opfor.scenarios.attacksurface.classes.domain.types import (
     Bucket,
     BucketReport,
     Candidates,
+    CloudRefs,
     CVE,
     CVEScan,
     DomainData,
@@ -278,12 +280,14 @@ class HarvestPaths(Capability):
         resolved = world.latest("resolved", task.node)
         addresses = resolved.payload.addresses if resolved else ()
         by_host: dict[str, set[str]] = {}
+        cloud_refs: set[str] = set()
 
         def add(host: str, path: str) -> None:
             if host and path and path.startswith("/"):
                 by_host.setdefault(host, set()).add(path.split("#")[0].split("?")[0])
 
         home = _safe(lambda: self._fetch_doc(name, "/").get("text", "")) or ""
+        cloud_refs.update(cloud_refs_in_text(home))
         for path in _home_paths(home):
             add(name, path)
         for path in _safe(lambda: self._robots(name, addresses)) or []:
@@ -292,6 +296,7 @@ class HarvestPaths(Capability):
             add(name, path)
         for script in script_sources(home, name)[:self._MAX_SCRIPTS]:
             body = _safe(lambda s=script: self._fetch_doc(name, s).get("text", "")) or ""
+            cloud_refs.update(cloud_refs_in_text(body))
             for path in paths_in_javascript(body):
                 add(name, path)
             for url in urls_in_javascript(body):
@@ -301,6 +306,9 @@ class HarvestPaths(Capability):
             add(name, path)
 
         facts = [Fact(kind="harvested", about=task.node)]
+        if cloud_refs:
+            facts.append(Fact(kind="cloud_refs", about=task.node,
+                              payload=CloudRefs(urls=tuple(sorted(cloud_refs)))))
         for host, paths in by_host.items():
             node_id = f"domain:{host}"
             if world.node(node_id) is None:
@@ -714,71 +722,70 @@ class BackupScan(Capability):
 
 
 class BucketScan(Capability):
-    """ENRICH: check cloud object-storage buckets derived from the target's identity.
+    """ENRICH: check cloud object-storage buckets the target reveals, for public access.
 
-    A public S3, GCS, or Azure bucket named after the org or a root domain often holds the
-    backups, assets, or logs the target never meant to expose. The candidate names are
-    derived from the org name and the discovered roots joined with common affixes, both handed
-    in as data, and each is checked anonymously against each provider's public list endpoint,
-    also handed in. So the capability holds no name list and no provider of its own. It reads
-    only public cloud endpoints, never the target's own server and never with a credential, so
-    it is osint. It records the buckets that exist, private or listable, whether a listable
-    bucket is the target's and holds sensitive objects is triage's judgment.
+    A public S3, GCS, or Azure bucket often holds the backups, dumps, or logs the target
+    never meant to expose. The buckets are discovered from evidence, never guessed by name,
+    a url the target's own pages reference and a subdomain CNAME that points at a provider,
+    both already in the world. Each discovered bucket is checked anonymously against its
+    provider's public list endpoint. It reads only public cloud endpoints, never the target's
+    own server and never with a credential, so it is osint. It records whether each bucket is
+    listable or private, whether a listable bucket holds sensitive objects is triage's
+    judgment.
     """
 
     name = "bucket_scan"
     phase = Phase.ENRICH
     osint = True
 
-    _MAX_CANDIDATES = 120
-
     def __init__(self, probe_url_fn) -> None:
         self._probe = probe_url_fn
 
     def run(self, task: Task, world: World) -> Outcome:
-        affixes = tuple(task.params.get("affixes") or ())
-        providers = tuple(task.params.get("providers") or ())
-        names = bucket_candidates(self._bases(world), affixes)[:self._MAX_CANDIDATES]
+        discovered = self._discovered(world)
         buckets: list[Bucket] = []
-        for provider in providers:
-            pname = str(provider.get("name", ""))
-            template = str(provider.get("url", ""))
-            if not pname or "{bucket}" not in template:
+        for key in sorted(discovered):
+            found, evidence = discovered[key]
+            try:
+                result = self._probe(found["list_url"])
+            except Exception:
                 continue
-            for name in names:
-                url = template.replace("{bucket}", name)
-                try:
-                    result = self._probe(url)
-                except Exception:
-                    continue
-                status = result.get("status")
-                if status == 200 and bucket_listable(result.get("body", "")):
-                    state = "listable"
-                elif status in (401, 403):
-                    state = "private"
-                else:
-                    continue
-                buckets.append(Bucket(name=name, provider=pname, url=url, state=state,
-                                      status=status))
+            status = result.get("status")
+            if status == 200 and bucket_listable(result.get("body", "")):
+                state = "listable"
+            elif status in (401, 403):
+                state = "private"
+            else:
+                continue
+            buckets.append(Bucket(name=found["bucket"], provider=found["provider"],
+                                  url=found["list_url"], state=state, evidence=evidence,
+                                  status=status))
         payload = BucketReport(buckets=tuple(buckets))
         return Done(facts=(Fact(kind="buckets", about=task.node, payload=payload),))
 
-    def _bases(self, world: World) -> list[str]:
-        """The identity strings the bucket names derive from, the org name and each discovered
-        root and its leftmost label, so a bucket named for the brand or a domain is reached."""
-        bases: list[str] = []
-        for node in world.nodes("org"):
-            if node.payload.name:
-                bases.append(node.payload.name)
-        for node in world.nodes("domain"):
-            data = node.payload
-            if data.name != data.root:
-                continue
-            bases.append(data.root)
-            label = data.root.split(".")[0]
-            if label:
-                bases.append(label)
-        return bases
+    def _discovered(self, world: World) -> dict:
+        """The buckets the target revealed, keyed by provider and name so a bucket referenced
+        many times is checked once. Evidence is a url the pages reference or a subdomain CNAME
+        that points at the provider, so a bucket here is observed, never guessed."""
+        found: dict[str, tuple[dict, str]] = {}
+
+        def record(reference: str, evidence: str) -> None:
+            bucket = cloud_bucket_from_url(reference)
+            if bucket is None:
+                return
+            found.setdefault(f"{bucket['provider']}:{bucket['bucket']}", (bucket, evidence))
+
+        for fact in world.facts("cloud_refs"):
+            host = world.node(fact.about)
+            source = host.payload.name if host else fact.about
+            for url in fact.payload.urls:
+                record(url, f"referenced by {source}")
+        for fact in world.facts("resolved"):
+            host = world.node(fact.about)
+            source = host.payload.name if host else fact.about
+            for cname in fact.payload.cnames:
+                record(cname, f"CNAME from {source}")
+        return found
 
 
 def _safe(thunk):

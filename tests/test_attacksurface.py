@@ -656,6 +656,44 @@ def test_source_map_scan_flags_an_inlined_map():
     assert leak.url.endswith("/assets/app.abc.js.map")
 
 
+def test_secrets_in_text_matches_patterns_and_redacts():
+    from opfor.scenarios.attacksurface.classes.domain import sources as domains
+
+    patterns = [
+        {"id": "aws-access-key-id", "regex": "AKIA[0-9A-Z]{16}", "note": "an AWS access key id"},
+        {"id": "never", "regex": "ZZZZ[0-9]{40}", "note": "no match"},
+    ]
+    body = "const k = 'AKIAIOSFODNN7EXAMPLE'; const ok = 1;"
+    hits = domains.secrets_in_text(body, patterns)
+    assert len(hits) == 1
+    assert hits[0]["pattern"] == "aws-access-key-id"
+    # the sample is redacted, a prefix and a length, never the full key
+    assert "AKIAIOSFODNN7EXAMPLE" not in hits[0]["sample"]
+    assert hits[0]["sample"].startswith("AKIAIO")
+
+
+def test_secret_scan_flags_a_key_in_a_bundle_and_redacts_it():
+    home = '<script src="/static/main.js"></script>'
+    bundle = "var cfg={awsKey:'AKIAIOSFODNN7EXAMPLE'};"
+    patterns = [{"id": "aws-access-key-id", "regex": "AKIA[0-9A-Z]{16}", "note": "an AWS access key id"}]
+
+    def fetch_doc(name, path):
+        if path == "/":
+            return {"text": home}
+        if path == "/static/main.js":
+            return {"text": bundle}
+        return {"text": ""}
+
+    report, _scenario, world = _run_capturing(fetch_doc_fn=fetch_doc)
+    # the planner hands the real patterns from secret_patterns.yaml, which includes the aws
+    # key shape, so the scan matches without the test injecting patterns
+    hits = [f.payload for f in world.facts("secrets_in_js") if f.payload.matches]
+    assert hits, "expected a secrets_in_js fact carrying a match"
+    match = hits[0].matches[0]
+    assert match.pattern == "aws-access-key-id"
+    assert "AKIAIOSFODNN7EXAMPLE" not in match.sample
+
+
 def test_cve_scan_fails_loud_when_identification_errors():
     # a model or lookup error is a loud Failed, never a silent empty result, invariant 5
     def boom(evidence):

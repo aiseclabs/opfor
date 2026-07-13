@@ -709,6 +709,43 @@ def source_map_from_text(text: str) -> dict | None:
     return None
 
 
+_MAX_SECRET_MATCHES = 20
+
+
+def _redact(value: str) -> str:
+    """A secret shown as a short prefix and its length, never in full, so the report and the
+    log never carry the value itself."""
+    value = value.strip()
+    head = value[:6]
+    return f"{head}...({len(value)} chars)"
+
+
+def secrets_in_text(text: str, patterns) -> list[dict]:
+    """Secret-like strings a set of patterns match in a body, redacted, parsed apart from
+    the fetch so a test drives it without a network call.
+
+    Each pattern is a dict with an id, a regex, and a note. A match is reported once per
+    pattern per body with a redacted sample, since one hit is enough to send a human to the
+    source. Whether a match is a live secret or a placeholder is triage's judgment.
+    """
+    out: list[dict] = []
+    for pattern in patterns or []:
+        regex = str(pattern.get("regex", ""))
+        if not regex:
+            continue
+        try:
+            match = re.search(regex, text or "")
+        except re.error:
+            continue
+        if not match:
+            continue
+        out.append({"pattern": str(pattern.get("id", "")), "note": str(pattern.get("note", "")),
+                    "sample": _redact(match.group(0))})
+        if len(out) >= _MAX_SECRET_MATCHES:
+            break
+    return out
+
+
 def script_sources(body: str, host: str) -> list[str]:
     """Same-host JavaScript URLs a page loads, as paths, deduped in document order.
 

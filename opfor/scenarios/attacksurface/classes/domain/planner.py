@@ -34,6 +34,11 @@ _STATIC = _INTERFACES.get("static_assets") or {}
 _STATIC_SUFFIXES = [str(s) for s in (_STATIC.get("suffixes") or [])]
 _STATIC_PREFIXES = [str(p) for p in (_STATIC.get("prefixes") or [])]
 
+# Secret patterns for the script scan, loaded here and handed to the capability, so no
+# capability reads a knowledge file.
+_SECRETS = yaml.safe_load((_KNOWLEDGE / "secret_patterns.yaml").read_text(encoding="utf-8")) or {}
+_SECRET_PATTERNS = [dict(p) for p in (_SECRETS.get("patterns") or [])]
+
 
 def _live_domains(world: World) -> list:
     """Every domain that answered HTTP, the hosts worth probing."""
@@ -148,6 +153,18 @@ def _source_map_rule(world: World) -> list[Task]:
     return tasks
 
 
+def _secret_scan_rule(world: World) -> list[Task]:
+    """Scan every live host's scripts for secret-like strings, once per host, handing the
+    capability the patterns. It reads the target's bundles, so the task carries the host."""
+    tasks: list[Task] = []
+    for node in _live_domains(world):
+        if world.has_fact(node.id, "secrets_in_js"):
+            continue
+        tasks.append(Task(capability="secret_scan", node=node.id,
+                          params={"patterns": _SECRET_PATTERNS}, scope_host=node.payload.name))
+    return tasks
+
+
 def _cve_rule(world: World) -> list[Task]:
     """Scan every live host for known vulnerabilities once its surface is enumerated.
 
@@ -193,6 +210,7 @@ def enrich_rules(*, with_cve: bool = False):
         _spec_rule,
         _graphql_rule,
         _source_map_rule,
+        _secret_scan_rule,
     ]
     if with_cve:
         rules.append(_cve_rule)

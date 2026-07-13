@@ -26,6 +26,7 @@ from opfor.scenarios.attacksurface.classes.domain.sources import (
     robots_entries,
     same_host_path,
     script_sources,
+    secrets_in_text,
     sitemap_paths,
     source_map_from_text,
     urls_in_javascript,
@@ -40,6 +41,8 @@ from opfor.scenarios.attacksurface.classes.domain.types import (
     GraphQLSchema,
     HTTP,
     Resolved,
+    SecretMatch,
+    SecretReport,
     SourceMapLeak,
     SourceMapReport,
 )
@@ -566,6 +569,42 @@ class SourceMapScan(Capability):
             return Failed(reason=f"source map scan {type(exc).__name__}: {exc}")
         payload = SourceMapReport(leaks=tuple(leaks))
         return Done(facts=(Fact(kind="source_maps", about=task.node, payload=payload),))
+
+
+class SecretScan(Capability):
+    """ENRICH: scan a live host's JavaScript bundles for secret-like strings.
+
+    A single-page app can ship a hardcoded key or token in a bundle. This reads the same-
+    host bundles the home page loads and runs the secret patterns the planner hands it over
+    each body, so the capability holds no pattern of its own. A match is redacted, a prefix
+    and a length, never the value, so the report and the log never carry the secret. It
+    touches the target, so it is scoped, not osint. Whether a match is a live secret or a
+    placeholder is triage's judgment.
+    """
+
+    name = "secret_scan"
+    phase = Phase.ENRICH
+    osint = False
+
+    def __init__(self, fetch_doc_fn) -> None:
+        self._fetch_doc = fetch_doc_fn
+
+    def run(self, task: Task, world: World) -> Outcome:
+        host = world.node(task.node)
+        name = host.payload.name
+        patterns = task.params.get("patterns", [])
+        try:
+            home = self._fetch_doc(name, "/").get("text", "")
+            matches: list[SecretMatch] = []
+            for bundle in script_sources(home, name)[:_MAX_SOURCE_MAPS]:
+                body = self._fetch_doc(name, bundle).get("text", "")
+                for found in secrets_in_text(body, patterns):
+                    matches.append(SecretMatch(pattern=found["pattern"], note=found["note"],
+                                               bundle=bundle, sample=found["sample"]))
+        except Exception as exc:
+            return Failed(reason=f"secret scan {type(exc).__name__}: {exc}")
+        payload = SecretReport(matches=tuple(matches))
+        return Done(facts=(Fact(kind="secrets_in_js", about=task.node, payload=payload),))
 
 
 def _safe(thunk):

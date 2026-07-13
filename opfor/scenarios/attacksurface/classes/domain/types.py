@@ -97,3 +97,27 @@ class GraphQLSchema:
     enabled: bool
     operations: tuple[str, ...] = ()
     count: int = 0
+
+
+@dataclass(frozen=True, kw_only=True)
+class CVE:
+    """One known vulnerability record from a public database. `cvss` and `severity` are the
+    published score, kept as raw facts, whether the CVE truly applies to the exposed surface
+    is triage's judgment, not the record's."""
+
+    id: str
+    cvss: float | None = None
+    severity: str = ""
+    summary: str = ""
+
+
+@dataclass(frozen=True, kw_only=True)
+class CVEScan:
+    """The result of identifying a host's product and looking up its known vulnerabilities.
+    `product` is empty when nothing identifiable was found, a real negative, not a failure.
+    The CVE list is raw, triage decides which matter and how severe given the surface."""
+
+    product: str = ""
+    version: str = ""
+    cpe: str = ""
+    cves: tuple[CVE, ...] = ()

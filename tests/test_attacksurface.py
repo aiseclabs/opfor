@@ -186,6 +186,16 @@ def _probe(name, addresses=()):
     return HTTP.get(name, {"alive": False, "status": None, "url": "", "server": "", "title": "", "body": ""})
 
 
+def _identify(evidence):
+    # By default nothing is identified, so the cve scan is a quiet no-op and never touches
+    # the triage MockProvider. A test that drives a product overrides this seam.
+    return {"product": "", "version": "", "cpe": ""}
+
+
+def _cves(product, version, cpe=""):
+    return []
+
+
 def _make(**over):
     """Build the scenario with every seam faked, so no test touches the network or the
     model. A MockProvider stands in for the triage model, returning an empty result by
@@ -193,7 +203,7 @@ def _make(**over):
     provider to drive a canned model reply."""
     seams = dict(search_fn=_search, repos_fn=_repos, enumerate_fn=_enumerate, pivot_fn=_pivot,
                  resolve_fn=_resolve, probe_fn=_probe, fetch_fn=_fetch, fetch_doc_fn=_fetch_doc,
-                 introspect_fn=_introspect, wayback_fn=_wayback)
+                 introspect_fn=_introspect, wayback_fn=_wayback, identify_fn=_identify, cve_fn=_cves)
     seams.update(over)
     seams.setdefault("provider", MockProvider(default='{"findings": []}'))
     seams.setdefault("model", "test-model")
@@ -583,6 +593,33 @@ def test_nvd_cves_returns_nothing_for_an_unidentified_product():
 
     # no product means nothing to query, an empty list without a network call
     assert domains.nvd_cves("", "1.0") == []
+
+
+def test_cve_scan_records_the_identified_product_and_its_cves():
+    # the identify seam names the product, the cve seam looks it up, and the scan records
+    # both as a raw fact, the agent-driven identification feeding the mechanical lookup
+    def identify(evidence):
+        assert "host" in evidence
+        return {"product": "grafana", "version": "8.0.0", "cpe": "grafana:grafana"}
+
+    def cves(product, version, cpe=""):
+        assert (product, version, cpe) == ("grafana", "8.0.0", "grafana:grafana")
+        return [{"id": "CVE-2021-39226", "cvss": 9.8, "severity": "CRITICAL", "summary": "auth bypass"}]
+
+    report, _scenario, world = _run_capturing(identify_fn=identify, cve_fn=cves)
+    scans = [f.payload for f in world.facts("cve_scanned") if f.payload.product]
+    assert scans, "expected a cve_scanned fact carrying a product"
+    assert scans[0].product == "grafana" and scans[0].version == "8.0.0"
+    assert any(c.id == "CVE-2021-39226" and c.severity == "CRITICAL" for c in scans[0].cves)
+
+
+def test_cve_scan_fails_loud_when_identification_errors():
+    # a model or lookup error is a loud Failed, never a silent empty result, invariant 5
+    def boom(evidence):
+        raise RuntimeError("model down")
+
+    report, _scenario, _world = _run_capturing(identify_fn=boom)
+    assert any("cve_scan" in note and "model down" in note for note in report.notes)
 
 
 def test_probe_list_includes_product_identity_and_version_paths():

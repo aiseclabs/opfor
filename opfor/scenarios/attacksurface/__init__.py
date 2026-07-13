@@ -23,6 +23,7 @@ from opfor.core import Node, Phase, Provider, RuleSet, Scenario, World, make_pro
 from opfor.core.providers.factory import default_model, role_model, triage_mode
 from opfor.scenarios.attacksurface import config
 from opfor.scenarios.attacksurface.classes import domain, github
+from opfor.scenarios.attacksurface.classes.domain import identify
 from opfor.scenarios.attacksurface.classes.domain import sources as domain_src
 from opfor.scenarios.attacksurface.classes.github import sources as github_src
 from opfor.scenarios.attacksurface.triage import SurfaceTriage
@@ -46,6 +47,8 @@ def build(
     fetch_doc_fn=domain_src.fetch_document,
     introspect_fn=domain_src.graphql_introspect,
     wayback_fn=domain_src.wayback_paths,
+    identify_fn=None,
+    cve_fn=domain_src.nvd_cves,
     provider: Provider | None = None,
     model: str | None = None,
     challenger: Provider | None = None,
@@ -66,6 +69,14 @@ def build(
         provider = make_provider()
     model = model or default_model()
 
+    # The CVE scan identifies a host's product with the model, then looks the version up.
+    # The identify seam is model-backed, wired from the same provider by default, so the
+    # capability holds no model, and a test injects its own fake. The lookup seam is the
+    # NVD source. Both together turn the scan on, see the domain class assemble.
+    if identify_fn is None:
+        def identify_fn(evidence):
+            return identify.identify_service(provider, model, evidence)
+
     # In adversarial mode a challenger refutes each finding and a judge breaks the tie, so a
     # false positive needs the model to survive a skeptic. The roles reuse the base provider
     # by default, with a per-role model override, and a test wires its own. Standard mode
@@ -83,7 +94,8 @@ def build(
         domain.assemble(enumerate_fn=enumerate_fn, pivot_fn=pivot_fn, resolve_fn=resolve_fn,
                         probe_fn=probe_fn, fetch_fn=fetch_fn, fetch_doc_fn=fetch_doc_fn,
                         introspect_fn=introspect_fn, wayback_fn=wayback_fn,
-                        reverse_whois_fn=reverse_whois_fn),
+                        reverse_whois_fn=reverse_whois_fn,
+                        identify_fn=identify_fn, cve_fn=cve_fn),
         github.assemble(search_fn=search_fn, repos_fn=repos_fn),
     ]
     capabilities = tuple(cap for bundle in bundles for cap in bundle.capabilities)

@@ -133,6 +133,23 @@ def _graphql_rule(world: World) -> list[Task]:
     return tasks
 
 
+def _cve_rule(world: World) -> list[Task]:
+    """Scan every live host for known vulnerabilities once its surface is enumerated.
+
+    Gating on the endpoints fact holds the scan until the version endpoints have been
+    probed, so the identification has that evidence to read. The scan runs once per host,
+    gated on its own fact, and touches only public sources, so it needs no scope host.
+    """
+    tasks: list[Task] = []
+    for node in _live_domains(world):
+        if not world.has_fact(node.id, "endpoints"):
+            continue
+        if world.has_fact(node.id, "cve_scanned"):
+            continue
+        tasks.append(Task(capability="cve_scan", node=node.id))
+    return tasks
+
+
 def map_rules(*, with_registrant: bool):
     """The domain MAP rules, discovery and the evidence pivots. The registrant pivot rides
     only when its keyed source is wired, so a keyless run omits it rather than failing."""
@@ -150,9 +167,10 @@ def map_rules(*, with_registrant: bool):
     return rules
 
 
-def enrich_rules():
-    """The domain ENRICH pipeline, resolve then probe then harvest then enumerate."""
-    return [
+def enrich_rules(*, with_cve: bool = False):
+    """The domain ENRICH pipeline, resolve then probe then harvest then enumerate, and the
+    CVE scan last when its seams are wired, once a host's surface is enumerated."""
+    rules = [
         each("domain", run="domain_resolve", unless_fact="resolved"),
         _http_rule,
         _harvest_rule,
@@ -160,3 +178,6 @@ def enrich_rules():
         _spec_rule,
         _graphql_rule,
     ]
+    if with_cve:
+        rules.append(_cve_rule)
+    return rules

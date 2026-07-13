@@ -75,6 +75,8 @@ JUDGE_SYSTEM = (
 
 _MAX_BODY = 600
 _MAX_LIST = 40
+# CVEs shown per host, most the lookup returns, so a noisy product does not flood the prompt.
+_MAX_CVES = 10
 # A chunk of surface is judged in one call. Bounded so a large target is split across calls
 # rather than overflowing the model context, mirroring codejury's per-file diff split.
 _MAX_CHUNK_CHARS = 24_000
@@ -355,6 +357,12 @@ class SurfaceTriage(Triage):
             line += f"\n  clue: {clue}"
         if alive and http_data.body:
             line += f"\n  body head: {_snippet(http_data.body)}"
+        scan = world.latest("cve_scanned", node.id)
+        if scan is not None and scan.payload.product:
+            version = f" {scan.payload.version}" if scan.payload.version else ""
+            line += f"\n  product: {scan.payload.product}{version}"
+            for cve in scan.payload.cves[:_MAX_CVES]:
+                line += f"\n  CVE {cve.id} CVSS {cve.cvss} {cve.severity}: {cve.summary}"
         return line
 
     def _endpoint_line(self, ep) -> str:

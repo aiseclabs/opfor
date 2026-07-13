@@ -95,29 +95,34 @@ def subdomains(domain: str) -> Enumeration:
     return union
 
 
-def certspotter_subdomains(domain: str) -> set[str]:
+def certspotter_subdomains(domain: str) -> Enumeration:
     """Subdomains of a domain seen in certificate transparency, via certspotter, paged.
 
     The free endpoint returns one bounded page, so the walk follows the `after` cursor
     across pages rather than stopping at the first, which multiplies recall many times over
     on a large log. See `_certspotter_paged` for the page cap and the keyless 429 fallback
-    every certspotter reader shares.
+    every certspotter reader shares. A walk that spends its whole page budget with the log
+    still yielding leaves certificates unread, so the result is flagged truncated rather than
+    passing as complete, invariant 5.
     """
     names: set[str] = set()
-    for issuance in _certspotter_paged(domain):
+    issuances, truncated = _certspotter_paged(domain)
+    for issuance in issuances:
         for raw in issuance.get("dns_names", []):
             # a wildcard such as *.dev.example.com is kept with its star, not silently
             # collapsed to the base, so the enumeration can flag it as a blind spot
             name = str(raw).strip().lower()
             if name and name.endswith("." + domain) and looks_like_host(name):
                 names.add(name)
-    return names
+    result = Enumeration(names)
+    result.truncated = truncated
+    return result
 
 
-def _certspotter_paged(domain: str) -> list:
+def _certspotter_paged(domain: str) -> tuple[list, bool]:
     """The certspotter issuance walk with its page cap and keyless 429 fallback, returning
-    the raw issuance records so every reader keeps the per-certificate grouping the sibling
-    guard needs.
+    the raw issuance records and whether the walk was truncated, so every reader keeps the
+    per-certificate grouping the sibling guard needs and the truncation signal it may raise.
 
     A token raises the page cap, but the rate limit is per account, so a token whose free
     quota is spent answers 429 while the anonymous per-address bucket is a separate pool
@@ -135,15 +140,18 @@ def _certspotter_paged(domain: str) -> list:
         return _certspotter_issuances(domain, token=None, pages=_CERTSPOTTER_PAGES_KEYLESS)
 
 
-def _certspotter_issuances(domain: str, *, token: str | None, pages: int) -> list:
+def _certspotter_issuances(domain: str, *, token: str | None, pages: int) -> tuple[list, bool]:
     """Walk the certspotter issuance log for `domain`, returning the raw records across
-    pages, authenticated when a token is given. The walk follows the `after` cursor between
-    pages and stops at the page cap so it stays bounded."""
+    pages and whether the walk was truncated, authenticated when a token is given. The walk
+    follows the `after` cursor between pages and stops at the page cap so it stays bounded. A
+    walk that spends its whole page budget on full pages leaves later certificates unread, so
+    it returns truncated True, while one that runs the cursor dry returns False."""
     headers = {"User-Agent": _UA, "Accept": "application/json"}
     if token:
         headers["Authorization"] = f"Bearer {token}"
     records: list = []
     after = ""
+    truncated = True
     for _ in range(pages):
         url = (f"https://api.certspotter.com/v1/issuances?domain={domain}"
                "&include_subdomains=true&expand=dns_names")
@@ -153,12 +161,14 @@ def _certspotter_issuances(domain: str, *, token: str | None, pages: int) -> lis
         with urllib.request.urlopen(request, timeout=_TIMEOUT) as resp:
             issuances = json.loads(resp.read().decode("utf-8", "replace"))
         if not issuances:
+            truncated = False
             break
         records.extend(issuances)
         after = str(issuances[-1].get("id") or "")
         if not after:
+            truncated = False
             break
-    return records
+    return records, truncated
 
 
 _VT_PAGES = 10  # cap on cursor pages, each up to the page limit, bounds a large domain
@@ -438,7 +448,8 @@ def cert_sibling_roots(domain: str) -> dict[str, str]:
     parse and the multi-tenant guard live in `sibling_roots_from_issuances`, so a test
     drives them without a network call.
     """
-    return sibling_roots_from_issuances(_certspotter_paged(domain), domain)
+    issuances, _ = _certspotter_paged(domain)
+    return sibling_roots_from_issuances(issuances, domain)
 
 
 def sibling_roots_from_issuances(issuances, domain: str) -> dict[str, str]:

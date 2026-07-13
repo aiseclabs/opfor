@@ -1680,3 +1680,66 @@ def test_probe_spec_verifies_reads_defers_writes_and_skips_templated():
     # A write operation and a templated path are never sent.
     assert "/process" not in calls
     assert "/jobs/{job_id}" not in calls
+
+
+def test_certspotter_flags_truncation_when_the_page_budget_is_spent(monkeypatch):
+    """A walk that spends its whole page budget on full pages leaves later certificates
+    unread, so it reports the blind spot rather than passing as complete, invariant 5."""
+    import urllib.request
+
+    from opfor.scenarios.attacksurface import config
+    from opfor.scenarios.attacksurface.classes.domain import sources as domains
+
+    monkeypatch.setattr(config, "certspotter_token", lambda: "")
+
+    class _Resp:
+        def __init__(self, payload):
+            self._payload = payload
+
+        def read(self):
+            return json.dumps(self._payload).encode("utf-8")
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+    # every page is full and carries an id cursor, so the bounded walk never runs dry
+    def fake_urlopen(request, timeout=0):
+        return _Resp([{"id": "999", "dns_names": ["api.example.com"]}])
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+    result = domains.certspotter_subdomains("example.com")
+    assert result == {"api.example.com"}
+    assert result.truncated is True
+
+
+def test_certspotter_does_not_flag_truncation_when_the_cursor_runs_dry(monkeypatch):
+    import urllib.request
+
+    from opfor.scenarios.attacksurface import config
+    from opfor.scenarios.attacksurface.classes.domain import sources as domains
+
+    monkeypatch.setattr(config, "certspotter_token", lambda: "")
+
+    class _Resp:
+        def __init__(self, payload):
+            self._payload = payload
+
+        def read(self):
+            return json.dumps(self._payload).encode("utf-8")
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+    # a page with no id cursor ends the walk, so the enumeration is complete
+    def fake_urlopen(request, timeout=0):
+        return _Resp([{"dns_names": ["api.example.com"]}])
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+    result = domains.certspotter_subdomains("example.com")
+    assert result.truncated is False

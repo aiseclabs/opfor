@@ -730,6 +730,22 @@ def paths_from_openapi(doc) -> list[str]:
     return sorted(out)
 
 
+def info_from_openapi(doc) -> tuple[str, str]:
+    """The `info` title and version of an OpenAPI or Swagger document, empty when absent.
+
+    Both OpenAPI 3 and Swagger 2 carry an `info` object with a title and a version, which
+    names the product and its release, for example LiteLLM 1.90.0, so the vulnerability
+    lookup reads it rather than guessing from a truncated body. A document without the block
+    yields two empty strings.
+    """
+    if not isinstance(doc, dict):
+        return "", ""
+    info = doc.get("info")
+    if not isinstance(info, dict):
+        return "", ""
+    return str(info.get("title") or "").strip(), str(info.get("version") or "").strip()
+
+
 def split_operation(entry: str) -> tuple[tuple[str, ...], str]:
     """Split a `METHODS path` operation entry into its methods and path.
 

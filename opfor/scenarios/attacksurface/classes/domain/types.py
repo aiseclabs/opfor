@@ -81,11 +81,15 @@ class Endpoint:
 class APISpec:
     """The interface surface parsed from an exposed API specification. `paths` are the
     operations the specification declares, so a single exposed spec expands into the whole
-    unauthenticated API surface rather than one finding."""
+    unauthenticated API surface rather than one finding. `title` and `version` are the
+    document's own `info` block, which names the product and its version far more reliably
+    than a truncated response body, so the vulnerability lookup reads them as evidence."""
 
     base: str
     paths: tuple[str, ...] = ()
     count: int = 0
+    title: str = ""
+    version: str = ""
 
 
 @dataclass(frozen=True, kw_only=True)

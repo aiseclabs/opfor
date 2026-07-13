@@ -1743,3 +1743,45 @@ def test_certspotter_does_not_flag_truncation_when_the_cursor_runs_dry(monkeypat
     monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
     result = domains.certspotter_subdomains("example.com")
     assert result.truncated is False
+
+
+def test_info_from_openapi_reads_title_and_version():
+    from opfor.scenarios.attacksurface.classes.domain.sources import info_from_openapi
+
+    doc = {"openapi": "3.1.0", "info": {"title": "litellm api", "version": "1.90.0"}, "paths": {}}
+    assert info_from_openapi(doc) == ("litellm api", "1.90.0")
+    assert info_from_openapi({"swagger": "2.0", "info": {"title": "x"}}) == ("x", "")
+    assert info_from_openapi({"paths": {}}) == ("", "")
+    assert info_from_openapi("not a doc") == ("", "")
+
+
+def test_cve_evidence_surfaces_the_spec_version_from_the_endpoint_body():
+    """The CVE identification reads a specification's declared version from the endpoint's
+    own body head, before any separate parse runs, so a version-bearing spec is not missed."""
+    from opfor.core import Node, Task, World
+    from opfor.scenarios.attacksurface.classes.domain.capabilities import CveScan
+    from opfor.scenarios.attacksurface.classes.domain.types import DomainData, Endpoint
+
+    captured = {}
+
+    def identify(evidence):
+        captured["evidence"] = evidence
+        return {"product": "", "version": "", "cpe": ""}
+
+    def cves(product, version, cpe=""):
+        return []
+
+    world = World()
+    world.add(Node(id="domain:api.example.com", type="domain",
+                   payload=DomainData(name="api.example.com", root="example.com", source="crt")))
+    ep_id = "endpoint:api.example.com/openapi.json"
+    body = '{"openapi":"3.1.0","info":{"title":"litellm api","version":"1.90.0"},"paths":{}}'
+    world.add(Node(id=ep_id, type="endpoint",
+                   payload=Endpoint(url="https://api.example.com/openapi.json", path="/openapi.json",
+                                    status=200, auth_required=False,
+                                    content_type="application/json", body=body)))
+
+    out = CveScan(identify, cves).run(Task(capability="cve_scan", node="domain:api.example.com"), world)
+    assert out.facts
+    assert "1.90.0" in captured["evidence"]
+    assert "litellm api" in captured["evidence"]

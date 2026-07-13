@@ -24,6 +24,7 @@ from opfor.scenarios.attacksurface.classes.domain.sources import (
     bucket_listable,
     cloud_bucket_from_url,
     cloud_refs_in_text,
+    info_from_openapi,
     operations_from_introspection,
     paths_from_openapi,
     paths_in_javascript,
@@ -442,7 +443,9 @@ class ExpandSpec(Capability):
         except Exception:
             parsed = {}
         paths = paths_from_openapi(parsed)
-        payload = APISpec(base=endpoint.url, paths=tuple(paths), count=len(paths))
+        title, version = info_from_openapi(parsed)
+        payload = APISpec(base=endpoint.url, paths=tuple(paths), count=len(paths),
+                          title=title, version=version)
         return Done(facts=(Fact(kind="api_spec", about=task.node, payload=payload),))
 
 
@@ -624,7 +627,23 @@ class CveScan(Capability):
             if endpoint.body:
                 bit += f"\n  body: {endpoint.body[:400]}"
             lines.append(bit)
+            title, version = self._spec_info(world, node, endpoint)
+            if title or version:
+                lines.append(f"  api spec info: title {title!r} version {version!r}")
         return "\n".join(lines)
+
+    def _spec_info(self, world: World, node, endpoint) -> tuple[str, str]:
+        """The product title and version an API specification declares, from the parsed
+        spec fact when one exists, otherwise from the endpoint's own body head. The `info`
+        block sits at the head of an OpenAPI or Swagger document, so the version is present
+        the moment the endpoint is probed, before any separate parse runs."""
+        spec = world.latest("api_spec", node.id)
+        if spec is not None and (spec.payload.title or spec.payload.version):
+            return spec.payload.title, spec.payload.version
+        try:
+            return info_from_openapi(json.loads(endpoint.body or ""))
+        except Exception:
+            return "", ""
 
 
 class SourceMapScan(Capability):

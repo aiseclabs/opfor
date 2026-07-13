@@ -226,6 +226,7 @@ class HTTPDomain(Capability):
             server=str(result.get("server", "")),
             title=str(result.get("title", "")),
             body=str(result.get("body", "")),
+            location=str(result.get("location", "")),
         )
         return Done(facts=(Fact(kind="http", about=task.node, payload=payload),))
 

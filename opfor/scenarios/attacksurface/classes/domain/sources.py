@@ -487,12 +487,12 @@ def http_probe(name: str, addresses=()) -> dict:
         for scheme in ("https", "http"):
             for _ in range(_PROBE_ATTEMPTS):
                 try:
-                    status, server, _, body, _location = _connect(name, ip, scheme, "/")
+                    status, server, _, body, location = _connect(name, ip, scheme, "/")
                 except TimeoutError:
                     continue
                 except (OSError, http.client.HTTPException):
                     break
-                return _result(True, status, f"{scheme}://{name}/", server, body)
+                return _result(True, status, f"{scheme}://{name}/", server, body, location)
     return _dead()
 
 
@@ -761,11 +761,13 @@ def _connect(name: str, ip: str, scheme: str, path: str, *, read_limit: int = _B
         conn.close()
 
 
-def _result(alive: bool, status, url: str, server: str, body: str) -> dict:
+def _result(alive: bool, status, url: str, server: str, body: str, location: str = "") -> dict:
     match = _TITLE.search(body)
     return {"alive": alive, "status": status, "url": url, "server": server,
-            "title": match.group(1).strip()[:200] if match else "", "body": body.lower()}
+            "title": match.group(1).strip()[:200] if match else "", "body": body.lower(),
+            "location": location}
 
 
 def _dead() -> dict:
-    return {"alive": False, "status": None, "url": "", "server": "", "title": "", "body": ""}
+    return {"alive": False, "status": None, "url": "", "server": "", "title": "", "body": "",
+            "location": ""}

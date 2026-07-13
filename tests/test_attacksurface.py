@@ -526,6 +526,16 @@ def test_http_probe_tries_every_public_ip_retries_timeouts_and_raises_the_unexpe
     # a private-only host has no public address, reported not alive without a connection
     assert domains.http_probe("host.example.com", ("10.0.0.1",))["alive"] is False
 
+    # the redirect target is captured, so a host fronted by an identity proxy is visible to
+    # triage rather than read as a plain live host
+    def connect_redirect(name, ip, scheme, path, **kw):
+        return (302, "", "text/html", "", "https://accounts.google.com/o/oauth2/v2/auth")
+
+    monkeypatch.setattr(domains, "_connect", connect_redirect)
+    redirected = domains.http_probe("host.example.com", ("8.8.8.8",))
+    assert redirected["alive"] is True
+    assert redirected["location"] == "https://accounts.google.com/o/oauth2/v2/auth"
+
 
 def test_static_assets_are_never_probed_into_endpoints():
     # admin's script names /main.css, a static asset, so it must not become an endpoint

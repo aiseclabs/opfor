@@ -52,12 +52,13 @@ class Enumeration(set):
 
 def subdomains(domain: str) -> Enumeration:
     """Passive subdomains of a domain, the union of certificate transparency, VirusTotal,
-    and OTX.
+    OTX, and DNSDumpster.
 
-    certspotter reads public certificate logs, VirusTotal and OTX join when their key is
-    set. VirusTotal is a reliable passive source where a keyless source is throttled by
-    shared address, and OTX reads passive DNS, the hostnames a resolver answered for, which
-    surfaces live hosts a wildcard certificate hides from the logs.
+    certspotter reads public certificate logs, VirusTotal, OTX, and DNSDumpster join when
+    their key is set. VirusTotal is a reliable passive source where a keyless source is
+    throttled by shared address, OTX reads passive DNS, the hostnames a resolver answered
+    for, which surfaces live hosts a wildcard certificate hides from the logs, and
+    DNSDumpster adds aggregated DNS records.
     All are public reads that never touch the target. Each source is best effort, an
     individual failure is tolerated so one dead source does not blind the rest, and only
     when every source fails is the failure raised, so an empty result means no records
@@ -71,6 +72,8 @@ def subdomains(domain: str) -> Enumeration:
         sources.append(virustotal_subdomains)
     if config.otx_key():
         sources.append(otx_subdomains)
+    if config.dnsdumpster_key():
+        sources.append(dnsdumpster_subdomains)
     names: set[str] = set()
     truncated = False
     errors: list[str] = []
@@ -233,6 +236,41 @@ def subdomains_from_otx(data, domain: str) -> set[str]:
         name = str(row.get("hostname", "")).strip().lower().rstrip(".")
         if name and name.endswith("." + domain) and looks_like_host(name):
             names.add(name)
+    return names
+
+
+def dnsdumpster_subdomains(domain: str) -> Enumeration:
+    """Subdomains of a domain from DNSDumpster's aggregated DNS records. Empty without a
+    key, so the union runs without it. The free tier returns a bounded first page and bills
+    for pagination, so a reply that names more A records than it returned is flagged
+    truncated rather than passed off as the whole set, invariant 5."""
+    key = config.dnsdumpster_key()
+    if not key:
+        return Enumeration()
+    url = f"https://api.dnsdumpster.com/domain/{domain}"
+    request = urllib.request.Request(url, headers={"User-Agent": _UA, "X-API-Key": key})
+    with urllib.request.urlopen(request, timeout=_TIMEOUT) as resp:
+        data = json.loads(resp.read().decode("utf-8", "replace"))
+    result = Enumeration(subdomains_from_dnsdumpster(data, domain))
+    try:
+        total = int(data.get("total_a_recs") or 0)
+    except (TypeError, ValueError):
+        total = 0
+    result.truncated = len(data.get("a") or []) < total
+    return result
+
+
+def subdomains_from_dnsdumpster(data, domain: str) -> set[str]:
+    """Subdomains under `domain` named in a DNSDumpster reply, from the A and CNAME records
+    whose host is a name under the target. The mail and nameserver records point off the
+    domain, so the domain-suffix filter drops them. Parsed apart from the fetch so a test
+    drives it without a network call."""
+    names: set[str] = set()
+    for record_type in ("a", "cname"):
+        for row in data.get(record_type) or []:
+            name = str(row.get("host", "")).strip().lower().rstrip(".")
+            if name and name.endswith("." + domain) and looks_like_host(name):
+                names.add(name)
     return names
 
 

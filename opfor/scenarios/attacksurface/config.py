@@ -41,6 +41,17 @@ def virustotal_key() -> str:
     return os.environ.get("OPFOR_VIRUSTOTAL_KEY", "")
 
 
+def otx_key() -> str:
+    """An AlienVault OTX API key, empty when unset.
+
+    The passive-DNS endpoint reads the hostnames a resolver actually answered for, which
+    surfaces live hosts hidden behind a wildcard certificate that certificate transparency
+    cannot see, so with a key it joins the union. A free account provides one. Without a
+    key the source is simply left out of the union.
+    """
+    return os.environ.get("OPFOR_OTX_KEY", "")
+
+
 def reverse_whois_key() -> str:
     """A reverse-WHOIS provider key, empty when unset.
 

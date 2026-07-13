@@ -51,10 +51,13 @@ class Enumeration(set):
 
 
 def subdomains(domain: str) -> Enumeration:
-    """Passive subdomains of a domain, the union of certificate transparency and VirusTotal.
+    """Passive subdomains of a domain, the union of certificate transparency, VirusTotal,
+    and OTX.
 
-    certspotter reads public certificate logs, VirusTotal joins when a key is set and is
-    the reliable passive source, since a keyless source is throttled by shared address.
+    certspotter reads public certificate logs, VirusTotal and OTX join when their key is
+    set. VirusTotal is a reliable passive source where a keyless source is throttled by
+    shared address, and OTX reads passive DNS, the hostnames a resolver answered for, which
+    surfaces live hosts a wildcard certificate hides from the logs.
     All are public reads that never touch the target. Each source is best effort, an
     individual failure is tolerated so one dead source does not blind the rest, and only
     when every source fails is the failure raised, so an empty result means no records
@@ -66,6 +69,8 @@ def subdomains(domain: str) -> Enumeration:
     sources = [certspotter_subdomains]
     if config.virustotal_key():
         sources.append(virustotal_subdomains)
+    if config.otx_key():
+        sources.append(otx_subdomains)
     names: set[str] = set()
     truncated = False
     errors: list[str] = []
@@ -190,6 +195,42 @@ def subdomains_from_vt(data, domain: str) -> set[str]:
     names: set[str] = set()
     for item in data.get("data", []) or []:
         name = str(item.get("id", "")).strip().lower()
+        if name and name.endswith("." + domain) and looks_like_host(name):
+            names.add(name)
+    return names
+
+
+# OTX passive DNS is slow to answer and caps its reply at a fixed size without a cursor to
+# page past, so the fetch waits longer than a normal read, and a reply at the cap is flagged
+# truncated rather than passed off as the whole set.
+_OTX_TIMEOUT = 60
+_OTX_LIMIT = 500
+
+
+def otx_subdomains(domain: str) -> Enumeration:
+    """Subdomains of a domain from AlienVault OTX passive DNS, the hostnames a resolver
+    actually answered for, which surfaces live hosts hidden behind a wildcard certificate
+    that certificate transparency cannot see. Empty without a key, so the union runs
+    without it. The endpoint caps its reply and does not page, so a reply at the cap is
+    flagged truncated, invariant 5."""
+    key = config.otx_key()
+    if not key:
+        return Enumeration()
+    url = f"https://otx.alienvault.com/api/v1/indicators/domain/{domain}/passive_dns"
+    request = urllib.request.Request(url, headers={"User-Agent": _UA, "X-OTX-API-KEY": key})
+    with urllib.request.urlopen(request, timeout=_OTX_TIMEOUT) as resp:
+        data = json.loads(resp.read().decode("utf-8", "replace"))
+    result = Enumeration(subdomains_from_otx(data, domain))
+    result.truncated = len(data.get("passive_dns") or []) >= _OTX_LIMIT
+    return result
+
+
+def subdomains_from_otx(data, domain: str) -> set[str]:
+    """Subdomains under `domain` named in an OTX passive-dns reply, parsed apart from the
+    fetch so a test drives it without a network call."""
+    names: set[str] = set()
+    for row in data.get("passive_dns") or []:
+        name = str(row.get("hostname", "")).strip().lower().rstrip(".")
         if name and name.endswith("." + domain) and looks_like_host(name):
             names.add(name)
     return names

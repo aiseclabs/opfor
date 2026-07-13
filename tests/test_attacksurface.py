@@ -907,6 +907,49 @@ def test_virustotal_enumeration_flags_truncation_at_the_page_cap(monkeypatch):
     assert domains.virustotal_subdomains("example.com").truncated is False
 
 
+def test_otx_passive_dns_parses_and_flags_the_cap(monkeypatch):
+    import urllib.request
+
+    from opfor.scenarios.attacksurface import config
+    from opfor.scenarios.attacksurface.classes.domain import sources as domains
+
+    # the parse keeps hosts under the domain and drops the apex and any other domain, apart
+    # from the network so it is driven by a fixture
+    reply = {"passive_dns": [
+        {"hostname": "api.example.com"},
+        {"hostname": "dev.example.com."},
+        {"hostname": "example.com"},
+        {"hostname": "other.test"},
+    ]}
+    assert domains.subdomains_from_otx(reply, "example.com") == {"api.example.com", "dev.example.com"}
+
+    # no key leaves the source out of the union, an empty enumeration rather than a call
+    monkeypatch.setattr(config, "otx_key", lambda: "")
+    assert domains.otx_subdomains("example.com") == set()
+
+    monkeypatch.setattr(config, "otx_key", lambda: "otx")
+
+    class _Resp:
+        def __init__(self, payload):
+            self._payload = payload
+
+        def read(self):
+            return json.dumps(self._payload).encode("utf-8")
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+    # a reply at the endpoint cap means more hosts exist unfetched, so it is flagged truncated
+    capped = {"passive_dns": [{"hostname": f"h{i}.example.com"} for i in range(500)], "count": 500}
+    monkeypatch.setattr(urllib.request, "urlopen", lambda request, timeout=0: _Resp(capped))
+    result = domains.otx_subdomains("example.com")
+    assert result.truncated is True
+    assert len(result) == 500
+
+
 def test_certspotter_token_429_falls_back_to_an_anonymous_walk(monkeypatch):
     import urllib.error
     import urllib.request

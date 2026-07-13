@@ -52,6 +52,13 @@ def otx_key() -> str:
     return os.environ.get("OPFOR_OTX_API_KEY", "")
 
 
+def nvd_api_key() -> str:
+    """An NVD API key, empty when unset. The CVE lookup queries NVD with or without a key,
+    a key only raises the rate limit from 5 to 50 requests per 30 seconds. Querying NVD is
+    a public read that never touches the target, so it needs no key to run."""
+    return os.environ.get("OPFOR_NVD_API_KEY", "")
+
+
 def dnsdumpster_key() -> str:
     """A DNSDumpster API key, empty when unset.
 

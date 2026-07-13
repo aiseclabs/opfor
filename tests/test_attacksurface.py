@@ -558,6 +558,33 @@ def test_signal_headers_keeps_identity_drops_noise_and_masks_cookie_value():
     assert hdrs["set-cookie"] == "_gitlab_session"
 
 
+def test_nvd_cves_parses_id_score_severity_and_summary():
+    from opfor.scenarios.attacksurface.classes.domain import sources as domains
+
+    reply = {
+        "vulnerabilities": [
+            {"cve": {
+                "id": "CVE-2021-39226",
+                "metrics": {"cvssMetricV31": [{"cvssData": {"baseScore": 9.8, "baseSeverity": "CRITICAL"}}],
+                            "cvssMetricV2": [{"cvssData": {"baseScore": 5.0}, "baseSeverity": "MEDIUM"}]},
+                "descriptions": [{"lang": "es", "value": "ignore"}, {"lang": "en", "value": "auth bypass"}],
+            }},
+            {"cve": {"id": "", "metrics": {}, "descriptions": []}},
+        ]
+    }
+    cves = domains.cves_from_nvd(reply)
+    assert len(cves) == 1
+    # the strongest metric wins, v3.1 over v2, and the english description is taken
+    assert cves[0] == {"id": "CVE-2021-39226", "cvss": 9.8, "severity": "CRITICAL", "summary": "auth bypass"}
+
+
+def test_nvd_cves_returns_nothing_for_an_unidentified_product():
+    from opfor.scenarios.attacksurface.classes.domain import sources as domains
+
+    # no product means nothing to query, an empty list without a network call
+    assert domains.nvd_cves("", "1.0") == []
+
+
 def test_probe_list_includes_product_identity_and_version_paths():
     from opfor.scenarios.attacksurface.classes.domain import planner
 

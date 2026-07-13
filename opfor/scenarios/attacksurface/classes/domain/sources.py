@@ -276,6 +276,67 @@ def subdomains_from_dnsdumpster(data, domain: str) -> set[str]:
     return names
 
 
+# --- known vulnerabilities: cves for an identified product version -------
+
+_NVD_TIMEOUT = 30
+_NVD_MAX = 25
+
+
+def nvd_cves(product: str, version: str, cpe: str = "") -> list[dict]:
+    """CVEs affecting a product from the NVD 2.0 API, most a bounded page.
+
+    A cpe as a `vendor:product` string with a version matches the affected version set
+    precisely, which the model supplies when it knows the product, and a bare product falls
+    back to a keyword search. Querying NVD is a public read that never touches the target,
+    keyless by default and higher-rate with a key. It returns raw CVE facts, whether a CVE
+    truly applies to the exposed surface and how severe is triage's judgment, not this.
+    """
+    if not product:
+        return []
+    headers = {"User-Agent": _UA, "Accept": "application/json"}
+    key = config.nvd_api_key()
+    if key:
+        headers["apiKey"] = key
+    if cpe and version:
+        match = urllib.parse.quote(f"cpe:2.3:a:{cpe}:{version}:*:*:*:*:*:*:*", safe="")
+        query = f"virtualMatchString={match}"
+    else:
+        query = f"keywordSearch={urllib.parse.quote((product + ' ' + version).strip())}"
+    url = f"https://services.nvd.nist.gov/rest/json/cves/2.0?{query}&resultsPerPage={_NVD_MAX}"
+    request = urllib.request.Request(url, headers=headers)
+    with urllib.request.urlopen(request, timeout=_NVD_TIMEOUT) as resp:
+        data = json.loads(resp.read().decode("utf-8", "replace"))
+    return cves_from_nvd(data)
+
+
+def cves_from_nvd(data) -> list[dict]:
+    """The id, CVSS score, severity, and summary of each CVE in an NVD 2.0 reply, parsed
+    apart from the fetch so a test drives it without a network call."""
+    out: list[dict] = []
+    for item in data.get("vulnerabilities") or []:
+        cve = item.get("cve") or {}
+        cid = str(cve.get("id") or "")
+        if not cid:
+            continue
+        score, severity = _nvd_score(cve.get("metrics") or {})
+        descriptions = cve.get("descriptions") or []
+        summary = next((str(d.get("value", "")) for d in descriptions if d.get("lang") == "en"), "")
+        out.append({"id": cid, "cvss": score, "severity": severity, "summary": summary[:300]})
+    return out
+
+
+def _nvd_score(metrics) -> tuple:
+    """The base score and severity from the strongest CVSS metric an NVD entry carries,
+    preferring v3.1 over v3.0 over v2."""
+    for key in ("cvssMetricV31", "cvssMetricV30", "cvssMetricV2"):
+        entries = metrics.get(key) or []
+        if entries:
+            cvss = entries[0].get("cvssData") or {}
+            severity = str(cvss.get("baseSeverity") or entries[0].get("baseSeverity") or "")
+            return (cvss.get("baseScore"), severity)
+    return (None, "")
+
+
 def hosts_from_file(path: str) -> tuple[str, ...]:
     """Read known hosts from a newline-delimited DNS export, normalized to probeable names.
 

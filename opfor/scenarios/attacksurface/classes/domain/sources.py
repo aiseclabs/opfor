@@ -42,7 +42,7 @@ _DOH_RESOLVERS = ("https://dns.google/resolve", "https://cloudflare-dns.com/dns-
 # cursor. With a key the quota allows a full walk. Without one the free quota is tiny, so
 # paging hard would exhaust it and self-throttle, so a keyless walk stays to a couple of
 # pages, still the most recent certificates, and leans on the other sources for the rest.
-_CERTSPOTTER_PAGES = 12
+_CERTSPOTTER_PAGES = 30
 _CERTSPOTTER_PAGES_KEYLESS = 2
 
 

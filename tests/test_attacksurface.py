@@ -558,6 +558,15 @@ def test_signal_headers_keeps_identity_drops_noise_and_masks_cookie_value():
     assert hdrs["set-cookie"] == "_gitlab_session"
 
 
+def test_probe_list_includes_product_identity_and_version_paths():
+    from opfor.scenarios.attacksurface.classes.domain import planner
+
+    # the product identity and version endpoints are data in paths.yaml, probed by the
+    # existing endpoint capability, so a later step can read the version for a cve match
+    for path in ("/actuator/info", "/version", "/.well-known/openid-configuration", "/nacos/"):
+        assert path in planner._PROBE_PATHS
+
+
 def test_static_assets_are_never_probed_into_endpoints():
     # admin's script names /main.css, a static asset, so it must not become an endpoint
     world = _seed()

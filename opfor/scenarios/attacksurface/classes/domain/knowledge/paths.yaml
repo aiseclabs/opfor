@@ -1,9 +1,11 @@
 # Interface paths to probe on a live host, to enumerate the reachable surface. Each is
 # a plain GET, no payload, so probing is recon, not an attack. The list is high signal
 # on purpose, config and version-control leaks, API specs, admin and monitoring
-# interfaces, so a wide run stays small and respectful. The planner reads this and hands
-# it to the endpoint capability, no capability reads the file. Adding a path is a data
-# change here.
+# interfaces, and product identity and version endpoints, so a wide run stays small and
+# respectful. A product identity path answers with the product and often its exact
+# version, which is what a later step matches against known vulnerabilities. The planner
+# reads this and hands it to the endpoint capability, no capability reads the file.
+# Adding a path is a data change here.
 
 paths:
   - "/robots.txt"
@@ -22,7 +24,17 @@ paths:
   - "/actuator"
   - "/actuator/health"
   - "/actuator/env"
+  - "/actuator/info"
   - "/metrics"
+  - "/version"
+  - "/api/version"
+  - "/.well-known/openid-configuration"
+  - "/nacos/"
+  - "/v1/agent/self"
+  - "/wp-json/"
+  - "/manager/html"
+  - "/debug/pprof/"
+  - "/_cluster/health"
   - "/swagger.json"
   - "/swagger-ui.html"
   - "/openapi.json"

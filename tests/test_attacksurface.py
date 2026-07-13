@@ -711,6 +711,50 @@ def test_secret_scan_flags_a_key_in_a_bundle_and_redacts_it():
     assert "AKIAIOSFODNN7EXAMPLE" not in match.sample
 
 
+def test_backup_candidates_derives_twins_and_skips_directories():
+    from opfor.scenarios.attacksurface.classes.domain import sources as domains
+
+    twins = domains.backup_candidates(
+        "/app/config.php", append=(".bak", "~"), rename=(".zip",), swap=(".{file}.swp",))
+    assert "/app/config.php.bak" in twins
+    assert "/app/config.php~" in twins
+    assert "/app/config.zip" in twins           # the extension is replaced, an archive twin
+    assert "/app/.config.php.swp" in twins      # the vim swap dotfile over the filename
+    # a directory or a bare root has no filename to derive from
+    assert domains.backup_candidates("/app/", append=(".bak",)) == []
+    assert domains.backup_candidates("/", append=(".bak",)) == []
+    # a file with no extension takes an append twin but no extension-rename twin
+    assert domains.backup_candidates("/README", append=("~",), rename=(".zip",)) == ["/README~"]
+
+
+def test_backup_scan_finds_a_twin_of_an_observed_file():
+    home = '<html><body><a href="/config.php">cfg</a></body></html>'
+    source = "<?php $db_pass='s3cr3t'; ?>"
+
+    def fetch(name, addresses, path):
+        url = f"https://{name}{path}"
+        miss = {"status": 404, "url": url, "content_type": "", "server": "", "title": "", "body": ""}
+        if name != "admin.example.com":
+            return miss
+        if path == "/config.php":
+            return {"status": 200, "url": url, "content_type": "text/html",
+                    "server": "nginx", "title": "", "body": "rendered page"}
+        if path == "/config.php.bak":
+            return {"status": 200, "url": url, "content_type": "text/plain",
+                    "server": "nginx", "title": "", "body": source}
+        return miss
+
+    def fetch_doc(name, path):
+        if name == "admin.example.com" and path == "/":
+            return {"status": 200, "content_type": "text/html", "text": home}
+        return {"status": None, "content_type": "", "text": ""}
+
+    report, _scenario, world = _run_capturing(fetch_fn=fetch, fetch_doc_fn=fetch_doc)
+    hits = [h for f in world.facts("backups") for h in f.payload.hits]
+    assert any(h.url.endswith("/config.php.bak") and h.size > 0 for h in hits), \
+        "expected a backups fact carrying the config.php.bak twin"
+
+
 def test_cve_scan_fails_loud_when_identification_errors():
     # a model or lookup error is a loud Failed, never a silent empty result, invariant 5
     def boom(evidence):

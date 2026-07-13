@@ -140,6 +140,27 @@ class SecretReport:
 
 
 @dataclass(frozen=True, kw_only=True)
+class BackupHit:
+    """One backup or editor-artifact twin that answered without a 404. `size` is the response
+    body length, a proxy for whether the twin returned real content rather than an empty or
+    error page. Whether it is a live source leak is triage's judgment, this is the raw fact."""
+
+    url: str
+    path: str
+    status: int | None = None
+    content_type: str = ""
+    size: int = 0
+
+
+@dataclass(frozen=True, kw_only=True)
+class BackupReport:
+    """The backup twins reachable for a host. Empty hits is a real negative, the derived
+    twins did not answer, not a failure."""
+
+    hits: tuple[BackupHit, ...] = ()
+
+
+@dataclass(frozen=True, kw_only=True)
 class CVE:
     """One known vulnerability record from a public database. `cvss` and `severity` are the
     published score, kept as raw facts, whether the CVE truly applies to the exposed surface

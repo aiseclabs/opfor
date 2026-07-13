@@ -13,6 +13,8 @@ triggers:
   - /.svn
   - /.hg
   - backup
+  - .bak
+  - .swp
   - /.npmrc
   - /.ssh
   - /.htpasswd
@@ -54,6 +56,12 @@ an app shell. Strong signals, by class:
 - Environment dumps and listings. A `phpinfo()` page leaks the full server config, a
   directory listing whose body reads `Index of /` exposes files not meant to be listed, a
   `/.DS_Store` leaks directory names. Grade by what is revealed.
+- Backup and editor twins of a served file. A `config.php.bak`, a `config.php~`, an editor
+  swap `.config.php.swp`, or an archive `config.zip` beside the live file often returns the
+  source the interpreter otherwise hides, so the twin hands over code and inline
+  credentials. The signal is that the twin returns the raw source or archive bytes rather
+  than the rendered page or a 404. High when the source or a config carries a secret, medium
+  when it is only source without a credential.
 
 ## Not A Finding
 

@@ -20,6 +20,7 @@ from opfor.core import Capability, Done, Fact, Failed, Node, Outcome, Phase, Tas
 from opfor.scenarios.attacksurface import config
 from opfor.scenarios.attacksurface.net import registrable_root
 from opfor.scenarios.attacksurface.classes.domain.sources import (
+    backup_candidates,
     operations_from_introspection,
     paths_from_openapi,
     paths_in_javascript,
@@ -33,6 +34,8 @@ from opfor.scenarios.attacksurface.classes.domain.sources import (
 )
 from opfor.scenarios.attacksurface.classes.domain.types import (
     APISpec,
+    BackupHit,
+    BackupReport,
     Candidates,
     CVE,
     CVEScan,
@@ -605,6 +608,105 @@ class SecretScan(Capability):
             return Failed(reason=f"secret scan {type(exc).__name__}: {exc}")
         payload = SecretReport(matches=tuple(matches))
         return Done(facts=(Fact(kind="secrets_in_js", about=task.node, payload=payload),))
+
+
+class BackupScan(Capability):
+    """ENRICH: probe for backup and editor-artifact twins of a host's observed files.
+
+    An editor or a deploy leaves `config.php.bak`, a vim swap `.config.php.swp`, or an
+    archive `config.zip` beside the file it serves, and that twin often returns the source
+    the live file hides behind an interpreter. The twin names are derived from the files this
+    host actually revealed, its reached endpoints and the paths its home page harvested, so
+    the probe follows the real surface rather than a fixed guess list. The name templates are
+    handed in, so the capability holds no list of its own. Probing is a scoped recon act, GET
+    only, so it carries the host for scope. It reports the twins that answered, whether one is
+    a real source leak is triage's judgment.
+    """
+
+    name = "backup_scan"
+    phase = Phase.ENRICH
+    osint = False
+
+    _MAX_FILES = 20
+    _MAX_CANDIDATES = 150
+    # Unlikely twin paths, probed first to learn how the host answers a backup name that does
+    # not exist, the same catch-all guard the interface probe uses.
+    _BASELINE_PATHS = ("/opfor-baseline-6f3a9c2e.bak", "/does-not-exist-8b1d.old")
+
+    def __init__(self, fetch_fn) -> None:
+        self._fetch = fetch_fn
+
+    def run(self, task: Task, world: World) -> Outcome:
+        host = world.node(task.node)
+        name = host.payload.name
+        resolved = world.latest("resolved", task.node)
+        addresses = resolved.payload.addresses if resolved else ()
+        append = tuple(task.params.get("append") or ())
+        rename = tuple(task.params.get("rename") or ())
+        swap = tuple(task.params.get("swap") or ())
+        candidates = self._candidates(world, host, append, rename, swap)
+        baseline = self._baseline(name, addresses)
+        hits: list[BackupHit] = []
+        for path in candidates:
+            try:
+                result = self._fetch(name, addresses, path)
+            except Exception:
+                continue
+            status = result.get("status")
+            if status is None or status == 404:
+                continue
+            if not _distinct(result, baseline):
+                continue
+            hits.append(BackupHit(
+                url=result.get("url", f"https://{name}{path}"),
+                path=path,
+                status=status,
+                content_type=str(result.get("content_type", "")),
+                size=len(result.get("body", "")),
+            ))
+        payload = BackupReport(hits=tuple(hits))
+        return Done(facts=(Fact(kind="backups", about=task.node, payload=payload),))
+
+    def _candidates(self, world: World, host, append, rename, swap) -> list[str]:
+        """The twin paths to probe, derived from the file-like paths this host revealed, its
+        reached endpoints and its harvested candidates, deduped and capped."""
+        files: list[str] = []
+
+        def add_file(path: str) -> None:
+            path = (path or "").split("?")[0].split("#")[0]
+            if not path.startswith("/") or path.endswith("/"):
+                return
+            if "." not in path.rsplit("/", 1)[-1]:
+                return
+            if path not in files:
+                files.append(path)
+
+        for node in world.nodes("endpoint"):
+            if urlparse(node.payload.url).hostname == host.payload.name:
+                add_file(node.payload.path)
+        for fact in world.facts("candidates", host.id):
+            for path in fact.payload.paths:
+                add_file(path)
+
+        out: list[str] = []
+        for path in files[:self._MAX_FILES]:
+            for candidate in backup_candidates(path, append=append, rename=rename, swap=swap):
+                if candidate not in out:
+                    out.append(candidate)
+                if len(out) >= self._MAX_CANDIDATES:
+                    return out
+        return out
+
+    def _baseline(self, name, addresses) -> dict:
+        """The host's answer to a backup name that does not exist, its catch-all signature."""
+        for path in self._BASELINE_PATHS:
+            try:
+                result = self._fetch(name, addresses, path)
+            except Exception:
+                continue
+            if result.get("status") is not None:
+                return result
+        return {"status": None, "content_type": "", "body": ""}
 
 
 def _safe(thunk):

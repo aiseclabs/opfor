@@ -13,6 +13,7 @@ from pathlib import Path
 from opfor.scenarios.attacksurface.classes import ClassBundle
 from opfor.scenarios.attacksurface.classes.domain import planner
 from opfor.scenarios.attacksurface.classes.domain.capabilities import (
+    BackupScan,
     CveScan,
     DiscoverDomains,
     DomainPivot,
@@ -50,6 +51,7 @@ def assemble(*, enumerate_fn, pivot_fn, resolve_fn, probe_fn, fetch_fn, fetch_do
         GraphQLIntrospect(introspect_fn),
         SourceMapScan(fetch_doc_fn),
         SecretScan(fetch_doc_fn),
+        BackupScan(fetch_fn),
     ]
     if reverse_whois_fn is not None:
         capabilities.append(DomainRegistrant(reverse_whois_fn))

@@ -39,6 +39,13 @@ _STATIC_PREFIXES = [str(p) for p in (_STATIC.get("prefixes") or [])]
 _SECRETS = yaml.safe_load((_KNOWLEDGE / "secret_patterns.yaml").read_text(encoding="utf-8")) or {}
 _SECRET_PATTERNS = [dict(p) for p in (_SECRETS.get("patterns") or [])]
 
+# Backup name templates for the backup scan, loaded here and handed to the capability, so no
+# capability reads a knowledge file.
+_BACKUPS = yaml.safe_load((_KNOWLEDGE / "backups.yaml").read_text(encoding="utf-8")) or {}
+_BACKUP_APPEND = [str(s) for s in (_BACKUPS.get("append") or [])]
+_BACKUP_RENAME = [str(s) for s in (_BACKUPS.get("rename") or [])]
+_BACKUP_SWAP = [str(s) for s in (_BACKUPS.get("swap") or [])]
+
 
 def _live_domains(world: World) -> list:
     """Every domain that answered HTTP, the hosts worth probing."""
@@ -165,6 +172,24 @@ def _secret_scan_rule(world: World) -> list[Task]:
     return tasks
 
 
+def _backup_rule(world: World) -> list[Task]:
+    """Probe backup twins of a live host's observed files, once per host, after its interfaces
+    are enumerated so the observed file set is complete. Hands the capability the name
+    templates, so it reads no knowledge file, and carries the host, since it touches the
+    target's server."""
+    tasks: list[Task] = []
+    for node in _live_domains(world):
+        if not world.has_fact(node.id, "endpoints"):
+            continue
+        if world.has_fact(node.id, "backups"):
+            continue
+        tasks.append(Task(capability="backup_scan", node=node.id,
+                          params={"append": _BACKUP_APPEND, "rename": _BACKUP_RENAME,
+                                  "swap": _BACKUP_SWAP},
+                          scope_host=node.payload.name))
+    return tasks
+
+
 def _cve_rule(world: World) -> list[Task]:
     """Scan every live host for known vulnerabilities once its surface is enumerated.
 
@@ -211,6 +236,7 @@ def enrich_rules(*, with_cve: bool = False):
         _graphql_rule,
         _source_map_rule,
         _secret_scan_rule,
+        _backup_rule,
     ]
     if with_cve:
         rules.append(_cve_rule)

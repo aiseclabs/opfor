@@ -389,6 +389,11 @@ class SurfaceTriage(Triage):
             for hit in secrets.payload.matches:
                 line += (f"\n  secret in {hit.bundle}: {hit.pattern} ({hit.note}), "
                          f"sample {hit.sample}")
+        backups = world.latest("backups", node.id)
+        if backups is not None and backups.payload.hits:
+            for hit in backups.payload.hits:
+                line += (f"\n  backup file: {hit.url}, HTTP {hit.status}, "
+                         f"{hit.content_type or 'unknown type'}, {hit.size} bytes")
         return line
 
     def _endpoint_line(self, ep) -> str:

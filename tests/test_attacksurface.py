@@ -287,6 +287,23 @@ def test_wildcard_certificate_is_reported_as_a_blind_spot():
     assert "dev.example.com" in blind[0].data["bases"]
 
 
+def test_truncated_enumeration_is_reported_as_a_blind_spot():
+    # a passive source that stopped at its page cap left subdomains unfetched, the run must
+    # say so rather than present the bounded set as the complete surface
+    from opfor.scenarios.attacksurface.classes.domain.sources import Enumeration
+
+    def enum_truncated(root):
+        found = Enumeration({"api.example.com"})
+        found.truncated = True
+        return found
+
+    report, _scenario, _world = _run_capturing(enumerate_fn=enum_truncated)
+    trunc = [f for f in report.findings if f.id == "finding:blindspot:enumeration"]
+    assert len(trunc) == 1
+    assert trunc[0].severity == "INFO"
+    assert "example.com" in trunc[0].data["roots"]
+
+
 def test_hosts_from_file_normalizes_a_dns_export(tmp_path):
     from opfor.scenarios.attacksurface.classes.domain.sources import hosts_from_file
 
@@ -847,6 +864,47 @@ def test_cert_sibling_pivot_walks_past_the_first_page(monkeypatch):
     assert domains.cert_sibling_roots("example.com") == {
         "example.net": "shares a certificate with example.com, 2 roots on the cert"
     }
+
+
+def test_virustotal_enumeration_flags_truncation_at_the_page_cap(monkeypatch):
+    import urllib.request
+
+    from opfor.scenarios.attacksurface import config
+    from opfor.scenarios.attacksurface.classes.domain import sources as domains
+
+    monkeypatch.setattr(config, "virustotal_key", lambda: "vt")
+
+    class _Resp:
+        def __init__(self, payload):
+            self._payload = payload
+
+        def read(self):
+            return json.dumps(self._payload).encode("utf-8")
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+    # every page answers with a record and a next cursor, so the walk never exhausts the
+    # cursor and stops only at the page cap, which means more subdomains remain unfetched
+    _next = "https://www.virustotal.com/api/v3/domains/example.com/subdomains?cursor=more"
+
+    def capped(request, timeout=0):
+        return _Resp({"data": [{"id": "api.example.com"}], "links": {"next": _next}})
+
+    monkeypatch.setattr(urllib.request, "urlopen", capped)
+    result = domains.virustotal_subdomains("example.com")
+    assert result.truncated is True
+    assert "api.example.com" in result
+
+    # a walk that exhausts the cursor before the cap is complete, not truncated
+    def exhausts(request, timeout=0):
+        return _Resp({"data": [{"id": "api.example.com"}], "links": {}})
+
+    monkeypatch.setattr(urllib.request, "urlopen", exhausts)
+    assert domains.virustotal_subdomains("example.com").truncated is False
 
 
 def test_certspotter_token_429_falls_back_to_an_anonymous_walk(monkeypatch):

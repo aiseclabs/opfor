@@ -42,7 +42,15 @@ _CERTSPOTTER_PAGES = 12
 _CERTSPOTTER_PAGES_KEYLESS = 2
 
 
-def subdomains(domain: str) -> set[str]:
+class Enumeration(set):
+    """A set of discovered subdomains that also records whether a source truncated. A page
+    cap that stops short of the full log leaves subdomains unfetched, so the fact is carried
+    up rather than passing as a complete result, invariant 5."""
+
+    truncated = False
+
+
+def subdomains(domain: str) -> Enumeration:
     """Passive subdomains of a domain, the union of certificate transparency and VirusTotal.
 
     certspotter reads public certificate logs, VirusTotal joins when a key is set and is
@@ -52,21 +60,27 @@ def subdomains(domain: str) -> set[str]:
     when every source fails is the failure raised, so an empty result means no records
     rather than a dead source. crt.sh once joined as a second window on the same logs, but
     it answered 502 or timed out far more often than it answered, so it was dropped, its
-    data class is already covered by certspotter.
+    data class is already covered by certspotter. A source that hit its page cap marks the
+    union truncated, so a bounded fetch is reported as a blind spot rather than a full set.
     """
     sources = [certspotter_subdomains]
     if config.virustotal_key():
         sources.append(virustotal_subdomains)
     names: set[str] = set()
+    truncated = False
     errors: list[str] = []
     for source in sources:
         try:
-            names |= source(domain)
+            result = source(domain)
+            names |= result
+            truncated = truncated or getattr(result, "truncated", False)
         except Exception as exc:
             errors.append(f"{source.__name__}: {exc}")
     if not names and len(errors) == len(sources):
         raise RuntimeError("all passive subdomain sources failed: " + ", ".join(errors))
-    return names
+    union = Enumeration(names)
+    union.truncated = truncated
+    return union
 
 
 def certspotter_subdomains(domain: str) -> set[str]:
@@ -138,18 +152,21 @@ def _certspotter_issuances(domain: str, *, token: str | None, pages: int) -> lis
 _VT_PAGES = 10  # cap on cursor pages, each up to the page limit, bounds a large domain
 
 
-def virustotal_subdomains(domain: str) -> set[str]:
+def virustotal_subdomains(domain: str) -> Enumeration:
     """Subdomains of a domain from VirusTotal, paged over the relationship cursor.
 
     A key buys a real per-account quota rather than the shared-address throttling the
     keyless passive sources suffer, so this is the reliable free passive source. It returns
-    an empty set when no key is set, so the union simply runs without it.
+    an empty set when no key is set, so the union simply runs without it. The walk stops at
+    the page cap, and a next cursor still present at the cap means more subdomains remain
+    unfetched, so the result is flagged truncated rather than passing as complete.
     """
     key = config.virustotal_key()
     if not key:
-        return set()
+        return Enumeration()
     headers = {"User-Agent": _UA, "Accept": "application/json", "x-apikey": key}
     names: set[str] = set()
+    truncated = False
     url = f"https://www.virustotal.com/api/v3/domains/{domain}/subdomains?limit=40"
     for _ in range(_VT_PAGES):
         request = urllib.request.Request(url, headers=headers)
@@ -159,7 +176,13 @@ def virustotal_subdomains(domain: str) -> set[str]:
         url = str((data.get("links") or {}).get("next") or "")
         if not url:
             break
-    return names
+    else:
+        # the loop hit the page cap without exhausting the cursor, so a next url still
+        # present means the log has more subdomains than this bounded walk fetched
+        truncated = bool(url)
+    result = Enumeration(names)
+    result.truncated = truncated
+    return result
 
 
 def subdomains_from_vt(data, domain: str) -> set[str]:

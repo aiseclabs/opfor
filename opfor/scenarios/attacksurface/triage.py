@@ -158,6 +158,7 @@ class SurfaceTriage(Triage):
         findings: list[Finding] = []
         findings.extend(self._roots(world))
         findings.extend(self._wildcards(world))
+        findings.extend(self._truncated(world))
 
         caveat = self._resolution_caveat(world)
         if caveat is not None:
@@ -459,6 +460,28 @@ class SurfaceTriage(Triage):
                      "passive discovery cannot see them. Enumerate these bases from DNS or an "
                      "internal source to close the gap",
             data={"kind": "blindspot", "bases": bases},
+        )]
+
+    def _truncated(self, world: World) -> list[Finding]:
+        """Report the roots whose passive enumeration hit a source page cap as a blind spot.
+        A bounded walk that stopped short left subdomains unfetched, so the surface under
+        these roots is incomplete. This is a fact about the reach of the run, not a semantic
+        judgment, so it stays in code, and saying it keeps a truncated set from reading as a
+        clean, complete result."""
+        roots = sorted(n.payload.name for n in world.nodes("domain")
+                       if world.has_fact(n.id, "enumeration_truncated"))
+        if not roots:
+            return []
+        shown = ", ".join(roots[:10]) + (f", and {len(roots) - 10} more" if len(roots) > 10 else "")
+        return [Finding(
+            id="finding:blindspot:enumeration",
+            title=f"Passive enumeration truncated, {len(roots)} root(s) hide subdomains beyond the page cap",
+            severity="INFO",
+            where=shown,
+            evidence="a passive source returned more subdomains than the page cap fetched, so "
+                     "the enumeration under these roots is incomplete. Raise the cap or "
+                     "enumerate from DNS or an internal source to close the gap",
+            data={"kind": "blindspot", "roots": roots},
         )]
 
     def _resolution_caveat(self, world: World) -> Finding | None:

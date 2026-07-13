@@ -172,7 +172,12 @@ class Subdomains(Capability):
                  payload=DomainData(name=base, root=root, source="passive", wildcard=is_wild))
             for base, is_wild in sorted(wildcard.items())
         )
-        return Done(facts=(Fact(kind="enumerated", about=task.node, yields=found),))
+        facts = [Fact(kind="enumerated", about=task.node, yields=found)]
+        # A source that stopped at its page cap left subdomains unfetched, so record the
+        # gap for triage to report rather than let a bounded set read as the full surface.
+        if getattr(names, "truncated", False):
+            facts.append(Fact(kind="enumeration_truncated", about=task.node))
+        return Done(facts=tuple(facts))
 
 
 class ResolveDomain(Capability):

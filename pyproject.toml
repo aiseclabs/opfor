@@ -2,7 +2,22 @@
 name = "opfor"
 version = "0.1.0"
 description = "Universal offensive-security engine, generic engine with knowledge as data"
+readme = "README.md"
 requires-python = ">=3.12"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+authors = [{ name = "AISecLabs" }]
+keywords = ["security", "offensive security", "reconnaissance", "attack surface", "llm", "red team"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Information Technology",
+    "Topic :: Security",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Operating System :: OS Independent",
+]
 dependencies = [
     "PyYAML>=6.0",
 ]
@@ -15,6 +30,11 @@ dev = ["pytest>=8.0"]
 [project.scripts]
 opfor = "opfor.cli:main"
 
+[project.urls]
+Homepage = "https://github.com/aiseclabs/opfor"
+Repository = "https://github.com/aiseclabs/opfor"
+Issues = "https://github.com/aiseclabs/opfor/issues"
+
 [tool.pytest.ini_options]
 pythonpath = ["."]
 
@@ -26,7 +46,7 @@ build-backend = "setuptools.build_meta"
 include = ["opfor*"]
 
 [tool.setuptools.package-data]
-opfor = [
-    "scenarios/*/knowledge/**/*.md",
-    "scenarios/*/**/*.yaml",
+"*" = [
+    "knowledge/**/*.md",
+    "knowledge/**/*.yaml",
 ]

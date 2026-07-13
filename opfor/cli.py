@@ -13,6 +13,7 @@ from __future__ import annotations
 import argparse
 import sys
 
+from opfor import __version__
 from opfor.scenarios.registry import known_scenarios
 
 
@@ -86,6 +87,7 @@ def _print_report(report) -> None:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="opfor", description="Universal offensive-security engine")
+    parser.add_argument("--version", action="version", version=f"opfor {__version__}")
     sub = parser.add_subparsers(dest="command", required=True)
 
     sub.add_parser("scenarios", help="list the registered scenarios")

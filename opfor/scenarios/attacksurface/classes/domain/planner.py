@@ -133,6 +133,21 @@ def _graphql_rule(world: World) -> list[Task]:
     return tasks
 
 
+def _source_map_rule(world: World) -> list[Task]:
+    """Scan every live host for reachable JavaScript source maps, once per host.
+
+    It reads the target's bundles and their maps, a scoped act, so the task carries the host
+    for scope. Gated on its own fact so it runs once.
+    """
+    tasks: list[Task] = []
+    for node in _live_domains(world):
+        if world.has_fact(node.id, "source_maps"):
+            continue
+        tasks.append(Task(capability="source_map_scan", node=node.id,
+                          scope_host=node.payload.name))
+    return tasks
+
+
 def _cve_rule(world: World) -> list[Task]:
     """Scan every live host for known vulnerabilities once its surface is enumerated.
 
@@ -177,6 +192,7 @@ def enrich_rules(*, with_cve: bool = False):
         _endpoints_rule,
         _spec_rule,
         _graphql_rule,
+        _source_map_rule,
     ]
     if with_cve:
         rules.append(_cve_rule)

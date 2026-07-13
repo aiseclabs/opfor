@@ -23,6 +23,7 @@ from opfor.scenarios.attacksurface.classes.domain.capabilities import (
     HarvestPaths,
     HTTPDomain,
     ResolveDomain,
+    SourceMapScan,
     Subdomains,
 )
 
@@ -46,6 +47,7 @@ def assemble(*, enumerate_fn, pivot_fn, resolve_fn, probe_fn, fetch_fn, fetch_do
         Endpoints(fetch_fn),
         ExpandSpec(fetch_doc_fn),
         GraphQLIntrospect(introspect_fn),
+        SourceMapScan(fetch_doc_fn),
     ]
     if reverse_whois_fn is not None:
         capabilities.append(DomainRegistrant(reverse_whois_fn))

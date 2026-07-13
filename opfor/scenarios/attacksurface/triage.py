@@ -377,6 +377,13 @@ class SurfaceTriage(Triage):
                 line += f"\n  CVE {cve.id} CVSS {cve.cvss} {cve.severity}: {cve.summary}"
                 if cve.references:
                     line += f"\n    refs: {', '.join(cve.references)}"
+        maps = world.latest("source_maps", node.id)
+        if maps is not None and maps.payload.leaks:
+            for leak in maps.payload.leaks:
+                detail = "inlines original source" if leak.has_sources_content else "source paths only"
+                line += f"\n  source map: {leak.url}, {leak.sources_count} sources, {detail}"
+                if leak.sample_sources:
+                    line += f"\n    sample: {', '.join(leak.sample_sources)}"
         return line
 
     def _endpoint_line(self, ep) -> str:

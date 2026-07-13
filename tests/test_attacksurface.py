@@ -617,6 +617,45 @@ def test_cve_scan_records_the_identified_product_and_its_cves():
     assert any(c.id == "CVE-2021-39226" and c.severity == "CRITICAL" for c in scans[0].cves)
 
 
+def test_source_map_parser_detects_inlined_source_and_paths_only():
+    from opfor.scenarios.attacksurface.classes.domain import sources as domains
+
+    inlined = json.dumps({"version": 3, "sources": ["../src/app.ts", "../src/api.ts"],
+                          "sourcesContent": ["export const x = 1", ""]})
+    r = domains.source_map_from_text(inlined)
+    assert r["has_sources_content"] is True
+    assert r["sources_count"] == 2
+    assert "../src/app.ts" in r["sample_sources"]
+
+    # a map that lists paths but inlines no content is a lesser leak, not None
+    paths_only = json.dumps({"version": 3, "sources": ["../src/app.ts"], "sourcesContent": [None]})
+    assert domains.source_map_from_text(paths_only)["has_sources_content"] is False
+
+    # ordinary json and an empty body are not source maps
+    assert domains.source_map_from_text('{"hello": "world"}') is None
+    assert domains.source_map_from_text("") is None
+
+
+def test_source_map_scan_flags_an_inlined_map():
+    home = '<script src="/assets/app.abc.js"></script>'
+    mapdoc = json.dumps({"version": 3, "sources": ["../src/secret.ts"],
+                         "sourcesContent": ["const API_KEY = 'x'"]})
+
+    def fetch_doc(name, path):
+        if path == "/":
+            return {"text": home}
+        if path.endswith(".map"):
+            return {"text": mapdoc}
+        return {"text": ""}
+
+    report, _scenario, world = _run_capturing(fetch_doc_fn=fetch_doc)
+    leaks = [f.payload for f in world.facts("source_maps") if f.payload.leaks]
+    assert leaks, "expected a source_maps fact carrying a leak"
+    leak = leaks[0].leaks[0]
+    assert leak.has_sources_content is True
+    assert leak.url.endswith("/assets/app.abc.js.map")
+
+
 def test_cve_scan_fails_loud_when_identification_errors():
     # a model or lookup error is a loud Failed, never a silent empty result, invariant 5
     def boom(evidence):

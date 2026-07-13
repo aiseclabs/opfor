@@ -100,6 +100,27 @@ class GraphQLSchema:
 
 
 @dataclass(frozen=True, kw_only=True)
+class SourceMapLeak:
+    """One reachable JavaScript source map. `has_sources_content` is True when the map
+    inlines the original source, so the application's source is reconstructable, not only
+    its file names. `sample_sources` is a few of the original paths named, as evidence."""
+
+    bundle: str
+    url: str
+    sources_count: int = 0
+    has_sources_content: bool = False
+    sample_sources: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True, kw_only=True)
+class SourceMapReport:
+    """The source maps reachable for a host. Empty leaks is a real negative, the bundles
+    ship no map, not a failure."""
+
+    leaks: tuple[SourceMapLeak, ...] = ()
+
+
+@dataclass(frozen=True, kw_only=True)
 class CVE:
     """One known vulnerability record from a public database. `cvss` and `severity` are the
     published score, kept as raw facts, whether the CVE truly applies to the exposed surface

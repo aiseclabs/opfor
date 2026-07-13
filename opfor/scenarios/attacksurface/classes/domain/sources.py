@@ -680,6 +680,35 @@ _JS_URL = re.compile(r"""["'`](https?://[A-Za-z0-9.\-]+(?:/[A-Za-z0-9_.\-/]{0,20
 _LOC = re.compile(r"<loc>\s*([^<\s]+)\s*</loc>", re.IGNORECASE)
 
 
+def source_map_from_text(text: str) -> dict | None:
+    """Whether a body is a JavaScript source map, and what it leaks, parsed apart from the
+    fetch so a test drives it without a network call.
+
+    Returns None when the body is not a source map. Otherwise returns the count of original
+    sources, whether the original source is inlined in `sourcesContent`, and a few of the
+    source paths as evidence. A large map may arrive truncated, so it falls back to a
+    substring check when the JSON does not parse, since a truncated map is still a leak.
+    """
+    if not text:
+        return None
+    try:
+        data = json.loads(text)
+    except (ValueError, TypeError):
+        data = None
+    if isinstance(data, dict) and "version" in data and "sources" in data:
+        sources = [str(s) for s in (data.get("sources") or [])]
+        content = data.get("sourcesContent") or []
+        return {"sources_count": len(sources),
+                "has_sources_content": any(bool(c) for c in content),
+                "sample_sources": tuple(sources[:5])}
+    low = text.lower()
+    if '"version"' in low and '"sources"' in low:
+        return {"sources_count": low.count('"../') + low.count('webpack://'),
+                "has_sources_content": '"sourcescontent"' in low,
+                "sample_sources": ()}
+    return None
+
+
 def script_sources(body: str, host: str) -> list[str]:
     """Same-host JavaScript URLs a page loads, as paths, deduped in document order.
 

@@ -27,6 +27,7 @@ from opfor.scenarios.attacksurface.classes.domain.sources import (
     same_host_path,
     script_sources,
     sitemap_paths,
+    source_map_from_text,
     urls_in_javascript,
 )
 from opfor.scenarios.attacksurface.classes.domain.types import (
@@ -39,9 +40,14 @@ from opfor.scenarios.attacksurface.classes.domain.types import (
     GraphQLSchema,
     HTTP,
     Resolved,
+    SourceMapLeak,
+    SourceMapReport,
 )
 
 _LINK = re.compile(r'(?:href|src)\s*=\s*["\']([^"\'#?]+)', re.IGNORECASE)
+# Same-host bundles checked for a source map per host, bounded so a bundle-heavy app stays
+# a small number of extra reads.
+_MAX_SOURCE_MAPS = 12
 
 
 class DiscoverDomains(Capability):
@@ -519,6 +525,47 @@ class CveScan(Capability):
                 bit += f"\n  body: {endpoint.body[:400]}"
             lines.append(bit)
         return "\n".join(lines)
+
+
+class SourceMapScan(Capability):
+    """ENRICH: find reachable JavaScript source maps on a live host.
+
+    A build tool ships `bundle.js.map` next to a bundle, and when it inlines the original
+    source in `sourcesContent` the application's source is reconstructable, comments,
+    internal paths, and sometimes secrets. The map is skipped as a static asset by the
+    interface probe, so this capability derives the map url from each same-host bundle the
+    home page loads and reads it. It touches the target, so it is scoped, not osint. It
+    reports the raw maps found, whether one is a real leak is triage's judgment.
+    """
+
+    name = "source_map_scan"
+    phase = Phase.ENRICH
+    osint = False
+
+    def __init__(self, fetch_doc_fn) -> None:
+        self._fetch_doc = fetch_doc_fn
+
+    def run(self, task: Task, world: World) -> Outcome:
+        host = world.node(task.node)
+        name = host.payload.name
+        try:
+            home = self._fetch_doc(name, "/").get("text", "")
+            leaks: list[SourceMapLeak] = []
+            for bundle in script_sources(home, name)[:_MAX_SOURCE_MAPS]:
+                map_path = bundle + ".map"
+                text = self._fetch_doc(name, map_path).get("text", "")
+                parsed = source_map_from_text(text)
+                if parsed is None:
+                    continue
+                leaks.append(SourceMapLeak(
+                    bundle=bundle, url=f"https://{name}{map_path}",
+                    sources_count=int(parsed["sources_count"]),
+                    has_sources_content=bool(parsed["has_sources_content"]),
+                    sample_sources=tuple(parsed["sample_sources"])))
+        except Exception as exc:
+            return Failed(reason=f"source map scan {type(exc).__name__}: {exc}")
+        payload = SourceMapReport(leaks=tuple(leaks))
+        return Done(facts=(Fact(kind="source_maps", about=task.node, payload=payload),))
 
 
 def _safe(thunk):

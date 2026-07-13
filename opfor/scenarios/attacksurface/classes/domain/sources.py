@@ -27,6 +27,8 @@ from opfor.scenarios.attacksurface.net import looks_like_host, registrable_root
 _UA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
 _TIMEOUT = 12
 _BODY_HEAD = 4096
+# One retry on a transient timeout, so a single slow read does not mark a live host dead.
+_PROBE_ATTEMPTS = 2
 _TITLE = re.compile(r"<title[^>]*>(.*?)</title>", re.IGNORECASE | re.DOTALL)
 _DOH_RESOLVERS = ("https://dns.google/resolve", "https://cloudflare-dns.com/dns-query")
 
@@ -471,22 +473,26 @@ def public_addresses(addresses) -> list[str]:
 
 
 def http_probe(name: str, addresses=()) -> dict:
-    """Probe a name over HTTPS then HTTP by connecting to a public address it resolves to.
+    """Probe a name over HTTPS then HTTP across every public address it resolves to.
 
     Connecting to the address with the name as SNI and Host bypasses the local resolver.
-    A host with no public address is not publicly reachable, reported as not alive. A
-    connection error on both schemes is a real answer, not raised.
+    A host with no public address is not publicly reachable, reported as not alive. Every
+    public address is tried, not only the first, so a round-robin or multi-region name is
+    not judged dead on one unlucky address. A timeout is transient and retried, since one
+    slow read must not mark a live host dead, while a refused or reset connection is a real
+    answer that moves on. Only connection errors are caught, so an unexpected error is
+    raised loud rather than passing as not alive, invariant 5.
     """
-    public = public_addresses(addresses)
-    if not public:
-        return _dead()
-    ip = public[0]
-    for scheme in ("https", "http"):
-        try:
-            status, server, _, body, _location = _connect(name, ip, scheme, "/")
-        except Exception:
-            continue
-        return _result(True, status, f"{scheme}://{name}/", server, body)
+    for ip in public_addresses(addresses):
+        for scheme in ("https", "http"):
+            for _ in range(_PROBE_ATTEMPTS):
+                try:
+                    status, server, _, body, _location = _connect(name, ip, scheme, "/")
+                except TimeoutError:
+                    continue
+                except (OSError, http.client.HTTPException):
+                    break
+                return _result(True, status, f"{scheme}://{name}/", server, body)
     return _dead()
 
 

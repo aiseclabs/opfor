@@ -483,6 +483,50 @@ def test_endpoints_enumerated_and_auth_classified():
     assert eps["endpoint:admin.example.com/.env"].auth_required is False
 
 
+def test_http_probe_tries_every_public_ip_retries_timeouts_and_raises_the_unexpected(monkeypatch):
+    from opfor.scenarios.attacksurface.classes.domain import sources as domains
+
+    # the first public address refuses on both schemes, the second answers, so a multi-ip
+    # name is alive rather than judged dead on the first unlucky address
+    calls = []
+
+    def refuse_first_ip(name, ip, scheme, path, **kw):
+        calls.append((ip, scheme))
+        if ip == "8.8.8.8":
+            raise ConnectionRefusedError()
+        return (200, "nginx", "text/html", "<title>ok</title>", "")
+
+    monkeypatch.setattr(domains, "_connect", refuse_first_ip)
+    result = domains.http_probe("host.example.com", ("8.8.8.8", "1.1.1.1"))
+    assert result["alive"] is True
+    assert result["status"] == 200
+    assert ("1.1.1.1", "https") in calls
+
+    # a timeout is transient, so it is retried and the live server on the retry is found
+    state = {"n": 0}
+
+    def timeout_then_ok(name, ip, scheme, path, **kw):
+        state["n"] += 1
+        if state["n"] == 1:
+            raise TimeoutError()
+        return (200, "nginx", "text/html", "", "")
+
+    monkeypatch.setattr(domains, "_connect", timeout_then_ok)
+    assert domains.http_probe("host.example.com", ("8.8.8.8",))["alive"] is True
+    assert state["n"] >= 2
+
+    # an unexpected error is raised loud, never passed off as not alive
+    def raise_bug(name, ip, scheme, path, **kw):
+        raise ValueError("bug")
+
+    monkeypatch.setattr(domains, "_connect", raise_bug)
+    with pytest.raises(ValueError):
+        domains.http_probe("host.example.com", ("8.8.8.8",))
+
+    # a private-only host has no public address, reported not alive without a connection
+    assert domains.http_probe("host.example.com", ("10.0.0.1",))["alive"] is False
+
+
 def test_static_assets_are_never_probed_into_endpoints():
     # admin's script names /main.css, a static asset, so it must not become an endpoint
     world = _seed()

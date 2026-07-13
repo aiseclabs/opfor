@@ -436,8 +436,16 @@ class SurfaceTriage(Triage):
             node = world.node(fact.about)
             url = node.payload.url if node else fact.about
             host = urlparse(url).hostname or url
-            sample = ", ".join(list(schema.operations)[:_MAX_LIST])
-            out.append((f"graphql introspection {url}, {schema.count} operations\n  operations: {sample}", host))
+            queries = [op for op in schema.operations if op.startswith("query:")]
+            mutations = [op for op in schema.operations if op.startswith("mutation:")]
+            line = f"graphql introspection {url}, {schema.count} operations"
+            if queries:
+                line += (f"\n  read queries reachable by the same unauthenticated introspection: "
+                         f"{', '.join(queries[:_MAX_LIST])}")
+            if mutations:
+                line += (f"\n  mutations, write operations declared, needs authorized confirmation: "
+                         f"{', '.join(mutations[:_MAX_LIST])}")
+            out.append((line, host))
         return out
 
     def _spec_audit_detail(self, audit) -> str:

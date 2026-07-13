@@ -37,8 +37,9 @@ SYSTEM = (
     "report, the assets a scan reached under a target. Read both and decide which assets "
     "rise to a finding an operator should act on. Judge on the evidence in the report, "
     "never on a path or name alone. Do not invent assets that are not in the report. "
-    "Reconnaissance only, a proof of concept is a safe read such as a curl of a URL, never "
-    "an attack or a state change.\n\n"
+    "Reconnaissance only. This run performs only safe reads, never an attack or a state "
+    "change. When demonstrating a finding would take an attack, describe the steps, do not "
+    "perform them, and mark the poc as requiring authorized exploitation.\n\n"
     "Reply with a single JSON object and nothing else, of the form "
     '{"findings": [ ... ]}. Report nothing as {"findings": []}. Each finding is an object '
     "with these fields:\n"
@@ -48,10 +49,15 @@ SYSTEM = (
     '  "severity"  one of INFO, LOW, MEDIUM, HIGH, CRITICAL.\n'
     '  "where"     the URL or host the finding is about, copied from the report.\n'
     '  "evidence"  what in the report shows this is real.\n'
-    '  "poc"       a single safe, reproducible command that demonstrates the finding, such '
-    'as `curl -s <the exact url>`, using only a read, never an attack, a login, or a state '
-    'change, so an operator can run it by hand and see the same evidence. Empty when no '
-    'command is needed.\n'
+    '  "poc"       how to demonstrate this specific finding, not a generic request. When '
+    'the finding is a known vulnerability, give the reproduction for that vulnerability by '
+    'its CVE id, not merely a read that proves the version. Mark the poc by what it needs. '
+    'Prefix "safe read: " and give the exact command, such as `curl -s <the exact url>`, '
+    'when a read alone demonstrates it, for an unauthenticated endpoint, an information '
+    'disclosure, or an open introspection. Prefix "requires authorized exploitation: " and '
+    'describe the steps when demonstrating it would take an attack, such as code execution, '
+    'an authentication bypass, or an injection, which this reconnaissance run does not '
+    'perform. Empty when no command is needed.\n'
     '  "confidence" a number from 0 to 1.\n'
 )
 

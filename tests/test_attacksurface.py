@@ -599,6 +599,23 @@ def test_nvd_cves_returns_nothing_for_an_unidentified_product():
     assert domains.nvd_cves("", "1.0") == []
 
 
+def test_nvd_throttle_serializes_calls_to_stay_under_the_rate_limit(monkeypatch):
+    from opfor.scenarios.attacksurface.classes.domain import sources as domains
+
+    clock = {"t": 100.0}
+    slept = []
+    monkeypatch.setattr(domains.time, "monotonic", lambda: clock["t"])
+    monkeypatch.setattr(domains.time, "sleep", lambda s: slept.append(s))
+    domains._nvd_next[0] = 0.0
+
+    # the first call does not wait, it only schedules the next slot
+    domains._nvd_wait(6.0)
+    assert slept == []
+    # a second call before the interval has passed blocks until the slot opens
+    domains._nvd_wait(6.0)
+    assert slept and abs(slept[-1] - 6.0) < 0.01
+
+
 def test_cve_scan_records_the_identified_product_and_its_cves():
     # the identify seam names the product, the cve seam looks it up, and the scan records
     # both as a raw fact, the agent-driven identification feeding the mechanical lookup

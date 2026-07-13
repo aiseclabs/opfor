@@ -17,6 +17,8 @@ import json
 import re
 import socket
 import ssl
+import threading
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -281,6 +283,25 @@ def subdomains_from_dnsdumpster(data, domain: str) -> set[str]:
 _NVD_TIMEOUT = 30
 _NVD_MAX = 25
 _NVD_MAX_REFS = 3
+# NVD rate-limits by address, about one request per six seconds without a key and far more
+# with one. The scan runs many hosts concurrently, so a process-wide throttle serializes
+# NVD calls to stay under the limit rather than bursting into a 429. See `_nvd_wait`.
+_NVD_INTERVAL_KEYLESS = 6.0
+_NVD_INTERVAL_KEYED = 1.0
+_NVD_RETRIES = 3
+_NVD_LOCK = threading.Lock()
+_nvd_next = [0.0]
+
+
+def _nvd_wait(interval: float) -> None:
+    """Block until at least `interval` seconds have passed since the last NVD call, across
+    all threads, so concurrent scans do not burst past the rate limit."""
+    with _NVD_LOCK:
+        now = time.monotonic()
+        wait = _nvd_next[0] - now
+        if wait > 0:
+            time.sleep(wait)
+        _nvd_next[0] = time.monotonic() + interval
 
 
 def nvd_cves(product: str, version: str, cpe: str = "") -> list[dict]:
@@ -305,9 +326,21 @@ def nvd_cves(product: str, version: str, cpe: str = "") -> list[dict]:
         query = f"keywordSearch={urllib.parse.quote((product + ' ' + version).strip())}"
     url = f"https://services.nvd.nist.gov/rest/json/cves/2.0?{query}&resultsPerPage={_NVD_MAX}"
     request = urllib.request.Request(url, headers=headers)
-    with urllib.request.urlopen(request, timeout=_NVD_TIMEOUT) as resp:
-        data = json.loads(resp.read().decode("utf-8", "replace"))
-    return cves_from_nvd(data)
+    interval = _NVD_INTERVAL_KEYED if key else _NVD_INTERVAL_KEYLESS
+    for attempt in range(_NVD_RETRIES):
+        _nvd_wait(interval)
+        try:
+            with urllib.request.urlopen(request, timeout=_NVD_TIMEOUT) as resp:
+                data = json.loads(resp.read().decode("utf-8", "replace"))
+            return cves_from_nvd(data)
+        except urllib.error.HTTPError as exc:
+            # A rate-limit answer is retried after a back-off, longer each attempt and
+            # honoring a Retry-After header, and only a persistent limit is raised loud.
+            if exc.code != 429 or attempt == _NVD_RETRIES - 1:
+                raise
+            retry_after = exc.headers.get("Retry-After") if exc.headers else None
+            time.sleep(float(retry_after) if retry_after and retry_after.isdigit() else interval * (attempt + 2))
+    return []
 
 
 def cves_from_nvd(data) -> list[dict]:

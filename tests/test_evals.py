@@ -138,3 +138,35 @@ def test_run_case_scores_a_canned_model_run():
     assert res.recall == 1.0
     assert len(res.false_positives) == 1  # the dotenv shell wrongly flagged as a file leak
     assert res.errors == 0
+
+
+def test_sensitive_file_case_scores_a_real_leak_and_a_shell_false_positive():
+    from evals.cases import load_case
+    from evals.runner import run_once
+
+    case = load_case("sensitive-file")
+    reply = json.dumps({"findings": [
+        {"category": "sensitive-file-exposure", "title": "Config leak", "severity": "HIGH",
+         "where": "https://leak.example.com/.git/config", "evidence": "git config and dotenv readable",
+         "poc": "safe read: curl -s https://leak.example.com/.git/config"},
+        {"category": "sensitive-file-exposure", "title": "Env leak", "severity": "HIGH",
+         "where": "https://shell.example.com/.env", "evidence": "the dotenv path answered 200"},
+    ]})
+    res = run_once(case, provider=MockProvider(default=reply))
+    assert res.found == ["config-leak"] and res.recall == 1.0
+    assert len(res.false_positives) == 1  # the app shell wrongly read as a leak
+
+
+def test_graphql_case_scores_open_introspection_and_leaves_the_closed_endpoint():
+    from evals.cases import load_case
+    from evals.runner import run_once
+
+    case = load_case("graphql-introspection")
+    reply = json.dumps({"findings": [
+        {"category": "graphql-introspection", "title": "Open introspection", "severity": "MEDIUM",
+         "where": "open-gql.example.com", "evidence": "the endpoint returned a full schema",
+         "poc": "safe read: introspection query"},
+    ]})
+    res = run_once(case, provider=MockProvider(default=reply))
+    assert res.found == ["open-introspection"] and res.recall == 1.0
+    assert res.false_positives == []  # the closed endpoint was correctly left alone

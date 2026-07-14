@@ -192,3 +192,30 @@ def test_cve_backtest_lands_the_known_cve_and_a_hallucination_is_a_false_positiv
     ]})
     bad = run_once(case, provider=MockProvider(default=hallucinated))
     assert bad.false_positives == ["finding:known-vulnerability:patched.example.com"]
+
+
+def test_gated_vs_open_catches_the_open_admin_and_never_punishes_a_correct_gated_verdict():
+    from evals.cases import load_case
+    from evals.runner import run_once
+
+    case = load_case("gated-vs-open")
+    good = json.dumps({"findings": [
+        {"category": "unauthenticated-interface", "title": "Open admin", "severity": "MEDIUM",
+         "where": "open-admin.example.com", "evidence": "an admin panel is reachable",
+         "poc": "safe read: curl -s https://open-admin.example.com/"},
+        {"category": "zero-trust-proxy", "title": "IAP gates host", "severity": "INFO",
+         "where": "iap.example.com", "evidence": "302 to accounts.google.com with the iap header"},
+    ]})
+    res = run_once(case, provider=MockProvider(default=good))
+    assert res.found == ["open-admin"] and res.recall == 1.0
+    # the correct informational gated verdict is not the guarded open class, so it is extra
+    assert res.false_positives == []
+    assert "finding:zero-trust-proxy:iap.example.com" in res.extra
+
+    # calling a gated host an open unauthenticated interface is the false positive
+    bad = json.dumps({"findings": [
+        {"category": "unauthenticated-interface", "title": "IAP open?", "severity": "HIGH",
+         "where": "iap.example.com", "evidence": "misread the gate as an open interface"},
+    ]})
+    wrong = run_once(case, provider=MockProvider(default=bad))
+    assert wrong.false_positives == ["finding:unauthenticated-interface:iap.example.com"]

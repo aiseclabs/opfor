@@ -15,6 +15,7 @@ _CASES = {
     "sensitive-file": "evals.cases.sensitive_file",
     "graphql-introspection": "evals.cases.graphql_introspection",
     "cve-backtest": "evals.cases.cve_backtest",
+    "gated-vs-open": "evals.cases.gated_vs_open",
 }
 
 

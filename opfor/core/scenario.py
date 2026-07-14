@@ -14,6 +14,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from opfor.core.capability import Capability
+from opfor.core.confirm import Confirm
 from opfor.core.phase import Phase
 from opfor.core.rules import Planner
 from opfor.core.triage import Triage
@@ -29,6 +30,9 @@ class Scenario:
     # The last phase this scenario runs. A recon scenario stops at TRIAGE, which is a
     # declared finish line, so reaching it is a closed run and stopping short is not.
     terminal: Phase = Phase.TRIAGE
+    # The confirm judge, run in the CONFIRM phase to regrade findings against the live
+    # reproduction receipts. Absent when a scenario never reproduces, then CONFIRM is idle.
+    confirm: Confirm | None = None
 
     @property
     def knowledge_dir(self) -> Path:

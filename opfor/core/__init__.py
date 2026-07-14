@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from opfor.core.budget import Budget
 from opfor.core.capability import Capability, Done, Failed, Later, Outcome, Task
+from opfor.core.confirm import Confirm
 from opfor.core.engine import run
 from opfor.core.json_parse import extract_json_object, require_json_object
 from opfor.core.ledger import Event, Ledger
@@ -28,6 +29,7 @@ __all__ = [
     "Budget",
     "Capability",
     "CompletionResult",
+    "Confirm",
     "Decision",
     "Done",
     "Event",

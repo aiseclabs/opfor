@@ -57,6 +57,16 @@ def run(
             reached = phase
             continue
 
+        if phase == Phase.CONFIRM and scenario.confirm is not None:
+            # A second judgment, not an action, so it runs the confirm judge rather than
+            # capabilities, mirroring TRIAGE. It regrades the findings against the receipts
+            # the EXPLOIT phase recorded and never mints a new one, so the surface a run
+            # reports is unchanged in count and only regraded.
+            findings = tuple(scenario.confirm.reconfirm(world, findings))
+            ledger.append("confirm", findings=len(findings))
+            reached = phase
+            continue
+
         while True:
             if not budget.ok():
                 notes.append(f"budget exhausted in {phase.name}")

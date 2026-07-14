@@ -67,12 +67,14 @@ def _run(args) -> int:
     name, roots, hosts, scope_hosts = _resolve_seed(args)
     world = seed_builders[args.scenario](name, domains=roots, hosts=hosts)
     scope = Scope(max_tier=args.tier, hosts=scope_hosts, authorized=args.authorize)
-    if getattr(args, "reproduce", False):
-        # The read-only reproduce phase is opt-in and intrusive, so it needs both a raised
-        # terminal and the recorded intrusive authorization, a fresh build carries the first
-        # and scope the second, so a run without --tier intrusive --authorize denies loud.
+    if getattr(args, "confirm", False) or getattr(args, "reproduce", False):
+        # The reproduce and confirm phases are opt-in and intrusive, so they need both a
+        # raised terminal and the recorded intrusive authorization, a fresh build carries the
+        # first and scope the second, so a run without --tier intrusive --authorize denies
+        # loud. Confirm implies reproduce, since it regrades the reproduction receipts.
         from opfor.scenarios.attacksurface import build as build_attacksurface
-        scenario = build_attacksurface(reproduce=True)
+        scenario = build_attacksurface(
+            reproduce=getattr(args, "reproduce", False), confirm=getattr(args, "confirm", False))
     else:
         scenario = get_scenario(args.scenario)
     report = engine_run(scenario, world, scope=scope, budget=Budget(args.budget))
@@ -104,6 +106,11 @@ def _print_report(report, world=None) -> None:
             detail = f"HTTP {repro.status} {repro.content_type}".strip()
             note = f" [{repro.error}]" if repro.error else ""
             print(f"      reproduced: {repro.method} {repro.url} -> {detail}{note}")
+        verdict = finding.data.get("reproduction_verdict")
+        if verdict:
+            reason = finding.data.get("reproduction_reason", "")
+            print(f"      confirmed: {verdict} (severity {finding.severity})"
+                  + (f" {reason}" if reason else ""))
 
 
 def _reproductions(world) -> dict:
@@ -134,6 +141,10 @@ def main(argv: list[str] | None = None) -> int:
     run.add_argument("--reproduce", action="store_true",
                      help="raise the terminal to EXPLOIT and replay each grounded safe-read poc, "
                           "read only, also needs --tier intrusive --authorize")
+    run.add_argument("--confirm", action="store_true",
+                     help="raise the terminal to CONFIRM and regrade each finding against its "
+                          "reproduction receipt, implies --reproduce, also needs "
+                          "--tier intrusive --authorize")
     run.add_argument("--budget", type=int, default=500, help="the task budget, default 500")
 
     args = parser.parse_args(argv)

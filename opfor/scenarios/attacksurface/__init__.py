@@ -27,6 +27,7 @@ from opfor.scenarios.attacksurface.classes.domain import identify
 from opfor.scenarios.attacksurface.classes.domain import sources as domain_src
 from opfor.scenarios.attacksurface.classes.github import sources as github_src
 from opfor.scenarios.attacksurface.triage import SurfaceTriage
+from opfor.scenarios.attacksurface.confirm import ConfirmTriage
 from opfor.scenarios.attacksurface.reproduce import ReproduceFinding, reproduce_rule
 from opfor.scenarios.attacksurface.types import Org
 
@@ -58,6 +59,7 @@ def build(
     judge: Provider | None = None,
     judge_model: str | None = None,
     reproduce: bool = False,
+    confirm: bool = False,
     reproduce_fetch_fn=domain_src.fetch_public_url,
 ) -> Scenario:
     # The registrant pivot is the reliable core, but its provider has no keyless mode, so
@@ -107,11 +109,22 @@ def build(
     enrich_rules = [rule for bundle in bundles for rule in bundle.enrich_rules]
     knowledge_dirs = [bundle.knowledge_dir for bundle in bundles if bundle.knowledge_dir]
 
+    # Confirm regrades findings against the reproduction receipts, so it needs the receipts
+    # the EXPLOIT phase records, so confirm implies reproduce. The terminal rises to EXPLOIT
+    # for a bare reproduce and to CONFIRM when the confirm regrade is asked for.
+    reproduce = reproduce or confirm
+
     # The read-only reproduce step and its rule are always registered but dormant, the
     # EXPLOIT phase runs only when the operator raises the terminal with reproduce. It is
     # intrusive tier, so scope still demands the recorded authorization even when enabled.
     capabilities = capabilities + (ReproduceFinding(reproduce_fetch_fn),)
     rules = {Phase.MAP: map_rules, Phase.ENRICH: enrich_rules, Phase.EXPLOIT: [reproduce_rule]}
+
+    terminal = Phase.TRIAGE
+    if reproduce:
+        terminal = Phase.EXPLOIT
+    if confirm:
+        terminal = Phase.CONFIRM
 
     return Scenario(
         name="attacksurface",
@@ -121,7 +134,8 @@ def build(
         triage=SurfaceTriage(knowledge_dirs, provider=provider, model=model,
                              challenger=challenger, challenger_model=challenger_model,
                              judge=judge, judge_model=judge_model),
-        terminal=Phase.EXPLOIT if reproduce else Phase.TRIAGE,
+        confirm=ConfirmTriage(provider=provider, model=model) if confirm else None,
+        terminal=terminal,
     )
 
 

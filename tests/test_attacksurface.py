@@ -1271,6 +1271,139 @@ def test_reproduce_is_intrusive_and_denied_without_authorization():
     assert allowed.allowed
 
 
+# --- the confirm regrade against the live receipt --------------------------------------
+
+
+def _claim(fid, *, severity="MEDIUM", where="https://h/x", title="t"):
+    from opfor.core import Finding
+    return Finding(id=fid, title=title, severity=severity, where=where,
+                   evidence="judged from the report", poc=f"safe read: curl -s {where}")
+
+
+def _receipt(**over):
+    from opfor.scenarios.attacksurface.reproduce import Reproduction
+    fields = dict(method="GET", url="https://h/x", status=200,
+                  content_type="application/json", size=12, excerpt='{"ok": true}', error="")
+    fields.update(over)
+    return Reproduction(**fields)
+
+
+def test_confirm_build_raises_terminal_to_confirm_and_wires_the_judge():
+    confirming = _make(confirm=True)
+    assert confirming.terminal == Phase.CONFIRM
+    assert confirming.confirm is not None
+    # confirm implies reproduce, since it regrades the reproduction receipts
+    assert any(cap.name == "reproduce_finding" for cap in confirming.capabilities)
+    assert _make().confirm is None and _make().terminal == Phase.TRIAGE
+
+
+def test_confirm_regrades_a_finding_against_its_receipt():
+    """A finding with a live receipt is regraded on what the request returned, the verdict,
+    the reason, and the receipt ride the finding for the report."""
+    from opfor.core import Fact, World
+    from opfor.scenarios.attacksurface.confirm import ConfirmTriage
+
+    world = World()
+    world.absorb([Fact(kind="reproduction", about="finding:a",
+                       payload=_receipt(content_type="text/html", excerpt="<!doctype html>"))])
+    reply = json.dumps({"verdict": "weakened", "severity": "LOW",
+                        "reason": "the app returned an html shell, not a raw config"})
+    confirm = ConfirmTriage(provider=MockProvider(responses=[reply]), model="m")
+
+    out = confirm.reconfirm(world, (_claim("finding:a", severity="MEDIUM"),))
+    assert len(out) == 1
+    assert out[0].severity == "LOW"  # regraded down on the receipt
+    assert out[0].data["reproduction_verdict"] == "weakened"
+    assert "html shell" in out[0].data["reproduction_reason"]
+    assert out[0].data["receipt"]["content_type"] == "text/html"
+
+
+def test_confirm_passes_through_a_finding_with_no_receipt_unchanged():
+    """A finding the reproduce phase never replayed carries no receipt, so confirm returns it
+    untouched and never invents a verdict for it."""
+    from opfor.core import World
+    from opfor.scenarios.attacksurface.confirm import ConfirmTriage
+
+    provider = MockProvider(default='{"verdict": "confirmed", "severity": "HIGH"}')
+    confirm = ConfirmTriage(provider=provider, model="m")
+    out = confirm.reconfirm(World(), (_claim("finding:a", severity="MEDIUM"),))
+    assert out[0].severity == "MEDIUM"
+    assert "reproduction_verdict" not in out[0].data
+    assert provider.calls == []  # the model is never asked about a finding with no receipt
+
+
+def test_confirm_is_loud_when_the_model_reply_cannot_be_parsed():
+    """A confirm call that returns no verdict is a failed confirmation, not a silent pass. The
+    finding is kept at its judged severity and marked confirm-failed, invariant 5."""
+    from opfor.core import Fact, World
+    from opfor.scenarios.attacksurface.confirm import ConfirmTriage
+
+    world = World()
+    world.absorb([Fact(kind="reproduction", about="finding:a", payload=_receipt())])
+    confirm = ConfirmTriage(provider=MockProvider(default="not json at all"), model="m")
+    out = confirm.reconfirm(world, (_claim("finding:a", severity="HIGH"),))
+    assert out[0].severity == "HIGH"  # never silently downgraded on a failed call
+    assert out[0].data["reproduction_verdict"] == "confirm-failed"
+    assert "failed" in out[0].data["reproduction_reason"]
+
+
+def test_confirm_regrades_end_to_end_across_triage_reproduce_and_confirm():
+    """The whole intrusive spine wired by hand: triage grounds a finding and materializes its
+    node, reproduce records the live receipt, confirm regrades the finding on that receipt."""
+    from opfor.core import Fact, Node, Task, World
+    from opfor.scenarios.attacksurface.classes.domain.types import DomainData, Endpoint, Resolved
+    from opfor.scenarios.attacksurface.confirm import ConfirmTriage
+    from opfor.scenarios.attacksurface.reproduce import ReproduceFinding
+    from opfor.scenarios.attacksurface.triage import SurfaceTriage
+
+    world = World()
+    world.add(Node(id="domain:api.example.com", type="domain",
+                   payload=DomainData(name="api.example.com", root="example.com", source="crt")))
+    # resolve the host so the resolution caveat does not suppress the model judgment
+    world.absorb([Fact(kind="resolved", about="domain:api.example.com",
+                       payload=Resolved(resolvable=True, addresses=("192.0.2.1",)))])
+    ep_id = "endpoint:api.example.com/.env"
+    world.add(Node(id=ep_id, type="endpoint",
+                   payload=Endpoint(url="https://api.example.com/.env", path="/.env",
+                                    status=200, auth_required=False, content_type="text/html")))
+
+    finder = json.dumps({"findings": [{
+        "category": "sensitive-file-exposure", "title": "Exposed .env", "severity": "MEDIUM",
+        "where": "https://api.example.com/.env", "evidence": "a dotenv path answered 200",
+        "poc": "safe read: curl -s https://api.example.com/.env", "confidence": 0.8}]})
+    triage = SurfaceTriage([], provider=MockProvider(responses=[finder]), model="m")
+    findings = triage.judge(world)
+    # no knowledge dirs are loaded here, so the model category normalizes to "other", the
+    # finding is still grounded against the observed endpoint GET and materialized as a node
+    graded = [f for f in findings if f.where == "https://api.example.com/.env"]
+    assert graded and "poc_request" in graded[0].data  # grounded, so a node was materialized
+
+    def fetch(url):
+        return {"status": 200, "url": url, "content_type": "text/html",
+                "body": "<!doctype html><html>app shell</html>"}
+
+    outcome = ReproduceFinding(fetch).run(
+        Task(capability="reproduce_finding", node=graded[0].id), world)
+    world.absorb(outcome.facts)  # the engine absorbs a capability's facts, so mirror it here
+
+    verdict = json.dumps({"verdict": "refuted", "severity": "INFO",
+                          "reason": "the receipt is the spa html shell, not a dotenv file"})
+    confirm = ConfirmTriage(provider=MockProvider(responses=[verdict]), model="m")
+    out = confirm.reconfirm(world, tuple(findings))
+    regraded = next(f for f in out if f.id == graded[0].id)
+    assert regraded.severity == "INFO"  # the false positive is graded down on the live receipt
+    assert regraded.data["reproduction_verdict"] == "refuted"
+
+
+def test_engine_reaches_the_confirm_phase_when_opted_in_and_authorized():
+    """End to end through the real engine: with confirm opted in and the intrusive tier
+    authorized, the run advances through EXPLOIT and closes at CONFIRM."""
+    scenario = _make(confirm=True)
+    scope = Scope(max_tier="intrusive", hosts=(ROOT,), authorized=True)
+    report = run(scenario, _seed(), scope=scope, budget=Budget(2000))
+    assert report.closed and report.reached == Phase.CONFIRM
+
+
 def test_unknown_severity_falls_back_to_class_impact_then_medium():
     ids = frozenset({"sensitive-file-exposure"})
     impacts = {"sensitive-file-exposure": "HIGH"}

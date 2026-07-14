@@ -170,3 +170,25 @@ def test_graphql_case_scores_open_introspection_and_leaves_the_closed_endpoint()
     res = run_once(case, provider=MockProvider(default=reply))
     assert res.found == ["open-introspection"] and res.recall == 1.0
     assert res.false_positives == []  # the closed endpoint was correctly left alone
+
+
+def test_cve_backtest_lands_the_known_cve_and_a_hallucination_is_a_false_positive():
+    from evals.cases import load_case
+    from evals.runner import run_once
+
+    case = load_case("cve-backtest")
+    landed = json.dumps({"findings": [
+        {"category": "known-vulnerability", "title": "Grafana path traversal", "severity": "HIGH",
+         "where": "vuln.example.com", "evidence": "grafana 8.3.0 matches CVE-2021-43798",
+         "poc": "requires authorized exploitation: replay CVE-2021-43798 per the advisory"},
+    ]})
+    res = run_once(case, provider=MockProvider(default=landed))
+    assert res.found == ["grafana-cve"] and res.recall == 1.0 and res.false_positives == []
+
+    # a known-vuln finding on the patched host is a hallucinated CVE, so it is a false positive
+    hallucinated = json.dumps({"findings": [
+        {"category": "known-vulnerability", "title": "CVE on patched", "severity": "HIGH",
+         "where": "patched.example.com", "evidence": "claims a cve that does not apply"},
+    ]})
+    bad = run_once(case, provider=MockProvider(default=hallucinated))
+    assert bad.false_positives == ["finding:known-vulnerability:patched.example.com"]

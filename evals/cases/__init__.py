@@ -14,6 +14,7 @@ _CASES = {
     "openspec-min": "evals.cases.openspec_min",
     "sensitive-file": "evals.cases.sensitive_file",
     "graphql-introspection": "evals.cases.graphql_introspection",
+    "cve-backtest": "evals.cases.cve_backtest",
 }
 
 

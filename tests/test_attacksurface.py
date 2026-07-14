@@ -1065,6 +1065,212 @@ def test_report_prints_the_poc_and_evidence(capsys):
     assert "evidence: the response is a git config" in out
 
 
+def test_grounding_attaches_a_poc_request_only_for_an_observed_safe_read():
+    """Strict grounding: a finding is marked reproducible only when its safe-read proof of
+    concept names a GET the surface actually recorded, never a request the model invented."""
+    from opfor.core import Fact, MockProvider, Node
+    from opfor.scenarios.attacksurface.classes.domain.types import (
+        DomainData, Endpoint, SpecAudit, SpecOperation)
+    from opfor.core.result import Finding
+    from opfor.scenarios.attacksurface.triage import SurfaceTriage
+
+    world = World()
+    world.add(Node(id="domain:api.example.com", type="domain",
+                   payload=DomainData(name="api.example.com", root="example.com", source="crt")))
+    ep_id = "endpoint:api.example.com/config/all"
+    world.add(Node(id=ep_id, type="endpoint",
+                   payload=Endpoint(url="https://api.example.com/config/all", path="/config/all",
+                                    status=200, auth_required=False, content_type="application/json")))
+    spec_ep = "endpoint:api.example.com/openapi.json"
+    world.add(Node(id=spec_ep, type="endpoint",
+                   payload=Endpoint(url="https://api.example.com/openapi.json", path="/openapi.json",
+                                    status=200, content_type="application/json")))
+    world.absorb([Fact(kind="spec_audit", about=spec_ep, payload=SpecAudit(
+        base="https://api.example.com/openapi.json",
+        operations=(SpecOperation(path="/tasks/active", methods="GET", verified=True,
+                                  status=200, content_type="application/json"),)))])
+
+    triage = SurfaceTriage([], provider=MockProvider(default='{"findings": []}'), model="m")
+
+    grounded = Finding(id="f1", title="open config", severity="HIGH",
+                       where="https://api.example.com/config/all",
+                       poc="safe read: curl -s https://api.example.com/config/all")
+    spec_op = Finding(id="f2", title="open op", severity="MEDIUM",
+                      where="https://api.example.com/openapi.json",
+                      poc="safe read: curl -s https://api.example.com/tasks/active")
+    invented = Finding(id="f3", title="guessed path", severity="HIGH",
+                       where="https://api.example.com/openapi.json",
+                       poc="safe read: curl -s https://api.example.com/secret/never-probed")
+    exploit = Finding(id="f4", title="rce", severity="HIGH",
+                      where="https://api.example.com/config/all",
+                      poc="requires authorized exploitation: curl https://api.example.com/config/all")
+
+    out = triage._grounded([grounded, spec_op, invented, exploit], world)
+    by_id = {f.id: f for f in out}
+    # an observed endpoint GET grounds the request, carrying the real receipt
+    assert by_id["f1"].data["poc_request"] == {
+        "method": "GET", "url": "https://api.example.com/config/all",
+        "expect": "HTTP 200 application/json", "source": f"endpoint:{ep_id}"}
+    # a verified specification operation grounds too
+    assert by_id["f2"].data["poc_request"]["url"] == "https://api.example.com/tasks/active"
+    # a url no capability observed is never marked reproducible
+    assert "poc_request" not in by_id["f3"].data
+    # an exploit proof of concept is never grounded as a safe read
+    assert "poc_request" not in by_id["f4"].data
+
+
+def test_default_run_stays_at_triage_and_reproduces_nothing():
+    """The reproduce phase is opt-in, so a default run closes at TRIAGE and records no
+    reproduction, the regression guard that the new phase changes nothing by default."""
+    report, _scenario, world = _run_capturing()
+    assert report.reached == Phase.TRIAGE
+    assert report.terminal == Phase.TRIAGE
+    assert world.facts("reproduction") == ()
+
+
+def test_reproduce_build_raises_terminal_to_exploit_and_registers_the_capability():
+    reproducing = _make(reproduce=True)
+    assert reproducing.terminal == Phase.EXPLOIT
+    assert any(cap.name == "reproduce_finding" for cap in reproducing.capabilities)
+    assert _make().terminal == Phase.TRIAGE
+
+
+def test_engine_reproduces_a_grounded_finding_in_exploit_when_authorized():
+    """End to end through the real engine: with reproduce opted in and the intrusive tier
+    authorized, the EXPLOIT phase replays a grounded finding's GET and records the receipt."""
+    from opfor.scenarios.attacksurface.reproduce import FindingClaim, PoCRequest
+
+    fetched = []
+
+    def fetch(url):
+        fetched.append(url)
+        return {"status": 200, "url": url, "content_type": "application/json", "body": "{}"}
+
+    world = _seed()
+    world.add(Node(id="finding:x", type="finding", payload=FindingClaim(
+        finding_id="finding:x", title="open spec", severity="HIGH",
+        where="https://www.example.com/openapi.json",
+        request=PoCRequest(method="GET", url="https://www.example.com/openapi.json",
+                           expect="HTTP 200 application/json", source="endpoint:seed"))))
+    scenario = _make(reproduce=True, reproduce_fetch_fn=fetch)
+    scope = Scope(max_tier="intrusive", hosts=(ROOT,), authorized=True)
+    report = run(scenario, world, scope=scope, budget=Budget(2000))
+
+    assert report.closed and report.reached == Phase.EXPLOIT
+    assert fetched == ["https://www.example.com/openapi.json"]
+    repro = {f.about: f.payload for f in world.facts("reproduction")}
+    assert repro["finding:x"].status == 200
+
+
+def test_engine_denies_reproduce_without_authorization_and_stays_loud():
+    """Same run without the recorded authorization: the reproduce task is scope-denied and
+    the fetch is never sent, deny-by-default holds even with the phase enabled."""
+    from opfor.scenarios.attacksurface.reproduce import FindingClaim, PoCRequest
+
+    fetched = []
+    world = _seed()
+    world.add(Node(id="finding:x", type="finding", payload=FindingClaim(
+        finding_id="finding:x", title="open spec", severity="HIGH",
+        where="https://www.example.com/openapi.json",
+        request=PoCRequest(method="GET", url="https://www.example.com/openapi.json"))))
+    scenario = _make(reproduce=True, reproduce_fetch_fn=lambda url: fetched.append(url))
+    scope = Scope(max_tier="intrusive", hosts=(ROOT,), authorized=False)
+    run(scenario, world, scope=scope, budget=Budget(2000))
+    assert fetched == []
+    assert world.facts("reproduction") == ()
+
+
+def test_reproduce_replays_a_grounded_get_and_records_the_receipt():
+    from opfor.core import Node, Task, World
+    from opfor.scenarios.attacksurface.reproduce import (
+        FindingClaim, PoCRequest, ReproduceFinding)
+
+    calls = []
+
+    def fetch(url):
+        calls.append(url)
+        return {"status": 200, "url": url, "content_type": "application/json",
+                "body": '{"ok": true}'}
+
+    world = World()
+    fid = "finding:api-spec:https://api.example.com/config/all"
+    world.add(Node(id=fid, type="finding", payload=FindingClaim(
+        finding_id=fid, title="open config", severity="HIGH",
+        where="https://api.example.com/config/all",
+        request=PoCRequest(method="GET", url="https://api.example.com/config/all",
+                           expect="HTTP 200 application/json", source="endpoint:x"))))
+
+    out = ReproduceFinding(fetch).run(Task(capability="reproduce_finding", node=fid), world)
+    assert calls == ["https://api.example.com/config/all"]
+    repro = out.facts[0].payload
+    assert repro.status == 200 and repro.content_type == "application/json"
+    assert repro.method == "GET" and repro.error == ""
+
+
+def test_reproduce_refuses_a_non_read_method_loud():
+    from opfor.core import Node, Task, World
+    from opfor.scenarios.attacksurface.reproduce import (
+        FindingClaim, PoCRequest, ReproduceFinding)
+    from opfor.core.capability import Failed
+
+    sent = []
+    world = World()
+    fid = "finding:x"
+    world.add(Node(id=fid, type="finding", payload=FindingClaim(
+        finding_id=fid, title="t", severity="HIGH", where="https://h/x",
+        request=PoCRequest(method="POST", url="https://h/x"))))
+    out = ReproduceFinding(lambda url: sent.append(url)).run(
+        Task(capability="reproduce_finding", node=fid), world)
+    assert isinstance(out, Failed)
+    assert "non-read method" in out.reason
+    assert sent == []  # a write is never sent
+
+
+def test_reproduce_scrubs_secrets_from_the_receipt_body():
+    from opfor.scenarios.attacksurface.reproduce import scrub
+
+    assert "[REDACTED]" in scrub('{"api_key": "sk-live-abcdef123456"}')
+    assert "sk-live-abcdef123456" not in scrub('{"api_key": "sk-live-abcdef123456"}')
+    assert "[REDACTED]" in scrub("Authorization: Bearer eyJhbGciOi.payload.sig")
+
+
+def test_reproduce_rule_only_targets_grounded_finding_nodes_not_yet_reproduced():
+    from opfor.core import Fact, Node, World
+    from opfor.scenarios.attacksurface.reproduce import (
+        FindingClaim, PoCRequest, Reproduction, reproduce_rule)
+
+    world = World()
+    world.add(Node(id="finding:a", type="finding", payload=FindingClaim(
+        finding_id="finding:a", title="a", severity="HIGH", where="https://h/a",
+        request=PoCRequest(method="GET", url="https://h/a"))))
+    world.add(Node(id="finding:b", type="finding", payload=FindingClaim(
+        finding_id="finding:b", title="b", severity="HIGH", where="https://h/b",
+        request=PoCRequest(method="GET", url="https://h/b"))))
+    world.absorb([Fact(kind="reproduction", about="finding:b",
+                       payload=Reproduction(method="GET", url="https://h/b", status=200))])
+
+    tasks = reproduce_rule(world)
+    ids = {t.node for t in tasks}
+    assert ids == {"finding:a"}  # b already reproduced, so it is not re-proposed
+    assert tasks[0].scope_host == "h"
+
+
+def test_reproduce_is_intrusive_and_denied_without_authorization():
+    """The reproduce capability is intrusive tier, so scope denies it loud unless the run
+    carries the recorded authorization, the deny-by-default envelope the design requires."""
+    from opfor.scenarios.attacksurface.reproduce import ReproduceFinding
+    from opfor.core.scope import Scope
+
+    cap = ReproduceFinding(lambda url: {})
+    assert cap.tier == "intrusive" and cap.osint is False
+    denied = Scope(max_tier="intrusive", hosts=("example.com",), authorized=False).authorize(
+        cap.tier, osint=cap.osint, host="api.example.com")
+    assert not denied.allowed
+    allowed = Scope(max_tier="intrusive", hosts=("example.com",), authorized=True).authorize(
+        cap.tier, osint=cap.osint, host="api.example.com")
+    assert allowed.allowed
+
+
 def test_unknown_severity_falls_back_to_class_impact_then_medium():
     ids = frozenset({"sensitive-file-exposure"})
     impacts = {"sensitive-file-exposure": "HIGH"}

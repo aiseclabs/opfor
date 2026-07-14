@@ -24,12 +24,13 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import urljoin, urlparse, urlsplit
 
 import yaml
 
-from opfor.core import Finding, Message, Provider, SEVERITIES, Triage, World, iter_md_docs
+from opfor.core import Finding, Message, Node, Provider, SEVERITIES, Triage, World, iter_md_docs
 from opfor.core.json_parse import require_json_object
+from opfor.scenarios.attacksurface.reproduce import FindingClaim, PoCRequest
 
 SYSTEM = (
     "You are the triage judge of an authorized offensive-security reconnaissance run. You "
@@ -92,6 +93,25 @@ _MAX_CVES = 10
 # A chunk of surface is judged in one call. Bounded so a large target is split across calls
 # rather than overflowing the model context, mirroring codejury's per-file diff split.
 _MAX_CHUNK_CHARS = 24_000
+
+
+_URL_RE = re.compile(r"https?://[^\s;'\"`)>]+")
+
+
+def _urls_in(text: str) -> list[str]:
+    """The http urls a proof-of-concept string names, in order, so a finding's request can
+    be matched to a recorded observation. Trailing punctuation the regex catches is trimmed."""
+    return [m.rstrip(".,") for m in _URL_RE.findall(text or "")]
+
+
+def _norm_url(url: str) -> str:
+    """A url reduced to scheme, host, and path for matching, lowercased host, no query or
+    fragment, and no trailing slash, so a proof of concept and an observation of the same
+    request compare equal despite cosmetic differences."""
+    parts = urlsplit(url.strip())
+    host = parts.hostname or ""
+    path = parts.path.rstrip("/")
+    return f"{parts.scheme.lower()}://{host.lower()}{path}"
 
 
 def _load_classes(directory: Path) -> list[dict]:
@@ -180,13 +200,86 @@ class SurfaceTriage(Triage):
             # and do not ask the model to judge a surface the run could not fairly reach.
             findings.append(caveat)
             findings.extend(self._github(world))
-            return findings
+            return self._grounded(findings, world)
 
         units = self._render_units(world)
         if units:
             findings.extend(self._judge_units(units))
         findings.extend(self._github(world))
-        return self._dedup(findings)
+        return self._grounded(self._dedup(findings), world)
+
+    def _grounded(self, findings: list[Finding], world: World) -> list[Finding]:
+        """Attach a reproducible request to each finding whose safe-read proof of concept
+        names a request the world actually observed, and to no other.
+
+        Strict grounding, so a request that no capability made is never marked reproducible.
+        A model can phrase a proof of concept for a request that was never sent, so the url
+        it names is matched against the GETs the surface recorded, an endpoint probe or a
+        verified specification operation. A match carries the observed receipt into
+        `poc_request`, so the reproduce phase replays a request known to have been made, not
+        one the model invented. A finding whose proof of concept needs an attack, a write or
+        an exploit, is never grounded here, since replaying it would not be a safe read.
+        """
+        observed = self._observed_gets(world)
+        for finding in findings:
+            request = self._poc_request(finding, observed)
+            if request is not None:
+                finding.data["poc_request"] = request
+                # materialize the finding as a world node, so the reproduce phase has
+                # something to act on. Only a grounded finding becomes a node, so the
+                # reproduce step never sees an ungrounded claim.
+                world.add(Node(id=finding.id, type="finding", payload=FindingClaim(
+                    finding_id=finding.id, title=finding.title, severity=finding.severity,
+                    where=finding.where, request=PoCRequest(**request))))
+        return findings
+
+    def _poc_request(self, finding: Finding, observed: dict) -> dict | None:
+        """The reproducible GET a finding's safe-read proof of concept names, or None. The
+        url is taken from the proof of concept itself, never from the finding's location, so
+        the reproduce phase replays exactly the request the finding claims rather than a
+        different one that merely shares a host. The url must match a recorded observation,
+        and an exploit-tier proof of concept, one the model marked as needing authorization,
+        is never reproducible by a safe read."""
+        poc = finding.poc or ""
+        if not poc or "authorized exploitation" in poc.lower():
+            return None
+        for url in _urls_in(poc):
+            receipt = observed.get(_norm_url(url))
+            if receipt is not None:
+                expect = f"HTTP {receipt['status']}"
+                if receipt.get("content_type"):
+                    expect += f" {receipt['content_type']}"
+                return {"method": "GET", "url": url.strip(), "expect": expect,
+                        "source": receipt["source"]}
+        return None
+
+    def _observed_gets(self, world: World) -> dict:
+        """Every GET the surface recorded, keyed by normalized url, so a finding's proof of
+        concept can be matched to a request known to have been made. The sources are the host
+        root probe, each probed endpoint, and each verified specification operation."""
+        observed: dict = {}
+        for node in world.nodes("domain"):
+            http = world.latest("http", node.id)
+            if http is not None and http.payload.status is not None:
+                url = f"https://{node.payload.name}/"
+                observed[_norm_url(url)] = {"status": http.payload.status,
+                                            "content_type": "", "source": f"http:{node.id}"}
+        for node in world.nodes("endpoint"):
+            endpoint = node.payload
+            if endpoint.status is None:
+                continue
+            observed[_norm_url(endpoint.url)] = {
+                "status": endpoint.status, "content_type": endpoint.content_type or "",
+                "source": f"endpoint:{node.id}"}
+        for fact in world.facts("spec_audit"):
+            for operation in fact.payload.operations:
+                if not operation.verified or operation.status is None:
+                    continue
+                url = urljoin(fact.payload.base, operation.path)
+                observed[_norm_url(url)] = {
+                    "status": operation.status, "content_type": operation.content_type or "",
+                    "source": f"spec_audit:{fact.about}:{operation.path}"}
+        return observed
 
     def _judge_units(self, units: list[str]) -> list[Finding]:
         """Judge the host units in char-bounded chunks. The knowledge is selected once over

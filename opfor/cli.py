@@ -11,10 +11,16 @@ resolution is testable without touching the network or the model.
 from __future__ import annotations
 
 import argparse
+import json
+import os
+import re
 import sys
+from pathlib import Path
 
 from opfor import __version__
 from opfor.scenarios.registry import known_scenarios
+
+_SEVERITY_ORDER = ("CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO")
 
 
 def _resolve_seed(args) -> tuple[str, tuple[str, ...], tuple[str, ...], tuple[str, ...]]:
@@ -79,6 +85,9 @@ def _run(args) -> int:
         scenario = get_scenario(args.scenario)
     report = engine_run(scenario, world, scope=scope, budget=Budget(args.budget))
     _print_report(report, world)
+    outdir = _persist(report, world, name, getattr(args, "output", None))
+    if outdir is not None:
+        print(f"written: {outdir}/findings.json, {outdir}/report.md")
     return 0 if report.closed else 1
 
 
@@ -90,8 +99,7 @@ def _print_report(report, world=None) -> None:
         print(f"note: {note}")
     reproductions = _reproductions(world)
     print(f"findings: {len(report.findings)}")
-    order = {"CRITICAL": 0, "HIGH": 1, "MEDIUM": 2, "LOW": 3, "INFO": 4}
-    for finding in sorted(report.findings, key=lambda f: order.get(f.severity, 9)):
+    for finding in sorted(report.findings, key=_severity_order):
         print(f"  [{finding.severity}] {finding.title} -> {finding.where}")
         if finding.evidence:
             print(f"      evidence: {finding.evidence}")
@@ -122,6 +130,108 @@ def _reproductions(world) -> dict:
     return {fact.about: fact.payload for fact in world.facts("reproduction")}
 
 
+def _severity_order(finding) -> int:
+    return _SEVERITY_ORDER.index(finding.severity) if finding.severity in _SEVERITY_ORDER else 9
+
+
+def _report_json(report, world=None) -> dict:
+    """The run as a structured object, the machine-readable twin of the printed report. It
+    carries the closure contract, status, reached, and terminal, so a reader knows whether the
+    run finished, not only what it found. A reproduction receipt is folded into its finding, so
+    the record is complete whether or not the finding was regraded in confirm."""
+    reproductions = _reproductions(world)
+    summary = {sev: 0 for sev in _SEVERITY_ORDER}
+    findings = []
+    for finding in sorted(report.findings, key=_severity_order):
+        summary[finding.severity] = summary.get(finding.severity, 0) + 1
+        record = finding.to_dict()
+        repro = reproductions.get(finding.id)
+        if repro is not None and "receipt" not in record["data"]:
+            record["data"]["reproduction"] = {
+                "method": repro.method, "url": repro.url, "status": repro.status,
+                "content_type": repro.content_type, "size": repro.size,
+                "error": repro.error, "excerpt": repro.excerpt}
+        findings.append(record)
+    return {
+        "scenario": report.scenario,
+        "status": report.status,
+        "reached": report.reached.name,
+        "terminal": report.terminal.name,
+        "notes": list(report.notes),
+        "summary": summary,
+        "findings": findings,
+    }
+
+
+def _report_md(report, world=None) -> str:
+    """The printed report rendered as markdown, the durable human twin of the json."""
+    reproductions = _reproductions(world)
+    lines = [f"# opfor {report.scenario} run", ""]
+    lines.append(f"- status: {report.status}")
+    lines.append(f"- reached: {report.reached.name}")
+    lines.append(f"- terminal: {report.terminal.name}")
+    lines.append(f"- findings: {len(report.findings)}")
+    if report.notes:
+        lines.append("")
+        lines.append("## Notes")
+        for note in report.notes:
+            lines.append(f"- {note}")
+    lines.append("")
+    lines.append("## Findings")
+    for finding in sorted(report.findings, key=_severity_order):
+        lines.append("")
+        lines.append(f"### [{finding.severity}] {finding.title}")
+        lines.append(f"- where: {finding.where}")
+        if finding.evidence:
+            lines.append(f"- evidence: {finding.evidence}")
+        if finding.poc:
+            lines.append(f"- poc: {finding.poc}")
+        request = finding.data.get("poc_request")
+        if request:
+            lines.append(f"- grounded poc: {request['method']} {request['url']} "
+                         f"(expect {request['expect']}, source {request['source']})")
+        repro = reproductions.get(finding.id)
+        if repro is not None:
+            detail = f"HTTP {repro.status} {repro.content_type}".strip()
+            note = f" [{repro.error}]" if repro.error else ""
+            lines.append(f"- reproduced: {repro.method} {repro.url} -> {detail}{note}")
+        verdict = finding.data.get("reproduction_verdict")
+        if verdict:
+            reason = finding.data.get("reproduction_reason", "")
+            lines.append(f"- confirmed: {verdict} (severity {finding.severity})"
+                         + (f" {reason}" if reason else ""))
+    return "\n".join(lines) + "\n"
+
+
+def _slug_target(name: str) -> str:
+    """A filesystem-safe run directory name from the target name."""
+    slug = re.sub(r"[^A-Za-z0-9._-]+", "-", name).strip("-")
+    return slug or "run"
+
+
+def _default_output(name: str) -> Path:
+    """A user-private default run directory, since it holds pocs and reproduction receipts,
+    mirroring where a review workspace lives. The XDG state home wins, else a home fallback."""
+    base = os.environ.get("XDG_STATE_HOME") or str(Path.home() / ".local" / "state")
+    return Path(base) / "opfor" / "runs" / _slug_target(name)
+
+
+def _persist(report, world, name: str, explicit: str | None) -> Path | None:
+    """Write the run's findings.json and report.md into the output directory, defaulting to a
+    user-private location the operator can override. A write failure is a loud warning, not a
+    crash, since the run itself already produced its result."""
+    outdir = Path(explicit) if explicit else _default_output(name)
+    try:
+        outdir.mkdir(parents=True, exist_ok=True, mode=0o700)
+        payload = json.dumps(_report_json(report, world), indent=2, ensure_ascii=False)
+        (outdir / "findings.json").write_text(payload + "\n", encoding="utf-8")
+        (outdir / "report.md").write_text(_report_md(report, world), encoding="utf-8")
+    except OSError as exc:
+        print(f"warning: could not write run output to {outdir}: {exc}", file=sys.stderr)
+        return None
+    return outdir
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="opfor", description="Universal offensive-security engine")
     parser.add_argument("--version", action="version", version=f"opfor {__version__}")
@@ -146,6 +256,9 @@ def main(argv: list[str] | None = None) -> int:
                           "reproduction receipt, implies --reproduce, also needs "
                           "--tier intrusive --authorize")
     run.add_argument("--budget", type=int, default=500, help="the task budget, default 500")
+    run.add_argument("--output",
+                     help="the run output directory for findings.json and report.md, defaults "
+                          "to a user-private location under XDG_STATE_HOME or ~/.local/state")
 
     args = parser.parse_args(argv)
     if args.command == "scenarios":

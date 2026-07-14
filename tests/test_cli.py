@@ -8,10 +8,12 @@ environment, a file folds through the same normalization, and an empty seed fail
 from __future__ import annotations
 
 import argparse
+import json
 
 import pytest
 
-from opfor.cli import _resolve_seed, main
+from opfor.cli import (
+    _default_output, _persist, _report_json, _resolve_seed, _slug_target, main)
 
 
 def _args(**over):
@@ -73,3 +75,54 @@ def test_run_rejects_a_scenario_with_no_seed_builder(monkeypatch):
     # mock is a kernel fixture with no run seed, so the run command says so rather than crash
     with pytest.raises(SystemExit):
         main(["run", "mock", "--root", "example.com"])
+
+
+# --- the run output artifacts, findings.json and report.md ------------------------------
+
+
+def _report_with_findings():
+    from opfor.core.phase import Phase
+    from opfor.core.result import CLOSED, Finding, Report
+    findings = (
+        Finding(id="f1", title="Open spec", severity="MEDIUM", where="https://h/openapi.json",
+                evidence="a spec answered 200", poc="safe read: curl -s https://h/openapi.json",
+                data={"poc_request": {"method": "GET", "url": "https://h/openapi.json",
+                                      "expect": "HTTP 200", "source": "endpoint:h"},
+                      "reproduction_verdict": "weakened", "reproduction_reason": "just a spec",
+                      "receipt": {"status": 200, "content_type": "application/json"}}),
+        Finding(id="f2", title="Dangling host", severity="LOW", where="old.h", evidence="e"),
+    )
+    return Report(scenario="attacksurface", status=CLOSED, reached=Phase.CONFIRM,
+                  terminal=Phase.CONFIRM, findings=findings, notes=("a caveat",))
+
+
+def test_report_json_carries_the_closure_contract_and_a_summary():
+    obj = _report_json(_report_with_findings())
+    assert obj["status"] == "closed"
+    assert obj["reached"] == "CONFIRM" and obj["terminal"] == "CONFIRM"
+    assert obj["summary"]["MEDIUM"] == 1 and obj["summary"]["LOW"] == 1
+    assert obj["notes"] == ["a caveat"]
+    # findings are ranked most severe first, and the confirm verdict rides the finding
+    assert [f["id"] for f in obj["findings"]] == ["f1", "f2"]
+    assert obj["findings"][0]["data"]["reproduction_verdict"] == "weakened"
+
+
+def test_persist_writes_findings_json_and_report_md(tmp_path):
+    outdir = _persist(_report_with_findings(), None, "1example.com", str(tmp_path / "run"))
+    assert outdir is not None
+    loaded = json.loads((outdir / "findings.json").read_text(encoding="utf-8"))
+    assert loaded["status"] == "closed" and len(loaded["findings"]) == 2
+    md = (outdir / "report.md").read_text(encoding="utf-8")
+    assert "# opfor attacksurface run" in md
+    assert "[MEDIUM] Open spec" in md and "confirmed: weakened" in md
+
+
+def test_default_output_is_user_private_under_xdg_state(monkeypatch, tmp_path):
+    monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path))
+    out = _default_output("1example.com")
+    assert out == tmp_path / "opfor" / "runs" / "1example.com"
+
+
+def test_slug_target_makes_a_filesystem_safe_name():
+    assert _slug_target("api/../weird name") == "api-..-weird-name"
+    assert _slug_target("///") == "run"

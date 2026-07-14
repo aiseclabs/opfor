@@ -2168,3 +2168,97 @@ def test_cve_evidence_surfaces_the_spec_version_from_the_endpoint_body():
     assert out.facts
     assert "1.90.0" in captured["evidence"]
     assert "litellm api" in captured["evidence"]
+
+
+# --- regression: a 1example-like synthetic surface, the model-independent invariants -------
+# These lock what does not depend on the triage model, so they are a deterministic gate.
+# The surface is the reserved-domain fixture above, shaped to mirror phenomena a real run
+# met: an open spec, a login redirect, a dotenv that answers a shell not a file, a dangling
+# subdomain, a wildcard blind spot. Judgment quality needs the real model and lives in the
+# live benchmark, not here. Here we only assert closure, the code-minted structural
+# findings, grounding integrity, and that reproduce stays read only.
+
+
+def _read_only(url):
+    return {"status": 200, "url": url, "content_type": "text/html", "body": "<html></html>"}
+
+
+def test_regression_surface_closes_at_confirm_with_code_minted_findings():
+    """The full spine over the synthetic surface closes at CONFIRM, and the findings that do
+    not depend on the model, an associated root, a wildcard blind spot, a github org, are
+    minted deterministically. A model-backed judgment is empty here by design, the default
+    provider returns no findings, so only the code-minted structural findings remain."""
+    world = _seed()
+    scenario = _make(confirm=True, reproduce_fetch_fn=_read_only)
+    scope = Scope(max_tier="intrusive", hosts=(ROOT,), authorized=True)
+    report = run(scenario, world, scope=scope, budget=Budget(3000))
+
+    assert report.closed and report.reached == Phase.CONFIRM
+    ids = {f.id for f in report.findings}
+    assert "finding:root:example.net" in ids
+    assert "finding:blindspot:wildcard" in ids
+    assert "finding:github_org:examplecorp" in ids
+    # reproduce is read only: any receipt recorded came from a safe method, never a write
+    for fact in world.facts("reproduction"):
+        assert fact.payload.method in ("GET", "HEAD", "OPTIONS")
+
+
+def test_regression_a_grounded_finding_replays_exactly_its_observed_get_read_only():
+    """A model finding grounded in an observed GET materializes a poc_request, and the EXPLOIT
+    phase replays exactly that request and nothing else, read only. This locks the grounding
+    and read-only invariants end to end through the engine, independent of what the model
+    judged, since the finding is canned."""
+    finding = json.dumps({"findings": [{
+        "category": "api-spec-exposure", "title": "Open spec", "severity": "MEDIUM",
+        "where": "https://spa.example.com/", "evidence": "the spec is reachable",
+        "poc": "safe read: curl -s https://spa.example.com/", "confidence": 0.8}]})
+    fetched: list[str] = []
+
+    def repro_fetch(url):
+        fetched.append(url)
+        return {"status": 200, "url": url, "content_type": "text/html", "body": "<html>spa</html>"}
+
+    world = _seed()
+    scenario = _make(reproduce=True, provider=MockProvider(default=finding),
+                     reproduce_fetch_fn=repro_fetch)
+    scope = Scope(max_tier="intrusive", hosts=(ROOT,), authorized=True)
+    report = run(scenario, world, scope=scope, budget=Budget(3000))
+
+    assert report.reached == Phase.EXPLOIT
+    spec = next((f for f in report.findings if f.where == "https://spa.example.com/"), None)
+    assert spec is not None
+    request = spec.data.get("poc_request")
+    assert request is not None and request["method"] == "GET"
+    # grounding integrity: the request traces to a recorded observation, not model prose
+    assert request["source"].split(":")[0] in ("http", "endpoint", "spec_audit")
+    # the EXPLOIT phase replayed exactly the grounded GET and nothing else
+    assert fetched == ["https://spa.example.com/"]
+    receipts = [fact.payload for fact in world.facts("reproduction") if fact.about == spec.id]
+    assert len(receipts) == 1 and receipts[0].method == "GET" and receipts[0].status == 200
+
+
+def test_regression_grounding_never_replays_an_unobserved_url():
+    """A model finding whose safe-read poc names a URL the surface never observed is not
+    grounded, so no node is materialized and the EXPLOIT phase replays nothing. This locks
+    strict grounding: reproduce touches only requests a capability already made."""
+    finding = json.dumps({"findings": [{
+        "category": "sensitive-file-exposure", "title": "Invented path", "severity": "HIGH",
+        "where": "https://spa.example.com/", "evidence": "claims a path that was never probed",
+        "poc": "safe read: curl -s https://spa.example.com/this-was-never-observed",
+        "confidence": 0.9}]})
+    fetched: list[str] = []
+
+    def repro_fetch(url):
+        fetched.append(url)
+        return {"status": 200, "url": url, "content_type": "text/html", "body": ""}
+
+    world = _seed()
+    scenario = _make(reproduce=True, provider=MockProvider(default=finding),
+                     reproduce_fetch_fn=repro_fetch)
+    scope = Scope(max_tier="intrusive", hosts=(ROOT,), authorized=True)
+    report = run(scenario, world, scope=scope, budget=Budget(3000))
+
+    invented = next((f for f in report.findings if f.title == "Invented path"), None)
+    assert invented is not None
+    assert "poc_request" not in invented.data  # never grounded on an unobserved url
+    assert fetched == []  # so the EXPLOIT phase replayed nothing

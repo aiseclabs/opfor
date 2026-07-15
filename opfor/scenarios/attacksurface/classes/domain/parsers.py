@@ -8,7 +8,6 @@ drives each on a fixture without a call. The fetching seams live in sources, the
 
 from __future__ import annotations
 
-import json
 import re
 import urllib.parse
 
@@ -77,55 +76,9 @@ def operations_from_introspection(data) -> list[str]:
     return sorted(out)
 
 
-# --- candidate interface paths: robots, sitemap, javascript, passive urls ---
+# --- candidate interface paths: robots, sitemap ---
 
-_SCRIPT_SRC = re.compile(r'<script[^>]+src\s*=\s*["\']([^"\']+)', re.IGNORECASE)
-_JS_PATH = re.compile(r"""["'`](/[A-Za-z0-9_.\-/]{1,160})["'`]""")
-_JS_URL = re.compile(r"""["'`](https?://[A-Za-z0-9.\-]+(?:/[A-Za-z0-9_.\-/]{0,200})?)["'`]""")
 _LOC = re.compile(r"<loc>\s*([^<\s]+)\s*</loc>", re.IGNORECASE)
-
-
-def source_map_from_text(text: str) -> dict | None:
-    """Whether a body is a JavaScript source map, and what it leaks, parsed apart from the
-    fetch so a test drives it without a network call.
-
-    Returns None when the body is not a source map. Otherwise returns the count of original
-    sources, whether the original source is inlined in `sourcesContent`, and a few of the
-    source paths as evidence. A large map may arrive truncated, so it falls back to a
-    substring check when the JSON does not parse, since a truncated map is still a leak.
-    """
-    if not text:
-        return None
-    try:
-        data = json.loads(text)
-    except (ValueError, TypeError):
-        data = None
-    if isinstance(data, dict) and "version" in data and "sources" in data:
-        sources = [str(s) for s in (data.get("sources") or [])]
-        content = data.get("sourcesContent") or []
-        return {"sources_count": len(sources),
-                "has_sources_content": any(bool(c) for c in content),
-                "sample_sources": tuple(sources[:5])}
-    low = text.lower()
-    if '"version"' in low and '"sources"' in low:
-        return {"sources_count": low.count('"../') + low.count('webpack://'),
-                "has_sources_content": '"sourcescontent"' in low,
-                "sample_sources": ()}
-    return None
-
-
-def script_sources(body: str, host: str) -> list[str]:
-    """Same-host JavaScript URLs a page loads, as paths, deduped in document order.
-
-    A single-page app hardcodes its API routes in these bundles, so they are the first
-    step to reading the app's own interface surface rather than guessing it.
-    """
-    out: list[str] = []
-    for src in _SCRIPT_SRC.findall(body or ""):
-        path = same_host_path(src, host)
-        if path and path.split("?")[0].lower().endswith(".js") and path not in out:
-            out.append(path)
-    return out
 
 
 def robots_entries(text: str) -> tuple[list[str], list[str]]:
@@ -171,3 +124,38 @@ def same_host_path(url: str, host: str) -> str | None:
     if parsed.scheme in ("http", "https") and parsed.hostname == host:
         return parsed.path or "/"
     return None
+
+
+def backup_candidates(path: str, *, append=(), rename=(), swap=()) -> list[str]:
+    """Backup and editor-artifact twin paths derived from an observed file path, apart from
+    the fetch so a test drives it without a network call.
+
+    An `append` suffix is added after the full filename, `config.php` yields
+    `config.php.bak`. A `rename` extension replaces the file's own extension, `config.php`
+    yields `config.zip`, catching an archive of the source dropped beside it. A `swap`
+    template is an editor dotfile over the filename, `{file}` yields `.config.php.swp`. A
+    path with no filename segment, a directory or a query only, yields nothing. Deriving the
+    twin is the mechanism here, the name lists are the data the caller hands in.
+    """
+    path = path.split("?")[0].split("#")[0]
+    if not path.startswith("/") or path.endswith("/"):
+        return []
+    directory, _, filename = path.rpartition("/")
+    if not filename:
+        return []
+    stem, dot, _ = filename.rpartition(".")
+    out: list[str] = []
+    for suffix in append:
+        out.append(f"{directory}/{filename}{suffix}")
+    if dot:
+        for extension in rename:
+            out.append(f"{directory}/{stem}{extension}")
+    for template in swap:
+        out.append(f"{directory}/{template.format(file=filename)}")
+    seen: set[str] = set()
+    result: list[str] = []
+    for candidate in out:
+        if candidate != path and candidate not in seen:
+            seen.add(candidate)
+            result.append(candidate)
+    return result

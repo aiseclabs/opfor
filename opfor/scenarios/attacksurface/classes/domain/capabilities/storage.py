@@ -3,11 +3,9 @@
 from __future__ import annotations
 
 from opfor.core import Capability, Done, Fact, Outcome, Phase, Task, World
+from opfor.scenarios.attacksurface.classes.domain.candidates import discovered_buckets
 from opfor.scenarios.attacksurface.classes.domain.capabilities.common import _coverage_gap
-from opfor.scenarios.attacksurface.classes.domain.sources import (
-    bucket_listable,
-    cloud_bucket_from_url,
-)
+from opfor.scenarios.attacksurface.classes.domain.sources import bucket_listable
 from opfor.scenarios.attacksurface.classes.domain.types import Bucket, BucketReport
 
 
@@ -32,7 +30,7 @@ class BucketScan(Capability):
         self._probe = probe_url_fn
 
     def run(self, task: Task, world: World) -> Outcome:
-        discovered = self._discovered(world)
+        discovered = discovered_buckets(world)
         buckets: list[Bucket] = []
         skipped: list[str] = []
         for key in sorted(discovered):
@@ -57,27 +55,3 @@ class BucketScan(Capability):
         if gap is not None:
             facts.append(Fact(kind="coverage_gap", about=task.node, payload=gap))
         return Done(facts=tuple(facts))
-
-    def _discovered(self, world: World) -> dict:
-        """The buckets the target revealed, keyed by provider and name so a bucket referenced
-        many times is checked once. Evidence is a url the pages reference or a subdomain CNAME
-        that points at the provider, so a bucket here is observed, never guessed."""
-        found: dict[str, tuple[dict, str]] = {}
-
-        def record(reference: str, evidence: str) -> None:
-            bucket = cloud_bucket_from_url(reference)
-            if bucket is None:
-                return
-            found.setdefault(f"{bucket['provider']}:{bucket['bucket']}", (bucket, evidence))
-
-        for fact in world.facts("cloud_refs"):
-            host = world.node(fact.about)
-            source = host.payload.name if host else fact.about
-            for url in fact.payload.urls:
-                record(url, f"referenced by {source}")
-        for fact in world.facts("resolved"):
-            host = world.node(fact.about)
-            source = host.payload.name if host else fact.about
-            for cname in fact.payload.cnames:
-                record(cname, f"CNAME from {source}")
-        return found

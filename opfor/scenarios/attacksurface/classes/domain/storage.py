@@ -1,90 +1,11 @@
-"""Pure scanners for the domain class, apart from the network so a test drives each one.
-
-Every function here reads a body or a path a source already fetched and reports raw facts,
-secret-like strings in a bundle, backup twin paths to try, the cloud bucket a url names,
-and whether a bucket body is a public listing. None of them touch the network and none
-judge, so a test drives each on a fixture and triage decides what is real. The fetching
-seams live in sources, they call in.
-"""
+"""Pure cloud object-storage URL parsing for the domain class, apart from the network so a test drives each one."""
 
 from __future__ import annotations
 
 import re
 import urllib.parse
 
-from opfor.scenarios.attacksurface.classes.domain.parsers import _JS_URL
-
-_MAX_SECRET_MATCHES = 20
-
-
-def _redact(value: str) -> str:
-    """A secret shown as a short prefix and its length, never in full, so the report and the
-    log never carry the value itself."""
-    value = value.strip()
-    head = value[:6]
-    return f"{head}...({len(value)} chars)"
-
-
-def secrets_in_text(text: str, patterns) -> list[dict]:
-    """Secret-like strings a set of patterns match in a body, redacted, parsed apart from
-    the fetch so a test drives it without a network call.
-
-    Each pattern is a dict with an id, a regex, and a note. A match is reported once per
-    pattern per body with a redacted sample, since one hit is enough to send a human to the
-    source. Whether a match is a live secret or a placeholder is triage's judgment.
-    """
-    out: list[dict] = []
-    for pattern in patterns or []:
-        regex = str(pattern.get("regex", ""))
-        if not regex:
-            continue
-        try:
-            match = re.search(regex, text or "")
-        except re.error:
-            continue
-        if not match:
-            continue
-        out.append({"pattern": str(pattern.get("id", "")), "note": str(pattern.get("note", "")),
-                    "sample": _redact(match.group(0))})
-        if len(out) >= _MAX_SECRET_MATCHES:
-            break
-    return out
-
-
-def backup_candidates(path: str, *, append=(), rename=(), swap=()) -> list[str]:
-    """Backup and editor-artifact twin paths derived from an observed file path, apart from
-    the fetch so a test drives it without a network call.
-
-    An `append` suffix is added after the full filename, `config.php` yields
-    `config.php.bak`. A `rename` extension replaces the file's own extension, `config.php`
-    yields `config.zip`, catching an archive of the source dropped beside it. A `swap`
-    template is an editor dotfile over the filename, `{file}` yields `.config.php.swp`. A
-    path with no filename segment, a directory or a query only, yields nothing. Deriving the
-    twin is the mechanism here, the name lists are the data the caller hands in.
-    """
-    path = path.split("?")[0].split("#")[0]
-    if not path.startswith("/") or path.endswith("/"):
-        return []
-    directory, _, filename = path.rpartition("/")
-    if not filename:
-        return []
-    stem, dot, _ = filename.rpartition(".")
-    out: list[str] = []
-    for suffix in append:
-        out.append(f"{directory}/{filename}{suffix}")
-    if dot:
-        for extension in rename:
-            out.append(f"{directory}/{stem}{extension}")
-    for template in swap:
-        out.append(f"{directory}/{template.format(file=filename)}")
-    seen: set[str] = set()
-    result: list[str] = []
-    for candidate in out:
-        if candidate != path and candidate not in seen:
-            seen.add(candidate)
-            result.append(candidate)
-    return result
-
+from opfor.scenarios.attacksurface.classes.domain.javascript import _JS_URL
 
 _BUCKET_NAME = re.compile(r"^[a-z0-9][a-z0-9.\-]{1,61}[a-z0-9]$")
 # XML listing roots each provider returns for a public, listable bucket, so a 200 that is an

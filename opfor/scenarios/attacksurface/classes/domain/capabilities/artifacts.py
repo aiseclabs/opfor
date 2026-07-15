@@ -2,16 +2,14 @@
 
 from __future__ import annotations
 
-from urllib.parse import urlparse
-
 from opfor.core import Capability, Done, Fact, Failed, Outcome, Phase, Task, World
 from opfor.scenarios.attacksurface.classes.domain.capabilities.common import (
     _MAX_SOURCE_MAPS,
     _coverage_gap,
     _distinct,
 )
+from opfor.scenarios.attacksurface.classes.domain.candidates import backup_targets
 from opfor.scenarios.attacksurface.classes.domain.sources import (
-    backup_candidates,
     script_sources,
     secrets_in_text,
     source_map_from_text,
@@ -120,8 +118,6 @@ class BackupScan(Capability):
     phase = Phase.ENRICH
     osint = False
 
-    _MAX_FILES = 20
-    _MAX_CANDIDATES = 150
     # Unlikely twin paths, probed first to learn how the host answers a backup name that does
     # not exist, the same catch-all guard the interface probe uses.
     _BASELINE_PATHS = ("/opfor-baseline-6f3a9c2e.bak", "/does-not-exist-8b1d.old")
@@ -137,7 +133,7 @@ class BackupScan(Capability):
         append = tuple(task.params.get("append") or ())
         rename = tuple(task.params.get("rename") or ())
         swap = tuple(task.params.get("swap") or ())
-        candidates = self._candidates(world, host, append, rename, swap)
+        candidates = backup_targets(world, host, append, rename, swap)
         baseline = self._baseline(name, addresses)
         hits: list[BackupHit] = []
         skipped: list[str] = []
@@ -164,36 +160,6 @@ class BackupScan(Capability):
         if gap is not None:
             facts.append(Fact(kind="coverage_gap", about=task.node, payload=gap))
         return Done(facts=tuple(facts))
-
-    def _candidates(self, world: World, host, append, rename, swap) -> list[str]:
-        """The twin paths to probe, derived from the file-like paths this host revealed, its
-        reached endpoints and its harvested candidates, deduped and capped."""
-        files: list[str] = []
-
-        def add_file(path: str) -> None:
-            path = (path or "").split("?")[0].split("#")[0]
-            if not path.startswith("/") or path.endswith("/"):
-                return
-            if "." not in path.rsplit("/", 1)[-1]:
-                return
-            if path not in files:
-                files.append(path)
-
-        for node in world.nodes("endpoint"):
-            if urlparse(node.payload.url).hostname == host.payload.name:
-                add_file(node.payload.path)
-        for fact in world.facts("candidates", host.id):
-            for path in fact.payload.paths:
-                add_file(path)
-
-        out: list[str] = []
-        for path in files[:self._MAX_FILES]:
-            for candidate in backup_candidates(path, append=append, rename=rename, swap=swap):
-                if candidate not in out:
-                    out.append(candidate)
-                if len(out) >= self._MAX_CANDIDATES:
-                    return out
-        return out
 
     def _baseline(self, name, addresses) -> dict:
         """The host's answer to a backup name that does not exist, its catch-all signature."""

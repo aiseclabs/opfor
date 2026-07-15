@@ -18,6 +18,7 @@ import urllib.request
 from opfor.scenarios.attacksurface import config
 from opfor.scenarios.attacksurface.net import looks_like_host, registrable_root
 from opfor.scenarios.attacksurface.classes.domain.http import _TIMEOUT, _UA
+from opfor.scenarios.attacksurface.classes.domain.parsers import same_host_path
 
 
 # --- certificate transparency: subdomains without touching the target -------
@@ -511,3 +512,22 @@ def roots_from_reverse_whois(data, term: str) -> dict[str, str]:
             roots.setdefault(registrable_root(name),
                              f"registration record names {term}")
     return roots
+
+
+def wayback_paths(host: str) -> set[str]:
+    """Historical url paths for a host from the Wayback Machine CDX index, a passive read.
+
+    It names paths that once existed without touching the target. It is one source in a
+    union, so the caller tolerates its failure rather than letting it block the others.
+    """
+    url = (f"http://web.archive.org/cdx/search/cdx?url={urllib.parse.quote(host)}/*"
+           "&output=json&fl=original&collapse=urlkey&limit=2000")
+    request = urllib.request.Request(url, headers={"User-Agent": _UA, "Accept": "application/json"})
+    with urllib.request.urlopen(request, timeout=_TIMEOUT) as resp:
+        rows = json.loads(resp.read().decode("utf-8", "replace"))
+    out: set[str] = set()
+    for row in rows[1:] if rows and isinstance(rows[0], list) else []:
+        path = same_host_path(str(row[0]), host)
+        if path:
+            out.add(path)
+    return out

@@ -952,3 +952,18 @@ def test_certspotter_non_list_response_fails_loud(monkeypatch):
     # on issuances[-1] or extend records with dict keys
     with pytest.raises(RuntimeError):
         passive._certspotter_issuances("example.com", token=None, pages=1)
+
+
+def test_read_capped_stops_at_the_wall_clock_deadline(monkeypatch):
+    from opfor.scenarios.attacksurface.classes.domain import http as domains
+    clock = {"t": 0.0}
+    monkeypatch.setattr(domains.time, "monotonic", lambda: clock["t"])
+
+    class _Drip:
+        def read1(self, n):
+            clock["t"] += 20.0   # each read advances past the 30s deadline within two reads
+            return b"x"
+
+    body = domains._read_capped(_Drip(), read_limit=1000)
+    # a slow-drip response is cut off at the deadline instead of tying the worker for 1000 bytes
+    assert 0 < len(body) < 1000

@@ -6,6 +6,13 @@ or unreliable. The HTTP probe connects straight to a resolved address with the h
 SNI and Host, so it too bypasses the local resolver, and it touches the target, so the
 capability marks it a scoped recon act. Each seam is injected, so a test drives the
 scenario with fixtures.
+
+Operator note on TLS: the recon probe does not verify the target certificate on purpose, a
+self-signed or mismatched certificate is itself a signal and refusing it would blind the
+scan. The trade-off is that content read over that unverified channel could be spoofed by a
+man in the middle and become a finding. The read-only reproduce replay verifies the
+certificate, so a spoofed finding on an https target fails to reproduce, which bounds how
+far a man-in-the-middle fabrication can travel.
 """
 
 from __future__ import annotations
@@ -16,6 +23,7 @@ import json
 import re
 import socket
 import ssl
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -342,6 +350,29 @@ def _signal_headers(resp) -> tuple:
     return tuple(out)
 
 
+_READ_CHUNK = 65536
+# A wall-clock ceiling on reading one response body. The per-recv socket timeout does not
+# bound total read time, so a server that dribbles bytes just under it could tie a worker
+# thread for the whole body. This caps the total, so a slow-drip host cannot stall the run.
+_READ_DEADLINE = 30.0
+
+
+def _read_capped(resp, read_limit: int) -> bytes:
+    """Read up to read_limit bytes, stopping at a wall-clock deadline. `read1` returns the
+    bytes already available rather than blocking for a full chunk, so the deadline is checked
+    often and a slow-drip response cannot hold a worker past the ceiling."""
+    deadline = time.monotonic() + _READ_DEADLINE
+    buf = bytearray()
+    while len(buf) < read_limit:
+        chunk = resp.read1(min(_READ_CHUNK, read_limit - len(buf)))
+        if not chunk:
+            break
+        buf.extend(chunk)
+        if time.monotonic() > deadline:
+            break
+    return bytes(buf)
+
+
 def _connect(name: str, ip: str, scheme: str, path: str, *, read_limit: int = _BODY_HEAD,
              method: str = "GET", payload: bytes | None = None,
              content_type: str = "", verify: bool = False) -> tuple:
@@ -377,7 +408,7 @@ def _connect(name: str, ip: str, scheme: str, path: str, *, read_limit: int = _B
     try:
         conn.request(method, path or "/", body=payload, headers=headers)
         resp = conn.getresponse()
-        body = resp.read(read_limit).decode("utf-8", "replace")
+        body = _read_capped(resp, read_limit).decode("utf-8", "replace")
         return (resp.status, resp.getheader("Server", "") or "",
                 resp.getheader("Content-Type", "") or "", body,
                 resp.getheader("Location", "") or "", _signal_headers(resp))

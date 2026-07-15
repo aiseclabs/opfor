@@ -229,6 +229,31 @@ def test_confirm_passes_through_a_finding_with_no_receipt_unchanged():
     assert provider.calls == []  # the model is never asked about a finding with no receipt
 
 
+def test_confirm_binds_a_receipt_by_url_not_by_a_shared_id():
+    """Two distinct findings can share an id, two CVEs on one host, but only one materializes a
+    claim node and a receipt. Confirm must regrade only the finding whose grounded request the
+    receipt actually replayed, never the co-id finding against a request it never made."""
+    from opfor.core import Fact, World
+    from opfor.scenarios.attacksurface.confirm import ConfirmTriage
+
+    world = World()
+    # the single receipt replayed /a, the request the first finding was grounded on
+    world.absorb([Fact(kind="reproduction", about="finding:known-vulnerability:h",
+                       payload=_receipt(url="https://h/a"))])
+    reply = json.dumps({"verdict": "confirmed", "severity": "HIGH", "reason": "reachable"})
+    confirm = ConfirmTriage(provider=MockProvider(responses=[reply]), model="m")
+
+    graded = _claim("finding:known-vulnerability:h", where="https://h/a", title="CVE-1")
+    other = _claim("finding:known-vulnerability:h", where="https://h/b", title="CVE-2")
+    out = confirm.reconfirm(world, (graded, other))
+
+    by_title = {f.title: f for f in out}
+    # the finding grounded on /a is regraded against its receipt
+    assert by_title["CVE-1"].data["reproduction_verdict"] == "confirmed"
+    # the co-id finding grounded on /b is left as judged, not confirmed against /a's receipt
+    assert "reproduction_verdict" not in by_title["CVE-2"].data
+
+
 def test_confirm_is_loud_when_the_model_reply_cannot_be_parsed():
     """A confirm call that returns no verdict is a failed confirmation, not a silent pass. The
     finding is kept at its judged severity and marked confirm-failed, invariant 5."""

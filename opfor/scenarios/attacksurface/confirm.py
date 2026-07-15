@@ -70,7 +70,13 @@ class ConfirmTriage(Confirm):
         out: list[Finding] = []
         for finding in findings:
             receipt = receipts.get(finding.id)
-            if receipt is None:
+            # Bind the receipt to the request this finding was actually grounded on, not to its
+            # id alone. Two distinct findings can share an id, two CVEs on one host, and only
+            # one materializes a claim node and a receipt, so keying on the id would regrade the
+            # other finding against a request it never made. A receipt whose url is not this
+            # finding's grounded url is not its receipt, so the finding is left as judged.
+            poc = finding.data.get("poc_request") or {}
+            if receipt is None or not poc.get("url") or poc.get("url") != receipt.url:
                 out.append(finding)
                 continue
             try:

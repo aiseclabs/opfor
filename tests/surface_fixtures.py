@@ -261,8 +261,11 @@ def _knowledge(scenario) -> str:
 
 def _claim(fid, *, severity="MEDIUM", where="https://h/x", title="t"):
     from opfor.core import Finding
+    # A grounded finding carries the request grounding matched, so confirm binds its receipt by
+    # url rather than by id alone. The url is the one the receipt fixtures replay.
     return Finding(id=fid, title=title, severity=severity, where=where,
-                   evidence="judged from the report", poc=f"safe read: curl -s {where}")
+                   evidence="judged from the report", poc=f"safe read: curl -s {where}",
+                   data={"poc_request": {"method": "GET", "url": where}})
 
 def _receipt(**over):
     from opfor.scenarios.attacksurface.reproduce import Reproduction

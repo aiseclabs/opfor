@@ -807,3 +807,29 @@ def test_resolve_host_treats_a_servfail_as_a_resolver_error_not_a_no_address(mon
     # a SERVFAIL is not accepted as a confirmed no-address, the next resolver is consulted
     assert result["resolvable"] is True and "1.2.3.4" in result["addresses"]
     assert calls["n"] >= 3
+
+
+def test_registrable_root_leaves_an_ip_literal_unchanged():
+    from opfor.scenarios.attacksurface.net import registrable_root
+    # an IP has no registrable root, folding it to the last two octets would mint a bogus root
+    assert registrable_root("10.0.0.5") == "10.0.0.5"
+    assert registrable_root("192.168.1.1") == "192.168.1.1"
+
+
+def test_same_host_path_matches_a_mixed_case_host():
+    from opfor.scenarios.attacksurface.classes.domain.parsers import same_host_path
+    # a mixed-case host name must still match its own absolute urls, else script and sitemap
+    # extraction drop every same-host link
+    assert same_host_path("https://Example.com/app.js", "Example.com") == "/app.js"
+
+
+def test_operator_hint_domain_is_lowercased_into_a_canonical_node():
+    from opfor.core import Node, Task, World
+    from opfor.scenarios.attacksurface.classes.domain.capabilities.discovery import DiscoverDomains
+    from opfor.scenarios.attacksurface.types import Org
+
+    world = World()
+    world.add(Node(id="org:x", type="org", payload=Org(name="X", domains=("Example.COM",))))
+    outcome = DiscoverDomains().run(Task(capability="discover_domains", node="org:x"), world)
+    ids = {n.id for n in outcome.facts[0].yields}
+    assert "domain:example.com" in ids

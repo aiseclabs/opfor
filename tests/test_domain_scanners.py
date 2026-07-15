@@ -827,3 +827,18 @@ def test_endpoint_probe_flags_when_the_baseline_cannot_be_established():
     gaps = [f.payload for f in outcome.facts if f.kind == "coverage_gap"]
     # a baseline that could not be established is flagged, so an unfiltered surface is loud
     assert gaps and any("baseline" in r for r in gaps[0].reasons)
+
+
+def test_norm_url_keeps_the_query_so_a_query_bearing_poc_does_not_false_match():
+    from opfor.scenarios.attacksurface.grounding import _norm_url
+    # a PoC that names a query parameter must not normalize onto the query-less observed GET,
+    # which would ground the finding in a materially different request
+    assert _norm_url("https://h/api/data?debug=1") != _norm_url("https://h/api/data")
+    # the query is order-normalized so cosmetic reordering still matches
+    assert _norm_url("https://h/a?x=1&y=2") == _norm_url("https://h/a?y=2&x=1")
+
+
+def test_urls_in_javascript_extracts_an_explicit_port():
+    from opfor.scenarios.attacksurface.classes.domain.javascript import urls_in_javascript
+    body = 'const api = "https://api.host.com:8443/v1/users";'
+    assert "https://api.host.com:8443/v1/users" in urls_in_javascript(body)

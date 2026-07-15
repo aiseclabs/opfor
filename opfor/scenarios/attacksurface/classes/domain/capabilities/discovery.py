@@ -21,9 +21,11 @@ class DiscoverDomains(Capability):
 
     def run(self, task: Task, world: World) -> Outcome:
         org = world.node(task.node).payload
+        # A host name is case-insensitive, so an operator hint is lowercased at the source,
+        # keeping node ids canonical and same-host attribution from missing a mixed-case name.
         roots = tuple(
-            Node(id=f"domain:{d}", type="domain",
-                 payload=DomainData(name=d, root=d, source="hint",
+            Node(id=f"domain:{d.lower()}", type="domain",
+                 payload=DomainData(name=d.lower(), root=d.lower(), source="hint",
                                     confidence="confirmed", evidence="operator hint"))
             for d in org.domains
         )
@@ -31,8 +33,8 @@ class DiscoverDomains(Capability):
         # pivot and subdomain rules, gated on name == root, skip them, and only resolution
         # and probing enrich them. This is how a DNS export closes the wildcard blind spot.
         hosts = tuple(
-            Node(id=f"domain:{h}", type="domain",
-                 payload=DomainData(name=h, root=registrable_root(h), source="inventory",
+            Node(id=f"domain:{h.lower()}", type="domain",
+                 payload=DomainData(name=h.lower(), root=registrable_root(h), source="inventory",
                                     confidence="confirmed", evidence="operator inventory"))
             for h in org.hosts
         )

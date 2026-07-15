@@ -143,7 +143,9 @@ def same_host_path(url: str, host: str) -> str | None:
     if url.startswith("/") and not url.startswith("//"):
         return url.split("#")[0].split("?")[0]
     parsed = urllib.parse.urlparse(url)
-    if parsed.scheme in ("http", "https") and parsed.hostname == host:
+    # a url's hostname is always lowercased by urlparse, so the host is lowercased too, else a
+    # mixed-case host name drops every same-host absolute url as if it were cross-host
+    if parsed.scheme in ("http", "https") and parsed.hostname == (host or "").lower():
         return parsed.path or "/"
     return None
 

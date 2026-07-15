@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import replace
-from urllib.parse import urljoin, urlsplit
+from urllib.parse import parse_qsl, urlencode, urljoin, urlsplit
 
 from opfor.core import Finding, Node, World
 from opfor.core.post_triage import PostTriage
@@ -35,13 +35,17 @@ def _urls_in(text: str) -> list[str]:
 
 
 def _norm_url(url: str) -> str:
-    """A url reduced to scheme, host, and path for matching, lowercased host, no query or
-    fragment, and no trailing slash, so a proof of concept and an observation of the same
-    request compare equal despite cosmetic differences."""
+    """A url reduced for matching, lowercased scheme and host, no fragment, and no trailing
+    slash, so a proof of concept and an observation of the same request compare equal despite
+    cosmetic differences. The query is kept, normalized by sorting, so a proof of concept that
+    names a query parameter does not match a query-less observed request, which would ground a
+    finding in a materially different request. Observed GETs carry no query, so a query-bearing
+    proof of concept simply stays ungrounded rather than grounding wrong."""
     parts = urlsplit(url.strip())
     host = parts.hostname or ""
     path = parts.path.rstrip("/")
-    return f"{parts.scheme.lower()}://{host.lower()}{path}"
+    query = "?" + urlencode(sorted(parse_qsl(parts.query))) if parts.query else ""
+    return f"{parts.scheme.lower()}://{host.lower()}{path}{query}"
 
 
 class FindingGrounder(PostTriage):
@@ -93,7 +97,9 @@ class FindingGrounder(PostTriage):
         for node in world.nodes("domain"):
             http = world.latest("http", node.id)
             if http is not None and http.payload.status is not None:
-                url = f"https://{node.payload.name}/"
+                # the scheme the host actually answered on, so an http-only host is keyed as
+                # http rather than a hardcoded https that a real observation never matched
+                url = getattr(http.payload, "url", "") or f"https://{node.payload.name}/"
                 observed[_norm_url(url)] = {"status": http.payload.status,
                                             "content_type": "", "source": f"http:{node.id}"}
         for node in world.nodes("endpoint"):

@@ -10,6 +10,8 @@ depend on, rather than one class depending on the other.
 
 from __future__ import annotations
 
+import ipaddress
+
 # A curated subset of multi-label public suffixes, so registrable-root extraction does
 # not mistake a country second level such as co.uk for a root. A single-label suffix
 # falls through to the two-label default, which is correct for com, io, and the like.
@@ -33,7 +35,15 @@ def registrable_root(name: str) -> str:
     """The registrable root of a host, example.com for api.example.com. A multi-label suffix keeps
     three labels, recognized either by the curated set or by the general shape of a known
     second level under a two-letter country code, such as co.uk, com.cn, or com.ph."""
-    labels = name.strip(".").lower().split(".")
+    name = name.strip(".").lower()
+    # an IP literal has no registrable root, so it is returned unchanged rather than folded to
+    # its last two octets, which would mint a bogus root such as 0.5 from 10.0.0.5
+    try:
+        ipaddress.ip_address(name)
+        return name
+    except ValueError:
+        pass
+    labels = name.split(".")
     if len(labels) <= 2:
         return ".".join(labels)
     tld, second = labels[-1], labels[-2]

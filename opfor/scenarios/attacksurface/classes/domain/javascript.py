@@ -9,7 +9,7 @@ from opfor.scenarios.attacksurface.classes.domain.parsers import same_host_path
 
 _SCRIPT_SRC = re.compile(r'<script[^>]+src\s*=\s*["\']([^"\']+)', re.IGNORECASE)
 _JS_PATH = re.compile(r"""["'`](/[A-Za-z0-9_.\-/]{1,160})["'`]""")
-_JS_URL = re.compile(r"""["'`](https?://[A-Za-z0-9.\-]+(?:/[A-Za-z0-9_.\-/]{0,200})?)["'`]""")
+_JS_URL = re.compile(r"""["'`](https?://[A-Za-z0-9.\-]+(?::\d+)?(?:/[A-Za-z0-9_.\-/]{0,200})?)["'`]""")
 
 _MAX_SECRET_MATCHES = 20
 

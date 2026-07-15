@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from opfor.core import Capability, Done, Fact, Failed, Outcome, Phase, Task, World
+from opfor.core import Capability, Done, Fact, Outcome, Phase, Task, World
+from opfor.scenarios.attacksurface.classes.domain.capabilities.common import _coverage_gap
 from opfor.scenarios.attacksurface.classes.domain.types import Resolved
 
 
@@ -20,7 +21,19 @@ class ResolveDomain(Capability):
         try:
             result = self._resolve(name)
         except Exception as exc:
-            return Failed(reason=f"resolve {type(exc).__name__}: {exc}")
+            # A resolver outage is not a confirmed no-address, so it must not read as a clean
+            # dangling host. It still records an errored `resolved` fact plus a coverage gap,
+            # rather than a bare Failed that leaves no fact, so a run-level barrier waiting on
+            # every domain being resolved is not wedged forever by one resolver failure while
+            # the whole downstream branch is silently suppressed, invariant 3 and 5.
+            payload = Resolved(resolvable=False, errored=True)
+            facts = [Fact(kind="resolved", about=task.node, payload=payload)]
+            gap = _coverage_gap("domain_resolve", name, 1, [
+                f"{name}: resolver failed, {type(exc).__name__}: {exc}, so the name was neither "
+                "resolved nor confirmed absent"])
+            if gap is not None:
+                facts.append(Fact(kind="coverage_gap", about=task.node, payload=gap))
+            return Done(facts=tuple(facts))
         payload = Resolved(resolvable=bool(result["resolvable"]),
                            addresses=tuple(result.get("addresses", ())),
                            cnames=tuple(result.get("cnames", ())))

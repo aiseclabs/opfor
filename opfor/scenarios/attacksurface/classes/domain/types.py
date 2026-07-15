@@ -29,9 +29,16 @@ class DomainData:
 
 @dataclass(frozen=True, kw_only=True)
 class Resolved:
+    """A domain resolution result. `errored` is True when the resolver itself failed rather
+    than returning an answer, so a resolver outage is told apart from a confirmed no-address.
+    An errored resolution is not resolvable and carries no CNAME, so it never reads as a
+    dangling-takeover candidate, and it still records the fact so a downstream barrier that
+    waits on every domain being attempted is not wedged by one resolver failure."""
+
     resolvable: bool
     addresses: tuple[str, ...] = ()
     cnames: tuple[str, ...] = ()
+    errored: bool = False
 
 
 @dataclass(frozen=True, kw_only=True)

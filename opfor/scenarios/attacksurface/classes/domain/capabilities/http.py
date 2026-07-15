@@ -106,24 +106,37 @@ class HarvestPaths(Capability):
             if host and path and path.startswith("/"):
                 by_host.setdefault(host, set()).add(path.split("#")[0].split("?")[0])
 
-        home = _safe(lambda: self._fetch_doc(name, "/").get("text", "")) or ""
-        cloud_refs.update(cloud_refs_in_text(home))
-        for path in _home_paths(home):
-            add(name, path)
-        for path in _safe(lambda: self._robots(name, addresses)) or []:
-            add(name, path)
-        for path in _safe(lambda: sitemap_paths(self._fetch_doc(name, "/sitemap.xml").get("text", ""), name)) or []:
-            add(name, path)
-        for script in script_sources(home, name)[:self._MAX_SCRIPTS]:
-            body = _safe(lambda s=script: self._fetch_doc(name, s).get("text", "")) or ""
-            cloud_refs.update(cloud_refs_in_text(body))
-            for path in paths_in_javascript(body):
+        try:
+            home = _safe(lambda: self._fetch_doc(name, "/").get("text", "")) or ""
+            cloud_refs.update(cloud_refs_in_text(home))
+            for path in _home_paths(home):
                 add(name, path)
-            for url in urls_in_javascript(body):
-                parsed = urlparse(url)
-                add(parsed.hostname or "", parsed.path or "/")
-        for path in sorted(_safe(lambda: self._wayback(name)) or set()):
-            add(name, path)
+            for path in _safe(lambda: self._robots(name, addresses)) or []:
+                add(name, path)
+            for path in _safe(lambda: sitemap_paths(self._fetch_doc(name, "/sitemap.xml").get("text", ""), name)) or []:
+                add(name, path)
+            for script in script_sources(home, name)[:self._MAX_SCRIPTS]:
+                body = _safe(lambda s=script: self._fetch_doc(name, s).get("text", "")) or ""
+                cloud_refs.update(cloud_refs_in_text(body))
+                for path in paths_in_javascript(body):
+                    add(name, path)
+                for url in urls_in_javascript(body):
+                    parsed = urlparse(url)
+                    add(parsed.hostname or "", parsed.path or "/")
+            for path in sorted(_safe(lambda: self._wayback(name)) or set()):
+                add(name, path)
+        except Exception as exc:
+            # An unexpected harvest error still records the harvested fact plus a coverage gap,
+            # rather than a bare crash that leaves no fact. The endpoints rule waits until every
+            # live host is harvested, so a factless host would silently suppress interface
+            # enumeration for every host while the run still closed, invariant 3 and 5.
+            gap = _coverage_gap("domain_harvest", name, 1, [
+                f"{name}: harvest failed, {type(exc).__name__}: {exc}, candidate paths for this "
+                "host were not gathered"])
+            facts = [Fact(kind="harvested", about=task.node)]
+            if gap is not None:
+                facts.append(Fact(kind="coverage_gap", about=task.node, payload=gap))
+            return Done(facts=tuple(facts))
 
         facts = [Fact(kind="harvested", about=task.node)]
         if cloud_refs:

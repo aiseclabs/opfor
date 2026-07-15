@@ -17,7 +17,7 @@ import urllib.request
 
 from opfor.scenarios.attacksurface import config
 from opfor.scenarios.attacksurface.net import looks_like_host, registrable_root
-from opfor.scenarios.attacksurface.classes.domain.http import _TIMEOUT, _UA
+from opfor.scenarios.attacksurface.classes.domain.http import _JSON_LIMIT, _TIMEOUT, _UA
 from opfor.scenarios.attacksurface.classes.domain.parsers import same_host_path
 
 
@@ -150,7 +150,11 @@ def _certspotter_issuances(domain: str, *, token: str | None, pages: int) -> tup
             url += f"&after={after}"
         request = urllib.request.Request(url, headers=headers)
         with urllib.request.urlopen(request, timeout=_TIMEOUT) as resp:
-            issuances = json.loads(resp.read().decode("utf-8", "replace"))
+            issuances = json.loads(resp.read(_JSON_LIMIT).decode("utf-8", "replace"))
+        if not isinstance(issuances, list):
+            # a certspotter error is a dict, not a list, so fail loud rather than crash on
+            # issuances[-1] or extend the records with its keys
+            raise RuntimeError(f"certspotter returned a non-list response: {str(issuances)[:120]}")
         if not issuances:
             truncated = False
             break
@@ -184,7 +188,7 @@ def virustotal_subdomains(domain: str) -> Enumeration:
     for _ in range(_VT_PAGES):
         request = urllib.request.Request(url, headers=headers)
         with urllib.request.urlopen(request, timeout=_TIMEOUT) as resp:
-            data = json.loads(resp.read().decode("utf-8", "replace"))
+            data = json.loads(resp.read(_JSON_LIMIT).decode("utf-8", "replace"))
         names |= subdomains_from_vt(data, domain)
         url = str((data.get("links") or {}).get("next") or "")
         if not url:
@@ -227,7 +231,7 @@ def otx_subdomains(domain: str) -> Enumeration:
     url = f"https://otx.alienvault.com/api/v1/indicators/domain/{domain}/passive_dns"
     request = urllib.request.Request(url, headers={"User-Agent": _UA, "X-OTX-API-KEY": key})
     with urllib.request.urlopen(request, timeout=_OTX_TIMEOUT) as resp:
-        data = json.loads(resp.read().decode("utf-8", "replace"))
+        data = json.loads(resp.read(_JSON_LIMIT).decode("utf-8", "replace"))
     result = Enumeration(subdomains_from_otx(data, domain))
     result.truncated = len(data.get("passive_dns") or []) >= _OTX_LIMIT
     return result
@@ -255,7 +259,7 @@ def dnsdumpster_subdomains(domain: str) -> Enumeration:
     url = f"https://api.dnsdumpster.com/domain/{domain}"
     request = urllib.request.Request(url, headers={"User-Agent": _UA, "X-API-Key": key})
     with urllib.request.urlopen(request, timeout=_TIMEOUT) as resp:
-        data = json.loads(resp.read().decode("utf-8", "replace"))
+        data = json.loads(resp.read(_JSON_LIMIT).decode("utf-8", "replace"))
     result = Enumeration(subdomains_from_dnsdumpster(data, domain))
     try:
         total = int(data.get("total_a_recs") or 0)
@@ -344,7 +348,7 @@ def _nvd_fetch(query: str) -> list[dict]:
         _nvd_wait(interval)
         try:
             with urllib.request.urlopen(request, timeout=_NVD_TIMEOUT) as resp:
-                data = json.loads(resp.read().decode("utf-8", "replace"))
+                data = json.loads(resp.read(_JSON_LIMIT).decode("utf-8", "replace"))
             return cves_from_nvd(data)
         except urllib.error.HTTPError as exc:
             if exc.code != 429 or attempt == _NVD_RETRIES - 1:
@@ -500,7 +504,7 @@ def reverse_whois(term: str, api_key: str) -> dict[str, str]:
         endpoint, data=body,
         headers={"User-Agent": _UA, "Content-Type": "application/json", "Accept": "application/json"})
     with urllib.request.urlopen(request, timeout=_TIMEOUT) as resp:
-        data = json.loads(resp.read().decode("utf-8", "replace"))
+        data = json.loads(resp.read(_JSON_LIMIT).decode("utf-8", "replace"))
     return roots_from_reverse_whois(data, term)
 
 
@@ -531,7 +535,7 @@ def wayback_paths(host: str) -> set[str]:
            "&output=json&fl=original&collapse=urlkey&limit=2000")
     request = urllib.request.Request(url, headers={"User-Agent": _UA, "Accept": "application/json"})
     with urllib.request.urlopen(request, timeout=_TIMEOUT) as resp:
-        rows = json.loads(resp.read().decode("utf-8", "replace"))
+        rows = json.loads(resp.read(_JSON_LIMIT).decode("utf-8", "replace"))
     out: set[str] = set()
     for row in rows[1:] if rows and isinstance(rows[0], list) else []:
         path = same_host_path(str(row[0]), host)

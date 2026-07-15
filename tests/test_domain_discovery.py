@@ -111,7 +111,7 @@ def test_resolve_host_keeps_cname_and_asks_both_address_families(monkeypatch):
         def __init__(self, payload):
             self._payload = payload
 
-        def read(self):
+        def read(self, *_a):
             return json.dumps(self._payload).encode("utf-8")
 
         def __enter__(self):
@@ -356,7 +356,7 @@ def test_cert_sibling_pivot_walks_past_the_first_page(monkeypatch):
         def __init__(self, payload):
             self._payload = payload
 
-        def read(self):
+        def read(self, *_a):
             return json.dumps(self._payload).encode("utf-8")
 
         def __enter__(self):
@@ -394,7 +394,7 @@ def test_virustotal_enumeration_flags_truncation_at_the_page_cap(monkeypatch):
         def __init__(self, payload):
             self._payload = payload
 
-        def read(self):
+        def read(self, *_a):
             return json.dumps(self._payload).encode("utf-8")
 
         def __enter__(self):
@@ -449,7 +449,7 @@ def test_otx_passive_dns_parses_and_flags_the_cap(monkeypatch):
         def __init__(self, payload):
             self._payload = payload
 
-        def read(self):
+        def read(self, *_a):
             return json.dumps(self._payload).encode("utf-8")
 
         def __enter__(self):
@@ -494,7 +494,7 @@ def test_dnsdumpster_parses_and_flags_the_free_tier_cap(monkeypatch):
         def __init__(self, payload):
             self._payload = payload
 
-        def read(self):
+        def read(self, *_a):
             return json.dumps(self._payload).encode("utf-8")
 
         def __enter__(self):
@@ -525,7 +525,7 @@ def test_certspotter_token_429_falls_back_to_an_anonymous_walk(monkeypatch):
         def __init__(self, payload):
             self._payload = payload
 
-        def read(self):
+        def read(self, *_a):
             return json.dumps(self._payload).encode("utf-8")
 
         def __enter__(self):
@@ -654,7 +654,7 @@ def test_certspotter_flags_truncation_when_the_page_budget_is_spent(monkeypatch)
         def __init__(self, payload):
             self._payload = payload
 
-        def read(self):
+        def read(self, *_a):
             return json.dumps(self._payload).encode("utf-8")
 
         def __enter__(self):
@@ -685,7 +685,7 @@ def test_certspotter_does_not_flag_truncation_when_the_cursor_runs_dry(monkeypat
         def __init__(self, payload):
             self._payload = payload
 
-        def read(self):
+        def read(self, *_a):
             return json.dumps(self._payload).encode("utf-8")
 
         def __enter__(self):
@@ -784,7 +784,7 @@ def test_resolve_host_treats_a_servfail_as_a_resolver_error_not_a_no_address(mon
         def __init__(self, payload):
             self._payload = payload
 
-        def read(self):
+        def read(self, *_a):
             return json.dumps(self._payload).encode("utf-8")
 
         def __enter__(self):
@@ -902,3 +902,53 @@ def test_readonly_fetch_pins_a_public_address_and_verifies_the_certificate(monke
     result = domains.fetch_readonly("https://example.com/panel")
     # the replay is pinned to the vetted public address and verifies the certificate
     assert result["status"] == 200 and seen["ip"] == "93.184.216.34" and seen["verify"] is True
+
+
+def test_fetch_public_url_uses_the_no_redirect_opener(monkeypatch):
+    from opfor.scenarios.attacksurface.classes.domain import http as domains
+
+    used = {}
+
+    class _Resp:
+        status = 200
+        headers = {"Content-Type": "application/xml"}
+
+        def read(self, *_a):
+            return b"<ListBucketResult/>"
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+    def fake_open(req, timeout=0):
+        used["opener"] = True
+        return _Resp()
+
+    monkeypatch.setattr(domains._NO_REDIRECT_OPENER, "open", fake_open)
+    result = domains.fetch_public_url("https://x.s3.amazonaws.com/")
+    # a bucket probe does not chase a server-controlled redirect off to another host
+    assert used.get("opener") and result["status"] == 200
+
+
+def test_certspotter_non_list_response_fails_loud(monkeypatch):
+    import urllib.request
+
+    from opfor.scenarios.attacksurface.classes.domain import passive
+
+    class _Resp:
+        def read(self, *_a):
+            return json.dumps({"message": "rate limited"}).encode("utf-8")
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+    monkeypatch.setattr(urllib.request, "urlopen", lambda *a, **k: _Resp())
+    # a certspotter error object is a dict, not a list, and must fail loud rather than crash
+    # on issuances[-1] or extend records with dict keys
+    with pytest.raises(RuntimeError):
+        passive._certspotter_issuances("example.com", token=None, pages=1)

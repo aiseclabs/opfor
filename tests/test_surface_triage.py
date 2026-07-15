@@ -404,3 +404,25 @@ def test_system_prompts_frame_target_text_as_untrusted():
     assert "untrusted" in triage_mod.CHALLENGER_SYSTEM.lower()
     assert "untrusted" in triage_mod.JUDGE_SYSTEM.lower()
     assert "untrusted" in confirm_mod.SYSTEM.lower()
+
+
+def test_malformed_findings_are_dropped_loudly_with_a_degraded_marker():
+    import json
+
+    from opfor.core import MockProvider
+    from opfor.scenarios.attacksurface.triage import SurfaceTriage
+
+    reply = json.dumps({"findings": [
+        {"category": "sensitive-file-exposure", "title": "ok", "severity": "HIGH",
+         "where": "https://h/a"},
+        {"category": "x"},          # no location, dropped
+        "not-an-object",            # not a dict, dropped
+    ]})
+    triage = SurfaceTriage([], provider=MockProvider(responses=[reply]), model="m")
+    found = triage._judge_chunk("## some host block")
+    # the two malformed entries do not vanish silently, a degraded marker says so
+    degraded = [f for f in found if f.data.get("kind") == "triage_degraded"]
+    assert degraded and degraded[0].data["dropped"] == 2
+    assert degraded[0].severity == "INFO"
+    # the well-formed finding still comes through
+    assert any(f.where == "https://h/a" for f in found)

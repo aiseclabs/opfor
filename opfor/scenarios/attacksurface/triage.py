@@ -250,10 +250,24 @@ class SurfaceTriage(Triage):
         raw = obj.get("findings")
         if not isinstance(raw, list):
             raise TriageError("the findings key was not a list")
-        found = [f for f in (self._map_finding(d) for d in raw) if f is not None]
-        if self._challenger is None:
-            return found
-        return [f for f in found if self._survives(f, chunk)]
+        mapped = [self._map_finding(d) for d in raw]
+        found = [f for f in mapped if f is not None]
+        if self._challenger is not None:
+            found = [f for f in found if self._survives(f, chunk)]
+        dropped = len(mapped) - len([f for f in mapped if f is not None])
+        if dropped:
+            # A malformed entry the model meant as a finding must not vanish silently, that
+            # would under-report the surface without saying so, invariant 5. Say how many were
+            # dropped so an operator can rerun or inspect the model output.
+            found.append(Finding(
+                id="finding:triage-degraded:mapping",
+                title=f"{dropped} model finding(s) could not be mapped and were dropped",
+                severity="INFO", where="triage",
+                evidence=f"the model returned {len(raw)} findings and {dropped} were malformed, "
+                         "a non-object entry or one with no location, so they were dropped and "
+                         "the surface may be under-reported. Rerun or inspect the model output",
+                data={"kind": "triage_degraded", "dropped": dropped, "total": len(raw)}))
+        return found
 
     def _survives(self, finding: Finding, chunk: str) -> bool:
         """Whether a finding survives the adversarial roles. The challenger tries to refute

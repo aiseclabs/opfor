@@ -36,6 +36,11 @@ _DOH_RESOLVERS = ("https://dns.google/resolve", "https://cloudflare-dns.com/dns-
 _DNS_A = 1
 _DNS_AAAA = 28
 _DNS_CNAME = 5
+# A ceiling on a JSON response body read from a resolver or a passive source, so a degenerate
+# or hostile upstream cannot exhaust memory with a multi-gigabyte reply. Generous, since a
+# real certificate-transparency or vulnerability response for a large domain can be several
+# megabytes, but bounded.
+_JSON_LIMIT = 8_000_000
 # DoH response codes. NOERROR and NXDOMAIN are real answers, a name that resolves or one that
 # provably does not exist. Any other rcode, SERVFAIL or REFUSED, is a resolver-side error, not
 # a confirmed absence of an address.
@@ -87,7 +92,7 @@ def _doh_query(resolver: str, name: str, rtype: str) -> tuple[int, list[dict]]:
     request = urllib.request.Request(
         url, headers={"Accept": "application/dns-json", "User-Agent": _UA})
     with urllib.request.urlopen(request, timeout=_TIMEOUT) as resp:
-        body = json.loads(resp.read().decode("utf-8", "replace"))
+        body = json.loads(resp.read(_JSON_LIMIT).decode("utf-8", "replace"))
     return int(body.get("Status", 0)), (body.get("Answer") or [])
 
 
@@ -170,7 +175,9 @@ def fetch_public_url(url: str) -> dict:
     """
     request = urllib.request.Request(url, headers={"User-Agent": _UA})
     try:
-        with urllib.request.urlopen(request, timeout=_PUBLIC_URL_TIMEOUT) as resp:
+        # do not follow a redirect, a server-controlled Location could steer this at another
+        # host, and the bucket state is read from the direct response, not a chased one
+        with _NO_REDIRECT_OPENER.open(request, timeout=_PUBLIC_URL_TIMEOUT) as resp:
             body = resp.read(_PUBLIC_URL_BODY).decode("utf-8", "replace")
             return {"status": resp.status, "url": url,
                     "content_type": resp.headers.get("Content-Type", ""), "body": body}

@@ -1002,8 +1002,8 @@ def test_empty_env_body_yields_no_exposure_clue():
     sc = _make()
     empty = Endpoint(url="https://cf.example.com/.env", path="/.env", status=200, body="")
     real = Endpoint(url="https://x/.env", path="/.env", status=200, body="db_password=secret\napi_key=abc")
-    assert sc.triage._exposure_clues(empty) == []
-    assert any("exposed-env" in c for c in sc.triage._exposure_clues(real))
+    assert sc.triage._renderer._exposure_clues(empty) == []
+    assert any("exposed-env" in c for c in sc.triage._renderer._exposure_clues(real))
 
 
 # --- structural findings triage mints in code ------------------------------------------

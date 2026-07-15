@@ -20,14 +20,26 @@ _MULTI_SUFFIXES = frozenset({
     "co.kr", "co.in", "co.za", "com.mx", "com.tr", "com.ru",
 })
 
+# Second-level labels that sit directly under a two-letter country-code TLD, so a suffix
+# of the shape such as com.ph or co.nz is recognized for any country without shipping a full
+# public-suffix list. This generalizes the curated set above rather than enumerating every
+# country, so a host under an uncurated country suffix is no longer mis-rooted.
+_CC_SECOND_LEVELS = frozenset({
+    "com", "co", "net", "org", "gov", "edu", "ac", "or", "ne", "go", "gob", "mil", "govt",
+})
+
 
 def registrable_root(name: str) -> str:
-    """The registrable root of a host, example.com for api.example.com, using a small
-    multi-label suffix set so co.uk and its kind keep three labels."""
+    """The registrable root of a host, example.com for api.example.com. A multi-label suffix keeps
+    three labels, recognized either by the curated set or by the general shape of a known
+    second level under a two-letter country code, such as co.uk, com.cn, or com.ph."""
     labels = name.strip(".").lower().split(".")
     if len(labels) <= 2:
         return ".".join(labels)
-    if ".".join(labels[-2:]) in _MULTI_SUFFIXES:
+    tld, second = labels[-1], labels[-2]
+    multi = ".".join(labels[-2:]) in _MULTI_SUFFIXES
+    multi = multi or (len(tld) == 2 and second in _CC_SECOND_LEVELS)
+    if multi:
         return ".".join(labels[-3:])
     return ".".join(labels[-2:])
 

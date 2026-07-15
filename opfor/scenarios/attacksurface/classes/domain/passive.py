@@ -434,9 +434,11 @@ def _host_from_record(name: str) -> str | None:
 # --- certificate SAN pivot: sibling roots that share a certificate ----------
 
 # A certificate spanning more distinct roots than this is treated as shared multi-tenant
-# infrastructure, a CDN bundling unrelated customers onto one certificate, so it proves
-# no common ownership and is skipped.
-_MAX_CERT_ROOTS = 5
+# infrastructure, a CDN or a managed-TLS provider bundling unrelated customers onto one
+# certificate, so it proves no common ownership and is skipped. Kept small, since a managed
+# certificate bundling the target with a few unrelated customer roots is the failure mode,
+# and cert co-tenancy is in any case recorded at a lower confidence than a registration match.
+_MAX_CERT_ROOTS = 3
 
 
 def cert_sibling_roots(domain: str) -> dict[str, str]:

@@ -304,7 +304,9 @@ def test_cert_san_pivot_discovers_a_sibling_root_with_evidence():
     assert net is not None
     assert net.payload.root == "example.net"
     assert net.payload.source == "cert-san"
-    assert net.payload.confidence == "confirmed"
+    # cert co-tenancy is weaker evidence than a registration match, so a cert-SAN sibling is
+    # associated, not confirmed, and triage sees the lower confidence
+    assert net.payload.confidence == "associated"
     assert "shares a certificate" in net.payload.evidence
 
 
@@ -760,3 +762,14 @@ def test_subdomain_enumeration_partial_failure_surfaces_a_coverage_gap():
     gaps = [f.payload for f in outcome.facts
             if f.kind == "coverage_gap" and f.payload.scan == "domain_subdomains"]
     assert gaps and gaps[0].failed == 1 and any("virustotal" in r for r in gaps[0].reasons)
+
+
+def test_registrable_root_recognizes_country_second_levels_generally():
+    from opfor.scenarios.attacksurface.net import registrable_root
+    # an uncurated country suffix is no longer mis-rooted, com.ph and co.nz keep three labels
+    assert registrable_root("api.company.com.ph") == "company.com.ph"
+    assert registrable_root("www.shop.co.nz") == "shop.co.nz"
+    # the curated and default cases are unchanged
+    assert registrable_root("host.example.co.uk") == "example.co.uk"
+    assert registrable_root("a.b.example.com") == "example.com"
+    assert registrable_root("api.example.com") == "example.com"

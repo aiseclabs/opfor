@@ -61,10 +61,13 @@ class DomainPivot(Capability):
             siblings = self._pivot(name)
         except Exception as exc:
             return Failed(reason=f"cert pivot {type(exc).__name__}: {exc}")
+        # Cert co-tenancy is weaker evidence of ownership than a registration match, a shared
+        # certificate can still bundle a few unrelated roots, so a cert-SAN sibling is recorded
+        # as associated rather than confirmed, and triage sees the weaker confidence.
         found = tuple(
             Node(id=f"domain:{root}", type="domain",
                  payload=DomainData(name=root, root=root, source="cert-san",
-                                    confidence="confirmed", evidence=evidence))
+                                    confidence="associated", evidence=evidence))
             for root, evidence in sorted(siblings.items())
         )
         return Done(facts=(Fact(kind="pivoted", about=task.node, yields=found),))

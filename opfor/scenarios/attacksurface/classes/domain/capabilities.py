@@ -45,6 +45,7 @@ from opfor.scenarios.attacksurface.classes.domain.types import (
     BucketReport,
     Candidates,
     CloudRefs,
+    CoverageGap,
     CVE,
     CVEScan,
     DomainData,
@@ -369,10 +370,12 @@ class Endpoints(Capability):
         candidates = self._clean(seed, suffixes, prefixes)
         baseline = self._baseline(name, addresses)
         endpoints: list[Node] = []
+        skipped: list[str] = []
         for path in candidates:
             try:
                 result = self._fetch(name, addresses, path)
-            except Exception:
+            except Exception as exc:
+                skipped.append(f"{path}: {type(exc).__name__}")
                 continue
             status = result.get("status")
             if status is None or status == 404:
@@ -391,7 +394,11 @@ class Endpoints(Capability):
                 location=str(result.get("location", "")),
             )
             endpoints.append(Node(id=f"endpoint:{name}{path}", type="endpoint", payload=payload))
-        return Done(facts=(Fact(kind="endpoints", about=task.node, yields=tuple(endpoints)),))
+        facts = [Fact(kind="endpoints", about=task.node, yields=tuple(endpoints))]
+        gap = _coverage_gap("domain_endpoints", name, len(candidates), skipped)
+        if gap is not None:
+            facts.append(Fact(kind="coverage_gap", about=task.node, payload=gap))
+        return Done(facts=tuple(facts))
 
     def _clean(self, paths, suffixes, prefixes) -> list[str]:
         out: list[str] = []
@@ -760,10 +767,12 @@ class BackupScan(Capability):
         candidates = self._candidates(world, host, append, rename, swap)
         baseline = self._baseline(name, addresses)
         hits: list[BackupHit] = []
+        skipped: list[str] = []
         for path in candidates:
             try:
                 result = self._fetch(name, addresses, path)
-            except Exception:
+            except Exception as exc:
+                skipped.append(f"{path}: {type(exc).__name__}")
                 continue
             status = result.get("status")
             if status is None or status == 404:
@@ -777,8 +786,11 @@ class BackupScan(Capability):
                 content_type=str(result.get("content_type", "")),
                 size=len(result.get("body", "")),
             ))
-        payload = BackupReport(hits=tuple(hits))
-        return Done(facts=(Fact(kind="backups", about=task.node, payload=payload),))
+        facts = [Fact(kind="backups", about=task.node, payload=BackupReport(hits=tuple(hits)))]
+        gap = _coverage_gap("backup_scan", name, len(candidates), skipped)
+        if gap is not None:
+            facts.append(Fact(kind="coverage_gap", about=task.node, payload=gap))
+        return Done(facts=tuple(facts))
 
     def _candidates(self, world: World, host, append, rename, swap) -> list[str]:
         """The twin paths to probe, derived from the file-like paths this host revealed, its
@@ -845,11 +857,13 @@ class BucketScan(Capability):
     def run(self, task: Task, world: World) -> Outcome:
         discovered = self._discovered(world)
         buckets: list[Bucket] = []
+        skipped: list[str] = []
         for key in sorted(discovered):
             found, evidence = discovered[key]
             try:
                 result = self._probe(found["list_url"])
-            except Exception:
+            except Exception as exc:
+                skipped.append(f"{key}: {type(exc).__name__}")
                 continue
             status = result.get("status")
             if status == 200 and bucket_listable(result.get("body", "")):
@@ -861,8 +875,11 @@ class BucketScan(Capability):
             buckets.append(Bucket(name=found["bucket"], provider=found["provider"],
                                   url=found["list_url"], state=state, evidence=evidence,
                                   status=status))
-        payload = BucketReport(buckets=tuple(buckets))
-        return Done(facts=(Fact(kind="buckets", about=task.node, payload=payload),))
+        facts = [Fact(kind="buckets", about=task.node, payload=BucketReport(buckets=tuple(buckets)))]
+        gap = _coverage_gap("bucket_scan", "cloud storage", len(discovered), skipped)
+        if gap is not None:
+            facts.append(Fact(kind="coverage_gap", about=task.node, payload=gap))
+        return Done(facts=tuple(facts))
 
     def _discovered(self, world: World) -> dict:
         """The buckets the target revealed, keyed by provider and name so a bucket referenced
@@ -887,6 +904,19 @@ class BucketScan(Capability):
             for cname in fact.payload.cnames:
                 record(cname, f"CNAME from {source}")
         return found
+
+
+_MAX_GAP_REASONS = 5
+
+
+def _coverage_gap(scan: str, host: str, attempted: int, skipped: list[str]) -> CoverageGap | None:
+    """A coverage gap payload when a per-item scan skipped items on errors, else None. So a
+    scan that dropped items keeps the drop loud rather than passing a partial surface off as
+    a clean negative, invariant 5. The reasons are a bounded sample so the fact stays small."""
+    if not skipped:
+        return None
+    return CoverageGap(scan=scan, host=host, attempted=attempted, failed=len(skipped),
+                       reasons=tuple(skipped[:_MAX_GAP_REASONS]))
 
 
 def _safe(thunk):

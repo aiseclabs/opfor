@@ -860,6 +860,80 @@ def test_bucket_scan_checks_buckets_the_target_reveals_by_cname():
         "expected the private example-private bucket"
 
 
+def test_endpoint_probe_records_a_coverage_gap_when_a_path_errors():
+    # one candidate path errors on the probe. The scan still returns the endpoints it
+    # reached, but the dropped path is recorded as a coverage gap and surfaced as an INFO
+    # finding, so a partial probe is never read as a clean, complete negative, invariant 5.
+    def fetch(name, addresses, path):
+        if name == "admin.example.com" and path == "/.git/config":
+            raise TimeoutError("probe timed out")
+        return _fetch(name, addresses, path)
+
+    report, _scenario, world = _run_capturing(fetch_fn=fetch)
+    gaps = [f.payload for f in world.facts("coverage_gap") if f.payload.scan == "domain_endpoints"]
+    assert any(g.host == "admin.example.com" and g.failed >= 1 for g in gaps), \
+        "a probe error must record a coverage_gap fact rather than be silently dropped"
+    gap_findings = [f for f in report.findings if f.data.get("kind") == "coverage_gap"]
+    assert any(f.severity == "INFO" and "admin.example.com" in f.where for f in gap_findings), \
+        "the coverage gap must surface as an INFO finding, so a partial scan reads as partial"
+    assert "TimeoutError" in "".join(f.evidence for f in gap_findings)
+
+
+def test_backup_scan_records_a_coverage_gap_when_a_twin_errors():
+    home = '<html><body><a href="/config.php">cfg</a></body></html>'
+
+    def fetch(name, addresses, path):
+        url = f"https://{name}{path}"
+        miss = {"status": 404, "url": url, "content_type": "", "server": "", "title": "", "body": ""}
+        if name != "admin.example.com":
+            return miss
+        if path == "/config.php":
+            return {"status": 200, "url": url, "content_type": "text/html",
+                    "server": "nginx", "title": "", "body": "rendered page"}
+        if path == "/config.php.bak":
+            raise ConnectionResetError("reset during backup twin probe")
+        return miss
+
+    def fetch_doc(name, path):
+        if name == "admin.example.com" and path == "/":
+            return {"status": 200, "content_type": "text/html", "text": home}
+        return {"status": None, "content_type": "", "text": ""}
+
+    _report, _scenario, world = _run_capturing(fetch_fn=fetch, fetch_doc_fn=fetch_doc)
+    gaps = [f.payload for f in world.facts("coverage_gap") if f.payload.scan == "backup_scan"]
+    assert any(g.failed >= 1 and any("ConnectionResetError" in r for r in g.reasons) for g in gaps), \
+        "a backup twin probe error must record a coverage_gap rather than vanish"
+
+
+def test_bucket_scan_records_a_coverage_gap_when_a_probe_errors():
+    listing = "<ListBucketResult><Contents><Key>dump.sql</Key></Contents></ListBucketResult>"
+
+    def resolve(name):
+        base = _resolve(name)
+        if name == "admin.example.com":
+            return {**base, "cnames": ("example-backup.s3.amazonaws.com",)}
+        if name == "www.example.com":
+            return {**base, "cnames": ("example-private.s3.amazonaws.com",)}
+        return base
+
+    def probe_url(url):
+        if "example-backup.s3" in url:
+            return {"status": 200, "url": url, "content_type": "application/xml", "body": listing}
+        if "example-private.s3" in url:
+            raise TimeoutError("bucket probe timed out")
+        return {"status": 404, "url": url, "content_type": "", "body": ""}
+
+    report, _scenario, world = _run_capturing(resolve_fn=resolve, probe_url_fn=probe_url)
+    # the reachable bucket is still reported, the errored one is a coverage gap, not a silent drop
+    buckets = [b for f in world.facts("buckets") for b in f.payload.buckets]
+    assert any(b.name == "example-backup" for b in buckets)
+    gaps = [f.payload for f in world.facts("coverage_gap") if f.payload.scan == "bucket_scan"]
+    assert any(g.failed >= 1 for g in gaps), \
+        "an errored bucket probe must record a coverage_gap rather than be silently skipped"
+    assert any(f.data.get("kind") == "coverage_gap" and f.data.get("scan") == "bucket_scan"
+               for f in report.findings)
+
+
 def test_cve_scan_fails_loud_when_identification_errors():
     # a model or lookup error is a loud Failed, never a silent empty result, invariant 5
     def boom(evidence):

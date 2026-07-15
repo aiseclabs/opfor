@@ -193,6 +193,7 @@ class SurfaceTriage(Triage):
         findings.extend(self._roots(world))
         findings.extend(self._wildcards(world))
         findings.extend(self._truncated(world))
+        findings.extend(self._coverage_gaps(world))
 
         caveat = self._resolution_caveat(world)
         if caveat is not None:
@@ -674,6 +675,29 @@ class SurfaceTriage(Triage):
                      "enumerate from DNS or an internal source to close the gap",
             data={"kind": "blindspot", "roots": roots},
         )]
+
+    def _coverage_gaps(self, world: World) -> list[Finding]:
+        """Report each scan that finished but skipped items on per-item errors, an INFO line
+        so a partial scan does not read as a clean negative. A fact about the reach of the
+        run, not a semantic judgment, so it stays in code, and saying it keeps a dropped item
+        from passing as covered, invariant 5."""
+        out: list[Finding] = []
+        for fact in world.facts("coverage_gap"):
+            gap = fact.payload
+            sample = "; ".join(gap.reasons)
+            out.append(Finding(
+                id=f"finding:coverage_gap:{gap.scan}:{gap.host}",
+                title=f"{gap.scan} skipped {gap.failed} of {gap.attempted} item(s) on errors",
+                severity="INFO",
+                where=gap.host,
+                evidence=f"{gap.failed} of {gap.attempted} items were skipped on fetch or "
+                         f"probe errors, so the surface {gap.scan} reports for {gap.host} is "
+                         f"partial rather than complete. Sample: {sample}. Rerun to cover the "
+                         "skipped items",
+                data={"kind": "coverage_gap", "scan": gap.scan, "failed": gap.failed,
+                      "attempted": gap.attempted},
+            ))
+        return out
 
     def _resolution_caveat(self, world: World) -> Finding | None:
         """When almost nothing resolved the resolver is the problem, not the target, so

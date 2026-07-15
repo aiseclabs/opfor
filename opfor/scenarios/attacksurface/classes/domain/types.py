@@ -231,6 +231,21 @@ class BucketReport:
 
 
 @dataclass(frozen=True, kw_only=True)
+class CoverageGap:
+    """A scan that finished but skipped items on per-item errors, so the surface it reports
+    is partial. A fact about the reach of the run, not a semantic judgment, so a silently
+    dropped item is never read as a clean negative, invariant 5. `scan` is the capability,
+    `host` the target it ran against, `attempted` and `failed` the counts, and `reasons` a
+    bounded sample of the errors, each a path or a name and its error type."""
+
+    scan: str
+    host: str
+    attempted: int = 0
+    failed: int = 0
+    reasons: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True, kw_only=True)
 class CVE:
     """One known vulnerability record from a public database. `cvss` and `severity` are the
     published score, kept as raw facts, whether the CVE truly applies to the exposed surface

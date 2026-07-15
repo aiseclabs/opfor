@@ -142,6 +142,14 @@ def _drive(state: RunState) -> Report:
             if not ready:
                 break
 
+            # Cap the batch to the budget still remaining, so the runaway ceiling is not
+            # overshot by a whole batch of concurrent tasks. When the cap bites, the batch
+            # runs up to the ceiling, the next loop sees the budget spent, and the run
+            # suspends, deterministically by task id so which tasks ran is reproducible.
+            remaining = s.budget.max_steps - s.budget.steps
+            if len(ready) > remaining:
+                ready = sorted(ready, key=lambda t: t.id)[:remaining]
+
             _run_batch(s.scenario, s.world, ready, s.budget, s.done, s.pending, s.ledger,
                        s.notes, s.max_workers)
 
@@ -187,8 +195,12 @@ def _run_batch(scenario, world, ready, budget, done, pending, ledger, notes, max
 
     Outcomes are collected while the pool runs and applied only after it joins, so the
     world is mutated by one thread and a running capability never reads a half-written
-    world. A failure is added to the run notes as well as the ledger, so the report is
-    loud about it and a caller does not have to read the ledger to see a failed step.
+    world. They are applied in a deterministic order, sorted by task id, not in thread
+    completion order, so two identical runs absorb facts in the same order and the world,
+    the triage prompt built from it, the ledger, and the findings are reproducible rather
+    than shuffled by scheduling. A failure is added to the run notes as well as the ledger,
+    so the report is loud about it and a caller does not have to read the ledger to see a
+    failed step.
     """
     collected: list[tuple[Task, object]] = []
     with ThreadPoolExecutor(max_workers=max_workers) as pool:
@@ -201,7 +213,7 @@ def _run_batch(scenario, world, ready, budget, done, pending, ledger, notes, max
             except Exception as exc:
                 collected.append((task, exc))
 
-    for task, outcome in collected:
+    for task, outcome in sorted(collected, key=lambda item: item[0].id):
         if isinstance(outcome, Exception):
             ledger.append("task_error", task=task.id, error=type(outcome).__name__)
             notes.append(f"error {task.id}: {type(outcome).__name__}: {outcome}")

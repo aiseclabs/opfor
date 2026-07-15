@@ -833,3 +833,22 @@ def test_operator_hint_domain_is_lowercased_into_a_canonical_node():
     outcome = DiscoverDomains().run(Task(capability="discover_domains", node="org:x"), world)
     ids = {n.id for n in outcome.facts[0].yields}
     assert "domain:example.com" in ids
+
+
+def test_a_run_is_deterministic_across_repeats():
+    # outcomes are absorbed in task-id order, not thread-completion order, so two identical
+    # runs produce the same world and the same triage input
+    a = _seed()
+    _run(a)
+    b = _seed()
+    _run(b)
+    assert [n.id for n in a.nodes()] == [n.id for n in b.nodes()]
+
+
+def test_budget_cap_is_not_overshot_by_a_batch():
+    from opfor.core import Budget, Scope, run
+    world = _seed()
+    budget = Budget(2)
+    run(_make(), world, scope=Scope(max_tier="recon", hosts=(ROOT,)), budget=budget)
+    # a batch is capped to the remaining budget, so the runaway ceiling is not blown past
+    assert budget.steps <= 2

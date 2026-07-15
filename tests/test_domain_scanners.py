@@ -643,3 +643,37 @@ def test_cve_evidence_surfaces_the_spec_version_from_the_endpoint_body():
     assert out.facts
     assert "1.90.0" in captured["evidence"]
     assert "litellm api" in captured["evidence"]
+
+
+def test_endpoint_probe_records_a_coverage_gap_on_a_transport_failure_not_only_a_raise():
+    # the real fetch seam swallows a connection error and returns status None rather than
+    # raising, so the gap must be recorded from a None status too, else a WAF-blocked or
+    # timed-out probe reads as a clean negative, invariant 5
+    def fetch(name, addresses, path):
+        if name == "admin.example.com" and path == "/.git/config":
+            return {"status": None, "url": f"https://{name}{path}", "content_type": "",
+                    "server": "", "title": "", "body": ""}
+        return _fetch(name, addresses, path)
+
+    _report, _scenario, world = _run_capturing(fetch_fn=fetch)
+    gaps = [f.payload for f in world.facts("coverage_gap") if f.payload.scan == "domain_endpoints"]
+    assert any(g.host == "admin.example.com" and any("no response" in r for r in g.reasons)
+               for g in gaps), "a transport failure must record a coverage_gap, not vanish"
+
+
+def test_graphql_capability_marks_an_errored_introspection_failed_not_disabled():
+    from opfor.core import Failed, Task
+    from opfor.scenarios.attacksurface.classes.domain.capabilities.specs import GraphQLIntrospect
+    from opfor.scenarios.attacksurface.classes.domain.types import Endpoint
+
+    world = World()
+    world.add(Node(id="endpoint:h/graphql", type="endpoint",
+                   payload=Endpoint(url="https://h/graphql", path="/graphql", status=200)))
+
+    def introspect(host, path):
+        raise RuntimeError("graphql introspection errored, HTTP 500")
+
+    outcome = GraphQLIntrospect(introspect).run(
+        Task(capability="endpoint_graphql", node="endpoint:h/graphql"), world)
+    # an errored probe is a loud Failed, never a clean graphql-disabled fact
+    assert isinstance(outcome, Failed) and "500" in outcome.reason

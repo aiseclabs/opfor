@@ -699,3 +699,38 @@ def test_certspotter_does_not_flag_truncation_when_the_cursor_runs_dry(monkeypat
     monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
     result = domains.certspotter_subdomains("example.com")
     assert result.truncated is False
+
+
+def test_fetch_url_tries_every_public_address_not_only_the_first(monkeypatch):
+    # a host whose first address is dead but second is live must still be enriched, so the
+    # fetch seam iterates all public addresses the way the alive probe does
+    from opfor.scenarios.attacksurface.classes.domain import http as domains
+    seen = []
+
+    def connect(name, ip, scheme, path, **kw):
+        seen.append(ip)
+        if ip == "1.1.1.1":
+            raise TimeoutError("dead first address")
+        return (200, "nginx", "text/html", "<title>ok</title>", "", ())
+
+    monkeypatch.setattr(domains, "_connect", connect)
+    result = domains.fetch_url("h.example.com", ("1.1.1.1", "2.2.2.2"), "/x")
+    assert result["status"] == 200 and "2.2.2.2" in seen
+
+
+def test_graphql_introspection_raises_on_a_server_error(monkeypatch):
+    from opfor.scenarios.attacksurface.classes.domain import http as domains
+    monkeypatch.setattr(domains, "resolve_host", lambda n: {"addresses": ("2.2.2.2",)})
+    monkeypatch.setattr(domains, "_connect", lambda *a, **k: (500, "", "", "", "", ()))
+    # a 5xx introspection is errored and unknown, never reported as safely disabled
+    with pytest.raises(RuntimeError):
+        domains.graphql_introspect("h.example.com", "/graphql")
+
+
+def test_graphql_introspection_is_off_on_a_client_refusal(monkeypatch):
+    from opfor.scenarios.attacksurface.classes.domain import http as domains
+    monkeypatch.setattr(domains, "resolve_host", lambda n: {"addresses": ("2.2.2.2",)})
+    monkeypatch.setattr(domains, "_connect",
+                        lambda *a, **k: (403, "", "", "introspection disabled", "", ()))
+    # a 4xx is an intentional refusal, a genuine off, so None rather than a raise
+    assert domains.graphql_introspect("h.example.com", "/graphql") is None

@@ -116,21 +116,27 @@ def http_probe(name: str, addresses=()) -> dict:
 
 
 def fetch_url(name: str, addresses, path: str) -> dict:
-    """Fetch one interface path on a name by connecting to a public resolved address."""
+    """Fetch one interface path on a name by connecting to a public resolved address.
+
+    Every public address is tried, not only the first, the same way the alive probe does, so
+    a host that answers on a later address is enriched rather than read as empty because its
+    first address is dead. A null status is returned only when no address answered on either
+    scheme, so the caller can tell a transport failure from a real absent path, invariant 5.
+    """
     public = public_addresses(addresses)
     if not public:
         return {"status": None, "url": f"https://{name}{path}", "content_type": "",
                 "server": "", "title": "", "body": ""}
-    ip = public[0]
-    for scheme in ("https", "http"):
-        try:
-            status, server, content_type, body, location, _hdrs = _connect(name, ip, scheme, path)
-        except Exception:
-            continue
-        match = _TITLE.search(body)
-        return {"status": status, "url": f"{scheme}://{name}{path}", "content_type": content_type,
-                "server": server, "title": match.group(1).strip()[:200] if match else "",
-                "body": body.lower(), "location": location}
+    for ip in public:
+        for scheme in ("https", "http"):
+            try:
+                status, server, content_type, body, location, _hdrs = _connect(name, ip, scheme, path)
+            except Exception:
+                continue
+            match = _TITLE.search(body)
+            return {"status": status, "url": f"{scheme}://{name}{path}", "content_type": content_type,
+                    "server": server, "title": match.group(1).strip()[:200] if match else "",
+                    "body": body.lower(), "location": location}
     return {"status": None, "url": f"https://{name}{path}", "content_type": "",
             "server": "", "title": "", "body": "", "location": ""}
 
@@ -185,13 +191,13 @@ def fetch_document(name: str, path: str) -> dict:
     public = public_addresses(resolve_host(name).get("addresses", ()))
     if not public:
         return {"status": None, "content_type": "", "text": ""}
-    ip = public[0]
-    for scheme in ("https", "http"):
-        try:
-            status, _, content_type, body, _location, _hdrs = _connect(name, ip, scheme, path, read_limit=_DOCUMENT_LIMIT)
-        except Exception:
-            continue
-        return {"status": status, "content_type": content_type, "text": body}
+    for ip in public:
+        for scheme in ("https", "http"):
+            try:
+                status, _, content_type, body, _location, _hdrs = _connect(name, ip, scheme, path, read_limit=_DOCUMENT_LIMIT)
+            except Exception:
+                continue
+            return {"status": status, "content_type": content_type, "text": body}
     return {"status": None, "content_type": "", "text": ""}
 
 
@@ -199,27 +205,38 @@ def graphql_introspect(name: str, path: str = "/graphql") -> dict | None:
     """Introspect a GraphQL endpoint, returning the schema data or None when it is off.
 
     Introspection is a read, one POST with a query, no mutation, so it stays a recon act.
-    A None result means introspection is disabled or the endpoint did not answer, not that
-    the check failed silently, the capability turns a raised error into a loud failure.
+    A None result means introspection is genuinely off, the endpoint answered and declined,
+    a 2xx without schema data or a client-side 4xx refusal. An errored probe is raised loud
+    instead, a 5xx, an unparseable 2xx body, or no answer on any address, so an endpoint that
+    could not be checked is never read as safely disabled, invariant 5. Every public address
+    is tried, not only the first.
     """
     public = public_addresses(resolve_host(name).get("addresses", ()))
     if not public:
-        return None
-    ip = public[0]
+        raise RuntimeError(f"graphql introspection has no public address for {name!r}")
     body = _INTROSPECTION.encode("utf-8")
-    for scheme in ("https", "http"):
-        try:
-            status, _, _, text, _location, _hdrs = _connect(name, ip, scheme, path, read_limit=_DOCUMENT_LIMIT,
-                                                             method="POST", payload=body, content_type="application/json")
-        except Exception:
-            continue
-        if status and 200 <= status < 300:
+    for ip in public:
+        for scheme in ("https", "http"):
             try:
-                data = json.loads(text)
+                status, _, _, text, _location, _hdrs = _connect(
+                    name, ip, scheme, path, read_limit=_DOCUMENT_LIMIT,
+                    method="POST", payload=body, content_type="application/json")
             except Exception:
+                continue
+            if status is None:
+                continue
+            if 200 <= status < 300:
+                try:
+                    data = json.loads(text)
+                except Exception as exc:
+                    raise RuntimeError(f"graphql 2xx body was not JSON: {type(exc).__name__}")
+                if isinstance(data, dict) and "data" in data:
+                    return data["data"]
                 return None
-            return data.get("data") if isinstance(data, dict) and "data" in data else data
-    return None
+            if 400 <= status < 500:
+                return None
+            raise RuntimeError(f"graphql introspection errored, HTTP {status}")
+    raise RuntimeError(f"graphql introspection got no answer on any address for {name!r}")
 
 
 # Response headers that carry no identification value and only add noise, dropped from the

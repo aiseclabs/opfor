@@ -45,6 +45,11 @@ class BucketScan(Capability):
                 state = "listable"
             elif status in (401, 403):
                 state = "private"
+            elif status is None:
+                # no answer is a transport failure, not a settled private-or-absent verdict,
+                # so it is a coverage gap rather than a clean negative, invariant 5
+                skipped.append(f"{key}: no response")
+                continue
             else:
                 continue
             buckets.append(Bucket(name=found["bucket"], provider=found["provider"],

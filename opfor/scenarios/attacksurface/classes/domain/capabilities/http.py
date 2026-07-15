@@ -181,7 +181,13 @@ class Endpoints(Capability):
                 skipped.append(f"{path}: {type(exc).__name__}")
                 continue
             status = result.get("status")
-            if status is None or status == 404:
+            if status is None:
+                # a live host gave no answer on this path, a transport failure such as a
+                # timeout or a WAF block, not an absent path, so it is a coverage gap rather
+                # than a clean negative, invariant 5
+                skipped.append(f"{path}: no response")
+                continue
+            if status == 404:
                 continue
             if not _distinct(result, baseline):
                 continue

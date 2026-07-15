@@ -10,9 +10,12 @@ that suspends says so, so incomplete work is never dressed as complete.
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from opfor.core.phase import Phase
+
+if TYPE_CHECKING:
+    from opfor.core.engine import RunState
 
 # A run either ran the whole spine to its terminal, or stopped short and can resume.
 CLOSED = "closed"
@@ -48,6 +51,10 @@ class Report:
     suspended run did not, and `notes` says why, such as an exhausted budget or work
     awaiting an async result. Coverage caveats also land in `notes`, so a bounded or
     truncated run is loud about it.
+
+    A run suspended on async work names the handles it is waiting on in `pending`, so a
+    stall is visible, and carries the resumable `state` an async result is fed back into,
+    so the run resumes rather than restarts. Both are empty or None on a closed run.
     """
 
     scenario: str
@@ -56,6 +63,11 @@ class Report:
     terminal: Phase
     findings: tuple[Finding, ...] = ()
     notes: tuple[str, ...] = ()
+    # The async handles a suspended run is waiting on, the keys to feed results back through.
+    pending: tuple[str, ...] = ()
+    # The resumable state of a run suspended on async work, live objects rather than a
+    # serialized checkpoint, so `engine.resume` continues it in process. None otherwise.
+    state: "RunState | None" = None
 
     @property
     def closed(self) -> bool:

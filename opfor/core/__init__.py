@@ -11,7 +11,7 @@ from __future__ import annotations
 from opfor.core.budget import Budget
 from opfor.core.capability import Capability, Done, Failed, Later, Outcome, Task
 from opfor.core.confirm import Confirm
-from opfor.core.engine import run
+from opfor.core.engine import RunState, resume, run
 from opfor.core.json_parse import extract_json_object, require_json_object
 from opfor.core.ledger import Event, Ledger
 from opfor.core.markdown_docs import iter_md_docs, parse_frontmatter
@@ -50,6 +50,7 @@ __all__ = [
     "Report",
     "Rule",
     "RuleSet",
+    "RunState",
     "SEVERITIES",
     "Scenario",
     "Scope",
@@ -62,5 +63,6 @@ __all__ = [
     "make_provider",
     "parse_frontmatter",
     "require_json_object",
+    "resume",
     "run",
 ]

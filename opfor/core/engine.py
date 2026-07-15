@@ -12,11 +12,20 @@ stops on an exhausted budget or on work awaiting an async result is suspended, a
 says so, so incomplete work is never dressed as complete. The engine is
 scenario-blind, it knows only capabilities, a planner, a triage, scope, and the
 world.
+
+A run suspended on an async result does not lose its place. The loop drives a `RunState`,
+the world, ledger, budget, the tasks already done, the tasks parked under a handle, and the
+phase it stopped in. On suspend the state rides the report, and `resume` feeds the async
+results back through their handles and drives the same state onward. So the phishing "hours
+later" path resumes the run rather than restarting it, closing the suspend and resume
+invariant rather than only its first half.
 """
 
 from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from dataclasses import dataclass, field
+from typing import Iterable
 
 from opfor.core.budget import Budget
 from opfor.core.capability import Done, Failed, Later, Task
@@ -25,7 +34,32 @@ from opfor.core.phase import Phase
 from opfor.core.result import CLOSED, SUSPENDED, Finding, Report
 from opfor.core.scenario import Scenario
 from opfor.core.scope import Scope
-from opfor.core.world import World
+from opfor.core.world import Fact, World
+
+
+@dataclass
+class RunState:
+    """The resumable state of a run, everything the loop needs to pick up where it stopped.
+
+    A closed run needs none of this again, so the state rides only a suspended report. It
+    holds live objects rather than a serialized checkpoint, so resume is in process, the
+    async result is fed back through the same handle and the same world it parked against.
+    `resume_from` is the phase a suspend stopped in, so the loop skips the phases already
+    completed and re-enters the one that still has work.
+    """
+
+    scenario: Scenario
+    world: World
+    scope: Scope
+    budget: Budget
+    ledger: Ledger
+    done: set[str] = field(default_factory=set)         # task ids that reached a terminal outcome
+    pending: dict[str, Task] = field(default_factory=dict)  # handle -> task parked for an async result
+    findings: tuple[Finding, ...] = ()
+    notes: list[str] = field(default_factory=list)
+    reached: Phase = Phase.SEED
+    resume_from: Phase | None = None
+    max_workers: int = 8
 
 
 def run(
@@ -39,61 +73,88 @@ def run(
 ) -> Report:
     """Run one scenario to closure or suspension against the world, and report."""
     ledger = ledger or Ledger()
-    done: set[str] = set()          # task ids that reached a terminal outcome
-    pending: dict[str, Task] = {}   # handle -> task parked for an async result
-    notes: list[str] = []
-    findings: tuple[Finding, ...] = ()
-    reached = Phase.SEED
-
     ledger.append("run_start", scenario=scenario.name, terminal=scenario.terminal.name)
+    state = RunState(scenario=scenario, world=world, scope=scope, budget=budget,
+                     ledger=ledger, max_workers=max_workers)
+    return _drive(state)
 
-    for phase in Phase.upto(scenario.terminal):
-        ledger.append("phase_enter", phase=phase.name)
+
+def resume(state: RunState, results: dict[str, Iterable[Fact]]) -> Report:
+    """Feed async results back through their handles and drive the suspended run onward.
+
+    `results` maps a handle the report named as pending to the facts its async work produced,
+    the "hours later" delivery. Each keyed task is absorbed and retired, then the loop
+    continues the same state. A result for a handle with no parked task is recorded loud and
+    ignored, never silently dropped, invariant 5.
+    """
+    for handle, raw in results.items():
+        task = state.pending.pop(handle, None)
+        facts = tuple(raw)
+        if task is None:
+            state.notes.append(f"resume: no parked task for handle {handle!r}")
+            state.ledger.append("resume_unknown", handle=handle)
+            continue
+        state.world.absorb(facts)
+        state.done.add(task.id)
+        state.ledger.append("resume", handle=handle, task=task.id, facts=len(facts))
+    return _drive(state)
+
+
+def _drive(state: RunState) -> Report:
+    """Drive the phase loop from where the state left off, to closure or suspension."""
+    s = state
+    for phase in Phase.upto(s.scenario.terminal):
+        if s.resume_from is not None and phase < s.resume_from:
+            continue
+        s.ledger.append("phase_enter", phase=phase.name)
 
         if phase == Phase.TRIAGE:
-            findings = tuple(scenario.triage.judge(world))
-            ledger.append("triage", findings=len(findings))
-            if scenario.post_triage is not None:
+            s.findings = tuple(s.scenario.triage.judge(s.world))
+            s.ledger.append("triage", findings=len(s.findings))
+            if s.scenario.post_triage is not None:
                 # A deterministic step, not a judgment. It grounds findings in observed
                 # requests and materializes the nodes the intrusive phases act on, so world
                 # mutation stays out of triage. It returns one finding per input finding, so
                 # the count the run reports is unchanged.
-                findings = tuple(scenario.post_triage.run(world, findings))
-                ledger.append("post_triage", findings=len(findings))
-            reached = phase
+                s.findings = tuple(s.scenario.post_triage.run(s.world, s.findings))
+                s.ledger.append("post_triage", findings=len(s.findings))
+            s.reached = phase
             continue
 
-        if phase == Phase.CONFIRM and scenario.confirm is not None:
+        if phase == Phase.CONFIRM and s.scenario.confirm is not None:
             # A second judgment, not an action, so it runs the confirm judge rather than
             # capabilities, mirroring TRIAGE. It regrades the findings against the receipts
             # the EXPLOIT phase recorded and never mints a new one, so the surface a run
             # reports is unchanged in count and only regraded.
-            findings = tuple(scenario.confirm.reconfirm(world, findings))
-            ledger.append("confirm", findings=len(findings))
-            reached = phase
+            s.findings = tuple(s.scenario.confirm.reconfirm(s.world, s.findings))
+            s.ledger.append("confirm", findings=len(s.findings))
+            s.reached = phase
             continue
 
         while True:
-            if not budget.ok():
-                notes.append(f"budget exhausted in {phase.name}")
-                ledger.append("suspend", reason="budget", phase=phase.name)
-                return _report(scenario, SUSPENDED, reached, findings, notes)
+            if not s.budget.ok():
+                s.notes.append(f"budget exhausted in {phase.name}")
+                s.ledger.append("suspend", reason="budget", phase=phase.name)
+                return _report(s, SUSPENDED)
 
-            ready = _authorize(scenario, scope, world, phase, done, pending, ledger, notes)
+            ready = _authorize(s.scenario, s.scope, s.world, phase, s.done, s.pending,
+                               s.ledger, s.notes)
             if not ready:
                 break
 
-            _run_batch(scenario, world, ready, budget, done, pending, ledger, notes, max_workers)
+            _run_batch(s.scenario, s.world, ready, s.budget, s.done, s.pending, s.ledger,
+                       s.notes, s.max_workers)
 
-        if pending:
-            notes.append(f"awaiting async results: {len(pending)}")
-            ledger.append("suspend", reason="async", phase=phase.name, pending=len(pending))
-            return _report(scenario, SUSPENDED, reached, findings, notes)
+        if s.pending:
+            s.notes.append(f"awaiting async results: {len(s.pending)}")
+            s.ledger.append("suspend", reason="async", phase=phase.name, pending=len(s.pending))
+            s.resume_from = phase
+            return _report(s, SUSPENDED)
 
-        reached = phase
+        s.reached = phase
 
-    ledger.append("run_end", status=CLOSED, reached=reached.name, findings=len(findings))
-    return _report(scenario, CLOSED, reached, findings, notes)
+    s.ledger.append("run_end", status=CLOSED, reached=s.reached.name, findings=len(s.findings))
+    return _report(s, CLOSED)
 
 
 def _authorize(scenario, scope, world, phase, done, pending, ledger, notes) -> list[Task]:
@@ -160,12 +221,18 @@ def _run_batch(scenario, world, ready, budget, done, pending, ledger, notes, max
             raise TypeError(f"capability {task.capability} returned a non-outcome: {type(outcome).__name__}")
 
 
-def _report(scenario, status, reached, findings, notes) -> Report:
+def _report(state: RunState, status: str) -> Report:
+    """The report for the state's current status. A run suspended with parked work names the
+    handles and carries the state, so an async result can be fed back and the run resumed. A
+    closed run or one suspended for another reason carries neither."""
+    resumable = status == SUSPENDED and bool(state.pending)
     return Report(
-        scenario=scenario.name,
+        scenario=state.scenario.name,
         status=status,
-        reached=reached,
-        terminal=scenario.terminal,
-        findings=findings,
-        notes=tuple(notes),
+        reached=state.reached,
+        terminal=state.scenario.terminal,
+        findings=state.findings,
+        notes=tuple(state.notes),
+        pending=tuple(sorted(state.pending)),
+        state=state if resumable else None,
     )

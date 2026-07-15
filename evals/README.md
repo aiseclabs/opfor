@@ -34,3 +34,10 @@ subscription by default or a vendor API when a key is set. The model is not dete
 repeat with `--runs` and fold by frequency. A case's answer key is authored from the surface's
 ground truth, never from what opfor currently outputs, so a high score cannot come from the
 tool grading itself.
+
+## Not shipped with the package
+
+The engine ships, the benchmark does not. `pyproject.toml` includes only `opfor*` in the
+wheel, so this package is a repository-only development and regression tool, run from a
+checkout with `python -m evals`, never `pip install`ed. Its cases are fixtures, not product
+code, so they stay out of the distribution the way the test suite does.

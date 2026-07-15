@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from opfor.core.budget import Budget
 from opfor.core.capability import Capability, Done, Failed, Later, Outcome, Task
+from opfor.core.checkpoint import Checkpoint, checkpoint, restore
 from opfor.core.confirm import Confirm
 from opfor.core.engine import RunState, resume, run
 from opfor.core.json_parse import extract_json_object, require_json_object
@@ -29,6 +30,7 @@ from opfor.core.world import Fact, Node, World
 __all__ = [
     "Budget",
     "Capability",
+    "Checkpoint",
     "CompletionResult",
     "Confirm",
     "Decision",
@@ -57,12 +59,14 @@ __all__ = [
     "Task",
     "Triage",
     "World",
+    "checkpoint",
     "each",
     "extract_json_object",
     "iter_md_docs",
     "make_provider",
     "parse_frontmatter",
     "require_json_object",
+    "restore",
     "resume",
     "run",
 ]

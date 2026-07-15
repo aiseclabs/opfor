@@ -10,8 +10,9 @@ which is how one engine drives web, network, chain, and phishing alike.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Mapping
 
 from opfor.core.capability import Capability
 from opfor.core.confirm import Confirm
@@ -39,6 +40,11 @@ class Scenario:
     # The confirm judge, run in the CONFIRM phase to regrade findings against the live
     # reproduction receipts. Absent when a scenario never reproduces, then CONFIRM is idle.
     confirm: Confirm | None = None
+    # The scenario's payload dataclasses, keyed by class name, so a durable checkpoint can
+    # serialize and rebuild the world's typed payloads without the kernel naming one. A
+    # scenario that never checkpoints may leave it empty, then only a payload-free world
+    # round-trips. Adding a payload type is listing it here, not touching the codec.
+    payloads: Mapping[str, type] = field(default_factory=dict)
 
     @property
     def knowledge_dir(self) -> Path:

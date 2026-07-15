@@ -34,6 +34,24 @@ from opfor.scenarios.attacksurface.types import Org
 
 NAME = "attacksurface"
 
+
+def _payloads() -> dict[str, type]:
+    """The scenario's payload dataclasses keyed by class name, collected from the modules that
+    define them, so a durable checkpoint can rebuild the world's typed payloads. Collected by
+    introspection rather than a hand list, so a new payload type is registered by defining it,
+    not by editing this map."""
+    from dataclasses import is_dataclass
+    from opfor.scenarios.attacksurface import reproduce, types as surface_types
+    from opfor.scenarios.attacksurface.classes.domain import types as domain_types
+    from opfor.scenarios.attacksurface.classes.github import types as github_types
+
+    registry: dict[str, type] = {}
+    for module in (surface_types, domain_types, github_types, reproduce):
+        for name, obj in vars(module).items():
+            if isinstance(obj, type) and is_dataclass(obj):
+                registry[name] = obj
+    return registry
+
 # Sentinel so build can tell an unset reverse-WHOIS seam from one a caller passed, even
 # a fake in a test, and default the real seam to on only when a provider key is set.
 _DEFAULT = object()
@@ -139,6 +157,7 @@ def build(
                              judge=judge, judge_model=judge_model),
         post_triage=FindingGrounder(),
         confirm=ConfirmTriage(provider=provider, model=model) if confirm else None,
+        payloads=_payloads(),
         terminal=terminal,
     )
 

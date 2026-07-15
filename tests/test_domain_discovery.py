@@ -136,7 +136,7 @@ def test_resolve_host_keeps_cname_and_asks_both_address_families(monkeypatch):
 
 
 def test_http_probe_tries_every_public_ip_retries_timeouts_and_raises_the_unexpected(monkeypatch):
-    from opfor.scenarios.attacksurface.classes.domain import sources as domains
+    from opfor.scenarios.attacksurface.classes.domain import http as domains
 
     # the first public address refuses on both schemes, the second answers, so a multi-ip
     # name is alive rather than judged dead on the first unlucky address

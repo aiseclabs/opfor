@@ -56,7 +56,7 @@ def test_nvd_cves_returns_nothing_for_an_unidentified_product():
 def test_nvd_keyword_search_uses_the_product_alone_not_the_version(monkeypatch):
     """NVD keyword search matches the description text, where a version rarely appears, so
     the query is the product alone, or a version-bearing product would return nothing."""
-    from opfor.scenarios.attacksurface.classes.domain import sources as domains
+    from opfor.scenarios.attacksurface.classes.domain import passive as domains
 
     queries = []
     monkeypatch.setattr(domains, "_nvd_fetch", lambda q: queries.append(q) or [])
@@ -67,7 +67,7 @@ def test_nvd_keyword_search_uses_the_product_alone_not_the_version(monkeypatch):
 def test_nvd_falls_back_to_a_product_keyword_when_the_cpe_match_is_empty(monkeypatch):
     """A wrong vendor guess or a cve not tagged with the cpe yields an empty cpe match, so
     the query falls back to a product keyword rather than missing a real advisory."""
-    from opfor.scenarios.attacksurface.classes.domain import sources as domains
+    from opfor.scenarios.attacksurface.classes.domain import passive as domains
 
     queries = []
 
@@ -86,7 +86,7 @@ def test_nvd_falls_back_to_a_product_keyword_when_the_cpe_match_is_empty(monkeyp
 
 
 def test_nvd_cpe_match_with_results_does_not_fall_back(monkeypatch):
-    from opfor.scenarios.attacksurface.classes.domain import sources as domains
+    from opfor.scenarios.attacksurface.classes.domain import passive as domains
 
     queries = []
     monkeypatch.setattr(domains, "_nvd_fetch",
@@ -98,7 +98,7 @@ def test_nvd_cpe_match_with_results_does_not_fall_back(monkeypatch):
 
 
 def test_nvd_throttle_serializes_calls_to_stay_under_the_rate_limit(monkeypatch):
-    from opfor.scenarios.attacksurface.classes.domain import sources as domains
+    from opfor.scenarios.attacksurface.classes.domain import passive as domains
 
     clock = {"t": 100.0}
     slept = []

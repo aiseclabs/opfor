@@ -1,0 +1,701 @@
+from __future__ import annotations
+
+import json
+
+import pytest
+
+from opfor.core import Budget, MockProvider, Node, Phase, Scope, World, run
+from opfor.core.result import CLOSED
+from opfor.scenarios.attacksurface import build
+from opfor.scenarios.attacksurface.triage import TriageError, _finding_from_dict
+from opfor.scenarios.attacksurface.types import Org
+
+from tests.surface_fixtures import *
+
+
+def test_run_closes():
+    report = _run(_seed())
+    assert report.closed
+    assert report.status == CLOSED
+    assert report.reached == Phase.TRIAGE
+
+
+def test_expands_both_asset_classes_from_the_org():
+    world = _seed()
+    _run(world)
+    assert {n.payload.name for n in world.nodes("domain")} >= {"www.example.com", "admin.example.com"}
+    assert {n.payload.login for n in world.nodes("github_org")} == {"examplecorp"}
+    assert len(world.nodes("github_repo")) == 2
+
+
+def test_wildcard_certificate_is_reported_as_a_blind_spot():
+    # *.dev.example.com hides its hosts from CT, the run must say so rather than look clean
+    report = _run(_seed())
+    blind = [f for f in report.findings if f.data.get("kind") == "blindspot"]
+    assert len(blind) == 1
+    assert blind[0].severity == "INFO"
+    assert "dev.example.com" in blind[0].data["bases"]
+
+
+def test_truncated_enumeration_is_reported_as_a_blind_spot():
+    # a passive source that stopped at its page cap left subdomains unfetched, the run must
+    # say so rather than present the bounded set as the complete surface
+    from opfor.scenarios.attacksurface.classes.domain.sources import Enumeration
+
+    def enum_truncated(root):
+        found = Enumeration({"api.example.com"})
+        found.truncated = True
+        return found
+
+    report, _scenario, _world = _run_capturing(enumerate_fn=enum_truncated)
+    trunc = [f for f in report.findings if f.id == "finding:blindspot:enumeration"]
+    assert len(trunc) == 1
+    assert trunc[0].severity == "INFO"
+    assert "example.com" in trunc[0].data["roots"]
+
+
+def test_hosts_from_file_normalizes_a_dns_export(tmp_path):
+    from opfor.scenarios.attacksurface.classes.domain.sources import hosts_from_file
+
+    export = tmp_path / "dns.txt"
+    export.write_text(
+        "# a dns export\n"
+        "\n"
+        "api.dev.example.com\n"
+        "*.sandbox.example.com\n"                                  # wildcard base is a real host
+        "_0007c31f57915f7fdc0b0f3de4b50248.api.hodor.example.com\n"  # ACM record wraps a host
+        "sel._domainkey.example.com\n"                            # DKIM control record, dropped
+        "API.DEV.EXAMPLE.COM\n",                                  # duplicate after lowercasing
+        encoding="utf-8")
+    hosts = hosts_from_file(str(export))
+    assert hosts == ("api.dev.example.com", "api.hodor.example.com", "sandbox.example.com")
+
+
+def test_inventory_hosts_enter_the_surface_as_enriched_leaves():
+    # a DNS-export host is resolved and triaged, but not re-enumerated, since it is a leaf
+    world = _seed(hosts=("api.dev.example.com",))
+    _run(world)
+    node = world.node("domain:api.dev.example.com")
+    assert node.payload.source == "inventory"
+    assert node.payload.root == "example.com"
+    assert world.has_fact(node.id, "resolved")
+    assert not world.has_fact(node.id, "enumerated")
+
+
+def test_wildcard_base_node_is_flagged():
+    from opfor.core import Node, World
+    from opfor.scenarios.attacksurface.classes.domain.capabilities import Subdomains
+    from opfor.scenarios.attacksurface.classes.domain.types import DomainData
+    from opfor.scenarios.attacksurface.types import Org
+
+    world = World()
+    world.add(Node(id="org:x", type="org", payload=Org(name="X", domains=("example.com",))))
+    world.add(Node(id="domain:example.com", type="domain",
+                   payload=DomainData(name="example.com", root="example.com", source="hint")))
+    cap = Subdomains(lambda root: {"*.dev.example.com", "api.example.com"})
+    from opfor.core import Task
+    outcome = cap.run(Task(capability="domain_subdomains", node="domain:example.com"), world)
+    nodes = {n.payload.name: n.payload for n in outcome.facts[0].yields}
+    assert nodes["dev.example.com"].wildcard is True
+    assert nodes["api.example.com"].wildcard is False
+
+
+def test_resolve_host_keeps_cname_and_asks_both_address_families(monkeypatch):
+    import urllib.request
+
+    from opfor.scenarios.attacksurface.classes.domain import sources as domains
+
+    asked = []
+
+    class _Resp:
+        def __init__(self, payload):
+            self._payload = payload
+
+        def read(self):
+            return json.dumps(self._payload).encode("utf-8")
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+    # a CNAME to an unclaimed target, answered but with no address, is the dangling case
+    def fake_urlopen(request, timeout=0):
+        asked.append(request.full_url)
+        if "type=A" in request.full_url:
+            return _Resp({"Answer": [{"type": 5, "data": "target.s3.amazonaws.com."}]})
+        return _Resp({"Answer": []})
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+    result = domains.resolve_host("dangling.example.com")
+    assert result["resolvable"] is False
+    assert result["addresses"] == ()
+    assert result["cnames"] == ("target.s3.amazonaws.com",)
+    assert any("type=A" in u for u in asked) and any("type=AAAA" in u for u in asked)
+
+
+def test_http_probe_tries_every_public_ip_retries_timeouts_and_raises_the_unexpected(monkeypatch):
+    from opfor.scenarios.attacksurface.classes.domain import sources as domains
+
+    # the first public address refuses on both schemes, the second answers, so a multi-ip
+    # name is alive rather than judged dead on the first unlucky address
+    calls = []
+
+    def refuse_first_ip(name, ip, scheme, path, **kw):
+        calls.append((ip, scheme))
+        if ip == "8.8.8.8":
+            raise ConnectionRefusedError()
+        return (200, "nginx", "text/html", "<title>ok</title>", "", ())
+
+    monkeypatch.setattr(domains, "_connect", refuse_first_ip)
+    result = domains.http_probe("host.example.com", ("8.8.8.8", "1.1.1.1"))
+    assert result["alive"] is True
+    assert result["status"] == 200
+    assert ("1.1.1.1", "https") in calls
+
+    # a timeout is transient, so it is retried and the live server on the retry is found
+    state = {"n": 0}
+
+    def timeout_then_ok(name, ip, scheme, path, **kw):
+        state["n"] += 1
+        if state["n"] == 1:
+            raise TimeoutError()
+        return (200, "nginx", "text/html", "", "", ())
+
+    monkeypatch.setattr(domains, "_connect", timeout_then_ok)
+    assert domains.http_probe("host.example.com", ("8.8.8.8",))["alive"] is True
+    assert state["n"] >= 2
+
+    # an unexpected error is raised loud, never passed off as not alive
+    def raise_bug(name, ip, scheme, path, **kw):
+        raise ValueError("bug")
+
+    monkeypatch.setattr(domains, "_connect", raise_bug)
+    with pytest.raises(ValueError):
+        domains.http_probe("host.example.com", ("8.8.8.8",))
+
+    # a private-only host has no public address, reported not alive without a connection
+    assert domains.http_probe("host.example.com", ("10.0.0.1",))["alive"] is False
+
+    # the redirect target is captured, so a host fronted by an identity proxy is visible to
+    # triage rather than read as a plain live host
+    def connect_redirect(name, ip, scheme, path, **kw):
+        return (302, "", "text/html", "", "https://accounts.google.com/o/oauth2/v2/auth",
+                (("www-authenticate", "Bearer"),))
+
+    monkeypatch.setattr(domains, "_connect", connect_redirect)
+    redirected = domains.http_probe("host.example.com", ("8.8.8.8",))
+    assert redirected["alive"] is True
+    assert redirected["location"] == "https://accounts.google.com/o/oauth2/v2/auth"
+    assert redirected["headers"] == (("www-authenticate", "Bearer"),)
+
+
+def test_signal_headers_keeps_identity_drops_noise_and_masks_cookie_value():
+    from opfor.scenarios.attacksurface.classes.domain import sources as domains
+
+    class _Resp:
+        def getheaders(self):
+            return [("Server", "nginx"), ("Date", "Mon"), ("Content-Length", "10"),
+                    ("X-Powered-By", "Express"), ("WWW-Authenticate", "Bearer realm=x"),
+                    ("Set-Cookie", "_gitlab_session=secretvalue; Path=/")]
+
+    hdrs = dict(domains._signal_headers(_Resp()))
+    # identity headers are kept, noise is dropped
+    assert hdrs["x-powered-by"] == "Express"
+    assert hdrs["www-authenticate"] == "Bearer realm=x"
+    assert hdrs["server"] == "nginx"
+    assert "date" not in hdrs and "content-length" not in hdrs
+    # a cookie is reduced to its name, the value is a secret and is dropped
+    assert hdrs["set-cookie"] == "_gitlab_session"
+
+
+def test_github_org_is_info_inventory():
+    report = _run(_seed())
+    gh = [f for f in report.findings if f.data["kind"] == "github_org"]
+    assert gh and gh[0].where == "examplecorp"
+    assert gh[0].severity == "INFO"
+    assert gh[0].data["repos"] == 2
+
+
+def test_github_attribution_keeps_the_owned_drops_the_namesake_flags_the_unproven():
+    # three candidates match the name: one links to the in-scope root, one links to a
+    # different root and is a namesake, one has no link and cannot be proven either way
+    def search(name, token=""):
+        return [
+            {"login": "examplecorp", "url": "u", "org_id": 1, "name": "Example Corp",
+             "blog": "https://example.com", "email": "", "verified": False},
+            {"login": "example-lasers", "url": "u", "org_id": 2, "name": "Example Lasers",
+             "blog": "https://example-lasers.io", "email": "", "verified": False},
+            {"login": "examplish", "url": "u", "org_id": 3, "name": "Examplish",
+             "blog": "", "email": "", "verified": False},
+        ]
+
+    report, _, world = _run_capturing(_seed(), search_fn=search)
+    logins = {n.payload.login for n in world.nodes("github_org")}
+    # the namesake proven to belong elsewhere is dropped, the other two are kept
+    assert logins == {"examplecorp", "examplish"}
+    attributed = {n.payload.login for n in world.nodes("github_org") if n.payload.attributed}
+    assert attributed == {"examplecorp"}
+    # the owned org is its own finding, the unproven one is collapsed into a caveat
+    kinds = {f.data.get("kind") for f in report.findings}
+    assert "github_org" in kinds and "github_unattributed" in kinds
+    caveat = next(f for f in report.findings if f.data.get("kind") == "github_unattributed")
+    assert caveat.data["logins"] == ["examplish"]
+
+
+def test_class_restriction_runs_only_that_class():
+    # github only: no domain nodes discovered, no domain findings
+    world = _seed(classes=("github",))
+    report = _run(world)
+    assert report.closed
+    assert world.nodes("domain") == ()
+    assert world.nodes("github_org")
+    assert all(f.data["kind"] == "github_org" for f in report.findings)
+
+
+def test_http_probe_denied_when_domain_out_of_scope():
+    world = _seed()
+    report = _run(world, scope=Scope(max_tier="recon", hosts=("other.test",)))
+    assert report.closed
+    assert not world.has_fact("domain:example.com", "http")
+    assert any("denied" in n and "domain_http" in n for n in report.notes)
+
+
+def test_total_resolution_failure_reports_incomplete_not_dangling():
+    # when not one name resolves, the resolver is the problem, so the run must say
+    # incomplete rather than call every name dangling
+    def none_resolve(name):
+        return {"resolvable": False, "addresses": ()}
+
+    scenario = _make(resolve_fn=none_resolve)
+    world = _seed(classes=("domain",))
+    report = run(scenario, world, scope=Scope(max_tier="recon", hosts=(ROOT,)), budget=Budget(500))
+    kinds = {f.data.get("kind") for f in report.findings}
+    assert "incomplete" in kinds
+    assert "dangling" not in kinds
+
+
+def test_github_search_failure_still_closes():
+    def boom(name, token=""):
+        raise TimeoutError("github slow")
+
+    scenario = _make(search_fn=boom)
+    world = _seed()
+    report = run(scenario, world, scope=Scope(max_tier="recon", hosts=(ROOT,)), budget=Budget(500))
+    assert report.closed
+    # the failure is loud in the report, not only in the ledger
+    assert any("failed" in n and "discover_github" in n for n in report.notes)
+
+
+def test_no_hint_domains_still_closes_via_github():
+    # a bare name with no hint domains and the domain class off still closes on github
+    world = _seed(domains=(), classes=("github",))
+    report = _run(world)
+    assert report.closed
+    assert world.nodes("domain") == ()
+    assert world.nodes("github_org")
+
+
+def test_cert_san_pivot_discovers_a_sibling_root_with_evidence():
+    world = _seed()
+    _run(world)
+    net = world.node("domain:example.net")
+    assert net is not None
+    assert net.payload.root == "example.net"
+    assert net.payload.source == "cert-san"
+    assert net.payload.confidence == "confirmed"
+    assert "shares a certificate" in net.payload.evidence
+
+
+def test_discovered_root_is_an_info_finding_carrying_its_evidence():
+    report = _run(_seed())
+    roots = [f for f in report.findings if f.data.get("kind") == "root"]
+    assert [f.where for f in roots] == ["example.net"]
+    assert roots[0].severity == "INFO"
+    assert "shares a certificate" in roots[0].evidence
+
+
+def test_hint_root_is_not_reported_as_a_discovered_root():
+    report = _run(_seed())
+    assert "example.com" not in {f.where for f in report.findings if f.data.get("kind") == "root"}
+
+
+def test_registrable_root_keeps_multi_label_suffixes():
+    from opfor.scenarios.attacksurface.net import registrable_root
+
+    assert registrable_root("api.example.com") == "example.com"
+    assert registrable_root("example.com") == "example.com"
+    assert registrable_root("a.b.example.co.uk") == "example.co.uk"
+
+
+def test_shared_certificate_is_not_treated_as_ownership_evidence():
+    from opfor.scenarios.attacksurface.classes.domain.sources import sibling_roots_from_issuances
+
+    # a dedicated cert bundling two roots yields the sibling
+    dedicated = [{"dns_names": ["example.com", "www.example.net"]}]
+    assert sibling_roots_from_issuances(dedicated, "example.com") == {
+        "example.net": "shares a certificate with example.com, 2 roots on the cert"
+    }
+    # a multi-tenant cert bundling many unrelated roots proves nothing, so it is skipped
+    shared = [{"dns_names": ["example.com", "a.org", "b.org", "c.org", "d.org", "e.org", "f.org"]}]
+    assert sibling_roots_from_issuances(shared, "example.com") == {}
+
+
+def test_cert_sibling_pivot_walks_past_the_first_page(monkeypatch):
+    import urllib.request
+
+    from opfor.scenarios.attacksurface import config
+    from opfor.scenarios.attacksurface.classes.domain import sources as domains
+
+    monkeypatch.setattr(config, "certspotter_token", lambda: None)
+
+    class _Resp:
+        def __init__(self, payload):
+            self._payload = payload
+
+        def read(self):
+            return json.dumps(self._payload).encode("utf-8")
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+    # page one holds only the seed's own cert, the sibling rides a cert reached only once
+    # the walk follows the `after` cursor to the next page, so a single-page fetch misses it
+    pages = {
+        "": [{"id": "1", "dns_names": ["example.com"]}],
+        "1": [{"id": "2", "dns_names": ["example.com", "example.net"]}],
+    }
+
+    def fake_urlopen(request, timeout=0):
+        after = request.full_url.split("after=")[1] if "after=" in request.full_url else ""
+        return _Resp(pages.get(after, []))
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+    assert domains.cert_sibling_roots("example.com") == {
+        "example.net": "shares a certificate with example.com, 2 roots on the cert"
+    }
+
+
+def test_virustotal_enumeration_flags_truncation_at_the_page_cap(monkeypatch):
+    import urllib.request
+
+    from opfor.scenarios.attacksurface import config
+    from opfor.scenarios.attacksurface.classes.domain import sources as domains
+
+    monkeypatch.setattr(config, "virustotal_key", lambda: "vt")
+
+    class _Resp:
+        def __init__(self, payload):
+            self._payload = payload
+
+        def read(self):
+            return json.dumps(self._payload).encode("utf-8")
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+    # every page answers with a record and a next cursor, so the walk never exhausts the
+    # cursor and stops only at the page cap, which means more subdomains remain unfetched
+    _next = "https://www.virustotal.com/api/v3/domains/example.com/subdomains?cursor=more"
+
+    def capped(request, timeout=0):
+        return _Resp({"data": [{"id": "api.example.com"}], "links": {"next": _next}})
+
+    monkeypatch.setattr(urllib.request, "urlopen", capped)
+    result = domains.virustotal_subdomains("example.com")
+    assert result.truncated is True
+    assert "api.example.com" in result
+
+    # a walk that exhausts the cursor before the cap is complete, not truncated
+    def exhausts(request, timeout=0):
+        return _Resp({"data": [{"id": "api.example.com"}], "links": {}})
+
+    monkeypatch.setattr(urllib.request, "urlopen", exhausts)
+    assert domains.virustotal_subdomains("example.com").truncated is False
+
+
+def test_otx_passive_dns_parses_and_flags_the_cap(monkeypatch):
+    import urllib.request
+
+    from opfor.scenarios.attacksurface import config
+    from opfor.scenarios.attacksurface.classes.domain import sources as domains
+
+    # the parse keeps hosts under the domain and drops the apex and any other domain, apart
+    # from the network so it is driven by a fixture
+    reply = {"passive_dns": [
+        {"hostname": "api.example.com"},
+        {"hostname": "dev.example.com."},
+        {"hostname": "example.com"},
+        {"hostname": "other.test"},
+    ]}
+    assert domains.subdomains_from_otx(reply, "example.com") == {"api.example.com", "dev.example.com"}
+
+    # no key leaves the source out of the union, an empty enumeration rather than a call
+    monkeypatch.setattr(config, "otx_key", lambda: "")
+    assert domains.otx_subdomains("example.com") == set()
+
+    monkeypatch.setattr(config, "otx_key", lambda: "otx")
+
+    class _Resp:
+        def __init__(self, payload):
+            self._payload = payload
+
+        def read(self):
+            return json.dumps(self._payload).encode("utf-8")
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+    # a reply at the endpoint cap means more hosts exist unfetched, so it is flagged truncated
+    capped = {"passive_dns": [{"hostname": f"h{i}.example.com"} for i in range(500)], "count": 500}
+    monkeypatch.setattr(urllib.request, "urlopen", lambda request, timeout=0: _Resp(capped))
+    result = domains.otx_subdomains("example.com")
+    assert result.truncated is True
+    assert len(result) == 500
+
+
+def test_dnsdumpster_parses_and_flags_the_free_tier_cap(monkeypatch):
+    import urllib.request
+
+    from opfor.scenarios.attacksurface import config
+    from opfor.scenarios.attacksurface.classes.domain import sources as domains
+
+    # the parse keeps hosts under the domain from the a and cname records, and the domain
+    # suffix drops the mail and nameserver records that point off the domain
+    reply = {
+        "a": [{"host": "api.example.com"}, {"host": "www.example.com"}],
+        "cname": [{"host": "cdn.example.com"}],
+        "mx": [{"host": "10 aspmx.l.google.com"}],
+        "ns": [{"host": "ns-1.awsdns-31.co.uk"}],
+        "total_a_recs": "2",
+    }
+    assert domains.subdomains_from_dnsdumpster(reply, "example.com") == {
+        "api.example.com", "www.example.com", "cdn.example.com"}
+
+    # no key leaves the source out of the union, an empty enumeration rather than a call
+    monkeypatch.setattr(config, "dnsdumpster_key", lambda: "")
+    assert domains.dnsdumpster_subdomains("example.com") == set()
+
+    monkeypatch.setattr(config, "dnsdumpster_key", lambda: "dd")
+
+    class _Resp:
+        def __init__(self, payload):
+            self._payload = payload
+
+        def read(self):
+            return json.dumps(self._payload).encode("utf-8")
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+    # the free tier returns fewer a records than the total it reports, so more remain and
+    # the reply is flagged truncated rather than passed off as complete
+    capped = {"a": [{"host": f"h{i}.example.com"} for i in range(50)], "total_a_recs": "205"}
+    monkeypatch.setattr(urllib.request, "urlopen", lambda request, timeout=0: _Resp(capped))
+    result = domains.dnsdumpster_subdomains("example.com")
+    assert result.truncated is True
+    assert len(result) == 50
+
+
+def test_certspotter_token_429_falls_back_to_an_anonymous_walk(monkeypatch):
+    import urllib.error
+    import urllib.request
+
+    from opfor.scenarios.attacksurface import config
+    from opfor.scenarios.attacksurface.classes.domain import sources as domains
+
+    monkeypatch.setattr(config, "certspotter_token", lambda: "spent-token")
+
+    class _Resp:
+        def __init__(self, payload):
+            self._payload = payload
+
+        def read(self):
+            return json.dumps(self._payload).encode("utf-8")
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+    # the token walk answers 429 as if its account quota were spent, the anonymous walk
+    # answers with records, so the source recovers rather than going blind
+    def fake_urlopen(request, timeout=0):
+        if request.get_header("Authorization"):
+            raise urllib.error.HTTPError(request.full_url, 429, "Too Many Requests", {}, None)
+        return _Resp([{"dns_names": ["api.example.com", "www.example.com"]}])
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+    assert domains.certspotter_subdomains("example.com") == {"api.example.com", "www.example.com"}
+
+
+def test_certspotter_token_error_that_is_not_429_is_raised(monkeypatch):
+    import urllib.error
+    import urllib.request
+
+    from opfor.scenarios.attacksurface import config
+    from opfor.scenarios.attacksurface.classes.domain import sources as domains
+
+    monkeypatch.setattr(config, "certspotter_token", lambda: "tok")
+
+    # a non-429 stays loud, it is not a quota signal and must not be swallowed as empty
+    def fake_urlopen(request, timeout=0):
+        raise urllib.error.HTTPError(request.full_url, 500, "Server Error", {}, None)
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+    with pytest.raises(urllib.error.HTTPError):
+        domains.certspotter_subdomains("example.com")
+
+
+def test_pivot_failure_still_closes_and_is_loud():
+    def boom(domain):
+        raise TimeoutError("certspotter slow")
+
+    scenario = _make(pivot_fn=boom)
+    world = _seed()
+    report = run(scenario, world, scope=Scope(max_tier="recon", hosts=(ROOT,)), budget=Budget(500))
+    assert report.closed
+    assert any("failed" in n and "domain_pivot" in n for n in report.notes)
+
+
+def test_registrant_pivot_is_off_without_a_key():
+    # the default seam stays off when no key is set, so the run has no registrant fact
+    world = _seed()
+    _run(world)
+    assert not world.has_fact("org:ExampleCorp", "registrant")
+
+
+def test_registrant_pivot_discovers_a_root_when_wired():
+    world = _seed()
+    run(_with_reverse(), world, scope=Scope(max_tier="recon", hosts=(ROOT,)), budget=Budget(500))
+    org = world.node("domain:example.org")
+    assert org is not None
+    assert org.payload.source == "reverse-whois"
+    assert org.payload.confidence == "confirmed"
+    assert "registration record names ExampleCorp" in org.payload.evidence
+
+
+def test_registrant_root_is_an_info_finding():
+    world = _seed()
+    report = run(_with_reverse(), world, scope=Scope(max_tier="recon", hosts=(ROOT,)), budget=Budget(500))
+    roots = {f.where: f for f in report.findings if f.data.get("kind") == "root"}
+    assert "example.org" in roots
+    assert roots["example.org"].data["source"] == "reverse-whois"
+
+
+def test_registrant_pivot_failure_still_closes_and_is_loud():
+    def boom(term, api_key=""):
+        raise TimeoutError("provider slow")
+
+    world = _seed()
+    report = run(_with_reverse(boom), world, scope=Scope(max_tier="recon", hosts=(ROOT,)), budget=Budget(500))
+    assert report.closed
+    assert any("failed" in n and "domain_registrant" in n for n in report.notes)
+
+
+def test_roots_from_reverse_whois_reads_both_shapes():
+    from opfor.scenarios.attacksurface.classes.domain.sources import roots_from_reverse_whois
+
+    as_strings = {"domainsList": ["a.example.org", "b.example.net"]}
+    assert roots_from_reverse_whois(as_strings, "Acme") == {
+        "example.org": "registration record names Acme",
+        "example.net": "registration record names Acme",
+    }
+    as_records = {"domainsList": [{"domainName": "c.example.io"}]}
+    assert roots_from_reverse_whois(as_records, "Acme") == {
+        "example.io": "registration record names Acme"
+    }
+
+
+def test_subdomains_from_vt_reads_relationship_ids():
+    from opfor.scenarios.attacksurface.classes.domain.sources import subdomains_from_vt
+
+    page = {"data": [{"id": "api.example.com"}, {"id": "*.mail.example.com"},
+                     {"id": "unrelated.test"}]}
+    # a wildcard keeps its star, so the enumeration can flag it rather than lose it
+    assert subdomains_from_vt(page, "example.com") == {"api.example.com", "*.mail.example.com"}
+
+
+def test_virustotal_is_skipped_without_a_key(monkeypatch):
+    from opfor.scenarios.attacksurface.classes.domain import sources as d
+
+    monkeypatch.delenv("OPFOR_VIRUSTOTAL_API_KEY", raising=False)
+    # no key means the source contributes nothing and makes no network call
+    assert d.virustotal_subdomains("example.com") == set()
+
+
+def test_certspotter_flags_truncation_when_the_page_budget_is_spent(monkeypatch):
+    """A walk that spends its whole page budget on full pages leaves later certificates
+    unread, so it reports the blind spot rather than passing as complete, invariant 5."""
+    import urllib.request
+
+    from opfor.scenarios.attacksurface import config
+    from opfor.scenarios.attacksurface.classes.domain import sources as domains
+
+    monkeypatch.setattr(config, "certspotter_token", lambda: "")
+
+    class _Resp:
+        def __init__(self, payload):
+            self._payload = payload
+
+        def read(self):
+            return json.dumps(self._payload).encode("utf-8")
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+    # every page is full and carries an id cursor, so the bounded walk never runs dry
+    def fake_urlopen(request, timeout=0):
+        return _Resp([{"id": "999", "dns_names": ["api.example.com"]}])
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+    result = domains.certspotter_subdomains("example.com")
+    assert result == {"api.example.com"}
+    assert result.truncated is True
+
+
+def test_certspotter_does_not_flag_truncation_when_the_cursor_runs_dry(monkeypatch):
+    import urllib.request
+
+    from opfor.scenarios.attacksurface import config
+    from opfor.scenarios.attacksurface.classes.domain import sources as domains
+
+    monkeypatch.setattr(config, "certspotter_token", lambda: "")
+
+    class _Resp:
+        def __init__(self, payload):
+            self._payload = payload
+
+        def read(self):
+            return json.dumps(self._payload).encode("utf-8")
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+    # a page with no id cursor ends the walk, so the enumeration is complete
+    def fake_urlopen(request, timeout=0):
+        return _Resp([{"dns_names": ["api.example.com"]}])
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+    result = domains.certspotter_subdomains("example.com")
+    assert result.truncated is False

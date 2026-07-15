@@ -170,10 +170,16 @@ class Endpoints(Capability):
             seed += list(fact.payload.paths)
         suffixes = tuple(task.params.get("static_suffixes") or ())
         prefixes = tuple(task.params.get("static_prefixes") or ())
-        candidates = self._clean(seed, suffixes, prefixes)
+        cleaned = self._clean(seed, suffixes, prefixes)
+        candidates = cleaned[: self._MAX_CANDIDATES]
         baseline = self._baseline(name, addresses)
         endpoints: list[Node] = []
         skipped: list[str] = []
+        if len(cleaned) > len(candidates):
+            # the candidate set is capped, so say how many paths were left unprobed rather
+            # than let a bounded probe read as the host's whole surface, invariant 5
+            skipped.append(f"{len(cleaned) - len(candidates)} more candidate paths beyond the "
+                           f"{self._MAX_CANDIDATES} cap were not probed")
         for path in candidates:
             try:
                 result = self._fetch(name, addresses, path)
@@ -210,14 +216,14 @@ class Endpoints(Capability):
         return Done(facts=tuple(facts))
 
     def _clean(self, paths, suffixes, prefixes) -> list[str]:
+        """The distinct probeable candidate paths, deduped, static assets dropped. The cap is
+        applied by the caller so the number dropped by it can be reported as a coverage gap."""
         out: list[str] = []
         for path in paths:
             if not path or not path.startswith("/") or _is_static_asset(path, suffixes, prefixes):
                 continue
             if path not in out:
                 out.append(path)
-            if len(out) >= self._MAX_CANDIDATES:
-                break
         return out
 
     def _baseline(self, name, addresses) -> dict:

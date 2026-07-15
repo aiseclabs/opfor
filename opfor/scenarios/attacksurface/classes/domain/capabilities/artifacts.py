@@ -47,22 +47,38 @@ class SourceMapScan(Capability):
         name = host.payload.name
         try:
             home = self._fetch_doc(name, "/").get("text", "")
-            leaks: list[SourceMapLeak] = []
-            for bundle in script_sources(home, name)[:_MAX_SOURCE_MAPS]:
-                map_path = bundle + ".map"
-                text = self._fetch_doc(name, map_path).get("text", "")
-                parsed = source_map_from_text(text)
-                if parsed is None:
-                    continue
-                leaks.append(SourceMapLeak(
-                    bundle=bundle, url=f"https://{name}{map_path}",
-                    sources_count=int(parsed["sources_count"]),
-                    has_sources_content=bool(parsed["has_sources_content"]),
-                    sample_sources=tuple(parsed["sample_sources"])))
         except Exception as exc:
-            return Failed(reason=f"source map scan {type(exc).__name__}: {exc}")
-        payload = SourceMapReport(leaks=tuple(leaks))
-        return Done(facts=(Fact(kind="source_maps", about=task.node, payload=payload),))
+            return Failed(reason=f"source map scan home fetch {type(exc).__name__}: {exc}")
+        bundles = script_sources(home, name)
+        probed = bundles[:_MAX_SOURCE_MAPS]
+        leaks: list[SourceMapLeak] = []
+        skipped: list[str] = []
+        for bundle in probed:
+            map_path = bundle + ".map"
+            # one bundle's error must not discard the maps already found on the others, so it
+            # is a per-bundle coverage gap rather than a whole-scan Failed, invariant 5
+            try:
+                text = self._fetch_doc(name, map_path).get("text", "")
+            except Exception as exc:
+                skipped.append(f"{map_path}: {type(exc).__name__}")
+                continue
+            parsed = source_map_from_text(text)
+            if parsed is None:
+                continue
+            leaks.append(SourceMapLeak(
+                bundle=bundle, url=f"https://{name}{map_path}",
+                sources_count=int(parsed["sources_count"]),
+                has_sources_content=bool(parsed["has_sources_content"]),
+                sample_sources=tuple(parsed["sample_sources"])))
+        if len(bundles) > len(probed):
+            skipped.append(f"{len(bundles) - len(probed)} more bundles beyond the "
+                           f"{_MAX_SOURCE_MAPS} cap were not scanned")
+        facts = [Fact(kind="source_maps", about=task.node,
+                      payload=SourceMapReport(leaks=tuple(leaks)))]
+        gap = _coverage_gap("source_map_scan", name, len(bundles), skipped)
+        if gap is not None:
+            facts.append(Fact(kind="coverage_gap", about=task.node, payload=gap))
+        return Done(facts=tuple(facts))
 
 
 class SecretScan(Capability):
@@ -89,16 +105,32 @@ class SecretScan(Capability):
         patterns = task.params.get("patterns", [])
         try:
             home = self._fetch_doc(name, "/").get("text", "")
-            matches: list[SecretMatch] = []
-            for bundle in script_sources(home, name)[:_MAX_SOURCE_MAPS]:
-                body = self._fetch_doc(name, bundle).get("text", "")
-                for found in secrets_in_text(body, patterns):
-                    matches.append(SecretMatch(pattern=found["pattern"], note=found["note"],
-                                               bundle=bundle, sample=found["sample"]))
         except Exception as exc:
-            return Failed(reason=f"secret scan {type(exc).__name__}: {exc}")
-        payload = SecretReport(matches=tuple(matches))
-        return Done(facts=(Fact(kind="secrets_in_js", about=task.node, payload=payload),))
+            return Failed(reason=f"secret scan home fetch {type(exc).__name__}: {exc}")
+        bundles = script_sources(home, name)
+        probed = bundles[:_MAX_SOURCE_MAPS]
+        matches: list[SecretMatch] = []
+        skipped: list[str] = []
+        for bundle in probed:
+            # a bundle that fails to fetch must not discard secrets already found in the
+            # others, so it is a per-bundle coverage gap rather than a whole-scan Failed
+            try:
+                body = self._fetch_doc(name, bundle).get("text", "")
+            except Exception as exc:
+                skipped.append(f"{bundle}: {type(exc).__name__}")
+                continue
+            for found in secrets_in_text(body, patterns):
+                matches.append(SecretMatch(pattern=found["pattern"], note=found["note"],
+                                           bundle=bundle, sample=found["sample"]))
+        if len(bundles) > len(probed):
+            skipped.append(f"{len(bundles) - len(probed)} more bundles beyond the "
+                           f"{_MAX_SOURCE_MAPS} cap were not scanned")
+        facts = [Fact(kind="secrets_in_js", about=task.node,
+                      payload=SecretReport(matches=tuple(matches)))]
+        gap = _coverage_gap("secret_scan", name, len(bundles), skipped)
+        if gap is not None:
+            facts.append(Fact(kind="coverage_gap", about=task.node, payload=gap))
+        return Done(facts=tuple(facts))
 
 
 class BackupScan(Capability):

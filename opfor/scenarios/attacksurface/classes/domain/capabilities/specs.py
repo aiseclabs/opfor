@@ -44,10 +44,16 @@ class ExpandSpec(Capability):
             document = self._fetch(host, endpoint.path)
         except Exception as exc:
             return Failed(reason=f"spec fetch {type(exc).__name__}: {exc}")
+        text = document.get("text") or ""
+        if document.get("status") is None:
+            # the endpoint probed reachable but the full document did not answer, a transport
+            # failure, not a spec that declares nothing, so fail loud rather than drop it as a
+            # count-0 spec the renderer silently discards, invariant 5
+            return Failed(reason=f"spec fetch got no response for {endpoint.url}")
         try:
-            parsed = json.loads(document.get("text") or "")
-        except Exception:
-            parsed = {}
+            parsed = json.loads(text) if text else {}
+        except Exception as exc:
+            return Failed(reason=f"spec body at {endpoint.url} was not JSON: {type(exc).__name__}")
         paths = paths_from_openapi(parsed)
         title, version = info_from_openapi(parsed)
         payload = APISpec(base=endpoint.url, paths=tuple(paths), count=len(paths),

@@ -734,3 +734,29 @@ def test_graphql_introspection_is_off_on_a_client_refusal(monkeypatch):
                         lambda *a, **k: (403, "", "", "introspection disabled", "", ()))
     # a 4xx is an intentional refusal, a genuine off, so None rather than a raise
     assert domains.graphql_introspect("h.example.com", "/graphql") is None
+
+
+def test_subdomain_enumeration_partial_failure_surfaces_a_coverage_gap():
+    from opfor.core import Done, Task
+    from opfor.scenarios.attacksurface.classes.domain.capabilities.discovery import Subdomains
+    from opfor.scenarios.attacksurface.classes.domain.passive import Enumeration
+    from opfor.scenarios.attacksurface.classes.domain.types import DomainData
+
+    world = World()
+    world.add(Node(id="domain:example.com", type="domain",
+                   payload=DomainData(name="example.com", root="example.com", source="seed")))
+
+    def enumerate_fn(root):
+        found = Enumeration({"a.example.com"})
+        found.source_errors = ("virustotal: down",)
+        found.source_count = 3
+        return found
+
+    outcome = Subdomains(enumerate_fn).run(
+        Task(capability="domain_subdomains", node="domain:example.com"), world)
+    assert isinstance(outcome, Done)
+    # a source that failed while others answered is surfaced as a coverage gap, so the
+    # partial subdomain set does not read as the full surface
+    gaps = [f.payload for f in outcome.facts
+            if f.kind == "coverage_gap" and f.payload.scan == "domain_subdomains"]
+    assert gaps and gaps[0].failed == 1 and any("virustotal" in r for r in gaps[0].reasons)

@@ -102,23 +102,27 @@ def secrets_in_text(text: str, patterns) -> list[dict]:
     """Secret-like strings a set of patterns match in a body, redacted, parsed apart from
     the fetch so a test drives it without a network call.
 
-    Each pattern is a dict with an id, a regex, and a note. A match is reported once per
-    pattern per body with a redacted sample, since one hit is enough to send a human to the
-    source. Whether a match is a live secret or a placeholder is triage's judgment.
+    Each pattern is a dict with an id, a regex, and a note. Every distinct match is reported,
+    deduped by redacted sample, so a bundle holding several keys of one shape surfaces all of
+    them rather than only the first, bounded by a cap. A malformed regex is not swallowed
+    here, patterns are validated loudly at load, so a bad one fails the run rather than
+    silently disabling a whole secret class. Whether a match is live is triage's judgment.
     """
     out: list[dict] = []
+    body = text or ""
+    seen: set[tuple[str, str]] = set()
     for pattern in patterns or []:
         regex = str(pattern.get("regex", ""))
         if not regex:
             continue
-        try:
-            match = re.search(regex, text or "")
-        except re.error:
-            continue
-        if not match:
-            continue
-        out.append({"pattern": str(pattern.get("id", "")), "note": str(pattern.get("note", "")),
-                    "sample": _redact(match.group(0))})
-        if len(out) >= _MAX_SECRET_MATCHES:
-            break
+        pid = str(pattern.get("id", ""))
+        for match in re.finditer(regex, body):
+            sample = _redact(match.group(0))
+            key = (pid, sample)
+            if key in seen:
+                continue
+            seen.add(key)
+            out.append({"pattern": pid, "note": str(pattern.get("note", "")), "sample": sample})
+            if len(out) >= _MAX_SECRET_MATCHES:
+                return out
     return out

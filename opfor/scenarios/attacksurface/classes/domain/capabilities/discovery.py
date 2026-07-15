@@ -5,7 +5,7 @@ from __future__ import annotations
 from opfor.core import Capability, Done, Fact, Failed, Node, Outcome, Phase, Task, World
 from opfor.scenarios.attacksurface import config
 from opfor.scenarios.attacksurface.net import registrable_root
-from opfor.scenarios.attacksurface.classes.domain.types import DomainData
+from opfor.scenarios.attacksurface.classes.domain.types import CoverageGap, DomainData
 
 
 class DiscoverDomains(Capability):
@@ -143,4 +143,12 @@ class Subdomains(Capability):
         # gap for triage to report rather than let a bounded set read as the full surface.
         if getattr(names, "truncated", False):
             facts.append(Fact(kind="enumeration_truncated", about=task.node))
+        # A source that errored while others answered is a blind spot, surfaced through the
+        # same coverage-gap channel so a partial union does not read as the full surface.
+        errors = getattr(names, "source_errors", ())
+        if errors:
+            facts.append(Fact(kind="coverage_gap", about=task.node, payload=CoverageGap(
+                scan="domain_subdomains", host=root,
+                attempted=getattr(names, "source_count", len(errors)),
+                failed=len(errors), reasons=tuple(errors[:5]))))
         return Done(facts=tuple(facts))

@@ -677,3 +677,88 @@ def test_graphql_capability_marks_an_errored_introspection_failed_not_disabled()
         Task(capability="endpoint_graphql", node="endpoint:h/graphql"), world)
     # an errored probe is a loud Failed, never a clean graphql-disabled fact
     assert isinstance(outcome, Failed) and "500" in outcome.reason
+
+
+def test_source_map_scan_tolerates_a_bundle_error_and_still_records_the_gap():
+    from opfor.core import Done, Task
+    from opfor.scenarios.attacksurface.classes.domain.capabilities.artifacts import SourceMapScan
+    from opfor.scenarios.attacksurface.classes.domain.types import DomainData
+
+    world = World()
+    world.add(Node(id="domain:h", type="domain", payload=DomainData(name="h", root="h", source="s")))
+    home = '<script src="/a.js"></script><script src="/b.js"></script>'
+
+    def fetch_doc(name, path):
+        if path == "/":
+            return {"status": 200, "text": home}
+        if path == "/a.js.map":
+            raise TimeoutError("map fetch failed")
+        if path == "/b.js.map":
+            return {"status": 200,
+                    "text": '{"version":3,"sources":["x.ts"],"sourcesContent":["code"]}'}
+        return {"status": None, "text": ""}
+
+    outcome = SourceMapScan(fetch_doc).run(Task(capability="source_map_scan", node="domain:h"), world)
+    assert isinstance(outcome, Done)
+    kinds = {f.kind for f in outcome.facts}
+    # the good bundle's leak is kept, and the errored bundle is a coverage gap, not a whole
+    # scan Failed that would discard what was already found
+    assert "source_maps" in kinds and "coverage_gap" in kinds
+    leaks = [f for f in outcome.facts if f.kind == "source_maps"][0].payload.leaks
+    assert len(leaks) == 1
+
+
+def test_expand_spec_fails_loud_on_transport_failure_and_on_a_malformed_body():
+    from opfor.core import Failed, Task
+    from opfor.scenarios.attacksurface.classes.domain.capabilities.specs import ExpandSpec
+    from opfor.scenarios.attacksurface.classes.domain.types import Endpoint
+
+    world = World()
+    world.add(Node(id="endpoint:h/openapi.json", type="endpoint",
+                   payload=Endpoint(url="https://h/openapi.json", path="/openapi.json",
+                                    status=200, content_type="application/json")))
+    task = Task(capability="endpoint_expand_spec", node="endpoint:h/openapi.json")
+
+    no_answer = ExpandSpec(lambda h, p: {"status": None, "text": ""}).run(task, world)
+    assert isinstance(no_answer, Failed) and "no response" in no_answer.reason
+    bad_json = ExpandSpec(lambda h, p: {"status": 200, "text": "<html>not a spec"}).run(task, world)
+    assert isinstance(bad_json, Failed) and "not JSON" in bad_json.reason
+
+
+def test_secret_scan_reports_multiple_distinct_matches_not_only_the_first():
+    from opfor.scenarios.attacksurface.classes.domain.javascript import secrets_in_text
+    body = "a=sk-aaaaaaaaaaaaaaaaaaaa b=sk-bbbbbbbbbbbbbbbbbbbb"
+    patterns = [{"id": "token", "regex": r"sk-[a-z]{20}", "note": "token"}]
+    found = secrets_in_text(body, patterns)
+    # both distinct tokens surface, not just the first, and they are deduped by sample
+    assert len(found) == 2 and len({f["sample"] for f in found}) == 2
+
+
+def test_a_malformed_secret_pattern_fails_loud_at_load(tmp_path):
+    from opfor.scenarios.attacksurface.classes.domain import planner
+    (tmp_path / "secret_patterns.yaml").write_text(
+        "patterns:\n  - id: bad\n    regex: '([unclosed'\n    note: broken\n", encoding="utf-8")
+    # a broken regex must fail the run at load, not silently disable the whole secret class
+    with pytest.raises(RuntimeError):
+        planner.load_plan_config(tmp_path)
+
+
+def test_endpoint_probe_reports_truncation_when_the_candidate_cap_is_hit():
+    from opfor.core import Done, Task
+    from opfor.scenarios.attacksurface.classes.domain.capabilities.http import Endpoints
+    from opfor.scenarios.attacksurface.classes.domain.types import DomainData
+
+    world = World()
+    world.add(Node(id="domain:h", type="domain", payload=DomainData(name="h", root="h", source="s")))
+    paths = [f"/p{i}" for i in range(500)]
+
+    def fetch(name, addresses, path):
+        return {"status": 404, "url": f"https://{name}{path}", "content_type": "",
+                "server": "", "title": "", "body": "", "location": ""}
+
+    outcome = Endpoints(fetch).run(
+        Task(capability="domain_endpoints", node="domain:h", params={"paths": paths}), world)
+    assert isinstance(outcome, Done)
+    gaps = [f.payload for f in outcome.facts if f.kind == "coverage_gap"]
+    # the 400-candidate cap is surfaced, not a silent bound read as the whole surface
+    assert gaps and any("cap" in r for r in gaps[0].reasons)

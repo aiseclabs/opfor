@@ -15,11 +15,27 @@ import, so the content root stays swappable and importing the module triggers no
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import urlparse
 
 import yaml
+
+
+def _validate_secret_patterns(patterns) -> None:
+    """Compile every secret pattern regex at load, so a malformed one fails the run loudly
+    here rather than being silently skipped during a scan and quietly disabling a whole
+    secret class, invariant 5."""
+    for pattern in patterns:
+        regex = str(pattern.get("regex", ""))
+        if not regex:
+            continue
+        try:
+            re.compile(regex)
+        except re.error as exc:
+            raise RuntimeError(
+                f"invalid secret pattern regex for {pattern.get('id', '?')!r}: {exc}") from exc
 
 from opfor.core import Task, World, each
 from opfor.scenarios.attacksurface.classes import class_enabled
@@ -52,11 +68,13 @@ def load_plan_config(knowledge: Path) -> DomainPlanConfig:
     static = load("interfaces.yaml").get("static_assets") or {}
     secrets = load("secret_patterns.yaml")
     backups = load("backups.yaml")
+    secret_patterns = tuple(dict(p) for p in (secrets.get("patterns") or []))
+    _validate_secret_patterns(secret_patterns)
     return DomainPlanConfig(
         probe_paths=tuple(str(p) for p in (paths.get("paths") or [])),
         static_suffixes=tuple(str(s) for s in (static.get("suffixes") or [])),
         static_prefixes=tuple(str(p) for p in (static.get("prefixes") or [])),
-        secret_patterns=tuple(dict(p) for p in (secrets.get("patterns") or [])),
+        secret_patterns=secret_patterns,
         backup_append=tuple(str(s) for s in (backups.get("append") or [])),
         backup_rename=tuple(str(s) for s in (backups.get("rename") or [])),
         backup_swap=tuple(str(s) for s in (backups.get("swap") or [])),

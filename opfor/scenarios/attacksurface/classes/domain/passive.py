@@ -78,6 +78,11 @@ def subdomains(domain: str) -> Enumeration:
         raise RuntimeError("all passive subdomain sources failed: " + ", ".join(errors))
     union = Enumeration(names)
     union.truncated = truncated
+    # A source that failed while others answered is a blind spot, so the errors ride the
+    # union and the capability surfaces them, rather than a partial set passing as the full
+    # subdomain surface, invariant 5.
+    union.source_errors = tuple(errors)
+    union.source_count = len(sources)
     return union
 
 

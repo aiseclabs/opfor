@@ -28,6 +28,7 @@ from opfor.scenarios.attacksurface.classes.domain import sources as domain_src
 from opfor.scenarios.attacksurface.classes.github import sources as github_src
 from opfor.scenarios.attacksurface.triage import SurfaceTriage
 from opfor.scenarios.attacksurface.confirm import ConfirmTriage
+from opfor.scenarios.attacksurface.grounding import FindingGrounder
 from opfor.scenarios.attacksurface.reproduce import ReproduceFinding, reproduce_rule
 from opfor.scenarios.attacksurface.types import Org
 
@@ -134,6 +135,7 @@ def build(
         triage=SurfaceTriage(knowledge_dirs, provider=provider, model=model,
                              challenger=challenger, challenger_model=challenger_model,
                              judge=judge, judge_model=judge_model),
+        post_triage=FindingGrounder(),
         confirm=ConfirmTriage(provider=provider, model=model) if confirm else None,
         terminal=terminal,
     )

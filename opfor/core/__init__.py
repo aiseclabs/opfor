@@ -16,6 +16,7 @@ from opfor.core.json_parse import extract_json_object, require_json_object
 from opfor.core.ledger import Event, Ledger
 from opfor.core.markdown_docs import iter_md_docs, parse_frontmatter
 from opfor.core.phase import Phase
+from opfor.core.post_triage import PostTriage
 from opfor.core.providers import CompletionResult, Message, MockProvider, Provider, make_provider
 from opfor.core.result import Finding, Report
 from opfor.core.rules import Planner, Rule, RuleSet, each
@@ -44,6 +45,7 @@ __all__ = [
     "Outcome",
     "Phase",
     "Planner",
+    "PostTriage",
     "Provider",
     "Report",
     "Rule",

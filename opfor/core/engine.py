@@ -51,9 +51,15 @@ def run(
         ledger.append("phase_enter", phase=phase.name)
 
         if phase == Phase.TRIAGE:
-            judged = scenario.triage.judge(world)
-            findings = tuple(judged)
+            findings = tuple(scenario.triage.judge(world))
             ledger.append("triage", findings=len(findings))
+            if scenario.post_triage is not None:
+                # A deterministic step, not a judgment. It grounds findings in observed
+                # requests and materializes the nodes the intrusive phases act on, so world
+                # mutation stays out of triage. It returns one finding per input finding, so
+                # the count the run reports is unchanged.
+                findings = tuple(scenario.post_triage.run(world, findings))
+                ledger.append("post_triage", findings=len(findings))
             reached = phase
             continue
 

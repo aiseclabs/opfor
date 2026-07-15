@@ -393,3 +393,14 @@ def test_adversarial_mode_wires_the_roles_from_the_env(monkeypatch):
     assert sc.triage._challenger is not None
     assert sc.triage._judge is not None
     assert sc.triage._challenger_model == "challenger-model"
+
+
+def test_system_prompts_frame_target_text_as_untrusted():
+    from opfor.scenarios.attacksurface import confirm as confirm_mod
+    from opfor.scenarios.attacksurface import triage as triage_mod
+    # target-controlled surface text is embedded in every model prompt, so each prompt must
+    # frame it as untrusted data whose embedded instructions are the attack, not guidance
+    assert "untrusted" in triage_mod.SYSTEM.lower()
+    assert "untrusted" in triage_mod.CHALLENGER_SYSTEM.lower()
+    assert "untrusted" in triage_mod.JUDGE_SYSTEM.lower()
+    assert "untrusted" in confirm_mod.SYSTEM.lower()

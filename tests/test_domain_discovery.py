@@ -852,3 +852,53 @@ def test_budget_cap_is_not_overshot_by_a_batch():
     run(_make(), world, scope=Scope(max_tier="recon", hosts=(ROOT,)), budget=budget)
     # a batch is capped to the remaining budget, so the runaway ceiling is not blown past
     assert budget.steps <= 2
+
+
+def test_connect_closes_the_raw_socket_when_the_tls_handshake_fails(monkeypatch):
+    import socket
+    import ssl
+
+    from opfor.scenarios.attacksurface.classes.domain import http as domains
+
+    closed = {"n": 0}
+
+    class _Raw:
+        def close(self):
+            closed["n"] += 1
+
+    monkeypatch.setattr(socket, "create_connection", lambda *a, **k: _Raw())
+
+    def boom(self, sock, server_hostname=None):
+        raise ssl.SSLError("handshake failed")
+
+    monkeypatch.setattr(ssl.SSLContext, "wrap_socket", boom)
+    # a host with 443 open but not speaking TLS must not leak the raw socket, else a scan
+    # exhausts the file-descriptor limit
+    with pytest.raises(ssl.SSLError):
+        domains._connect("h", "1.2.3.4", "https", "/")
+    assert closed["n"] == 1
+
+
+def test_readonly_fetch_refuses_a_host_that_resolves_only_to_a_private_address(monkeypatch):
+    from opfor.scenarios.attacksurface.classes.domain import http as domains
+    monkeypatch.setattr(domains, "resolve_host",
+                        lambda h: {"addresses": ("127.0.0.1",), "resolvable": True, "cnames": ()})
+    # a name repointed at loopback between observation and replay must not be fetched
+    assert domains.fetch_readonly("http://internal.example.com/x")["status"] is None
+
+
+def test_readonly_fetch_pins_a_public_address_and_verifies_the_certificate(monkeypatch):
+    from opfor.scenarios.attacksurface.classes.domain import http as domains
+    monkeypatch.setattr(domains, "resolve_host",
+                        lambda h: {"addresses": ("93.184.216.34",), "resolvable": True, "cnames": ()})
+    seen = {}
+
+    def fake_connect(name, ip, scheme, path, **kw):
+        seen["ip"] = ip
+        seen["verify"] = kw.get("verify")
+        return (200, "s", "text/html", "body", "", ())
+
+    monkeypatch.setattr(domains, "_connect", fake_connect)
+    result = domains.fetch_readonly("https://example.com/panel")
+    # the replay is pinned to the vetted public address and verifies the certificate
+    assert result["status"] == 200 and seen["ip"] == "93.184.216.34" and seen["verify"] is True

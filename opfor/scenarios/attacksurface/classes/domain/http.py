@@ -199,33 +199,39 @@ class _NoRedirect(urllib.request.HTTPRedirectHandler):
         return None
 
 
-_READ_ONLY_OPENER = urllib.request.build_opener(_NoRedirect)
+_NO_REDIRECT_OPENER = urllib.request.build_opener(_NoRedirect)
 
 
 def fetch_readonly(url: str) -> dict:
-    """A single anonymous GET that never follows a redirect, for the read-only reproduce
-    replay. A 3xx is captured raw with its Location, so a redirect to a login flow or an
-    off-site host is recorded rather than chased, keeping the replay read-only and inside the
-    authorized host. No credential is ever sent, and a connection error returns a null status.
+    """A single GET for the read-only reproduce replay, connected to a vetted public address.
+
+    The host is resolved and filtered to its public addresses, and the request is pinned to
+    that address, so a name repointed at a private or link-local target between observation
+    and replay cannot steer the replay at an internal host, the same private-IP guard every
+    other probe uses. The certificate is verified, so a man in the middle cannot feed the
+    replay fabricated content. A redirect is captured raw with its Location, never followed,
+    so an off-site or login redirect is recorded rather than chased. A host with no public
+    address, or one that does not answer, returns a null status.
     """
-    request = urllib.request.Request(url, headers={"User-Agent": _UA})
-    try:
-        with _READ_ONLY_OPENER.open(request, timeout=_PUBLIC_URL_TIMEOUT) as resp:
-            body = resp.read(_REPRODUCE_BODY).decode("utf-8", "replace")
-            return {"status": resp.status, "url": url,
-                    "content_type": resp.headers.get("Content-Type", ""),
-                    "location": resp.headers.get("Location", ""), "body": body}
-    except urllib.error.HTTPError as exc:
+    parts = urllib.parse.urlsplit(url)
+    host = parts.hostname or ""
+    scheme = parts.scheme or "https"
+    path = parts.path or "/"
+    if parts.query:
+        path = f"{path}?{parts.query}"
+    empty = {"status": None, "url": url, "content_type": "", "location": "", "body": ""}
+    public = public_addresses(resolve_host(host).get("addresses", ()))
+    if not public:
+        return empty
+    for ip in public:
         try:
-            body = exc.read(_REPRODUCE_BODY).decode("utf-8", "replace")
+            status, _server, content_type, body, location, _headers = _connect(
+                host, ip, scheme, path, read_limit=_REPRODUCE_BODY, verify=True)
         except Exception:
-            body = ""
-        headers = exc.headers
-        return {"status": exc.code, "url": url,
-                "content_type": headers.get("Content-Type", "") if headers else "",
-                "location": headers.get("Location", "") if headers else "", "body": body}
-    except Exception:
-        return {"status": None, "url": url, "content_type": "", "location": "", "body": ""}
+            continue
+        return {"status": status, "url": url, "content_type": content_type,
+                "location": location, "body": body}
+    return empty
 
 
 # --- self-declared interfaces: an app maps its own API --------------------
@@ -331,20 +337,29 @@ def _signal_headers(resp) -> tuple:
 
 def _connect(name: str, ip: str, scheme: str, path: str, *, read_limit: int = _BODY_HEAD,
              method: str = "GET", payload: bytes | None = None,
-             content_type: str = "") -> tuple:
+             content_type: str = "", verify: bool = False) -> tuple:
     """One request to ip, with SNI and Host set to name, returning status and shape.
 
-    Certificate validation is off on purpose, a recon probe records what a server serves,
-    a self-signed or mismatched certificate is itself signal, not a reason to skip. The
-    read limit is a full document when a caller needs to parse a body such as a spec, and
-    a payload turns the request into a POST for a GraphQL introspection.
+    Certificate validation is off by default on purpose, a recon probe records what a server
+    serves, a self-signed or mismatched certificate is itself signal, not a reason to skip.
+    A caller that acts on the content, such as the read-only reproduce replay, passes
+    `verify=True` so a man in the middle cannot feed it fabricated content over a trusted
+    channel. The read limit is a full document when a caller needs to parse a body such as a
+    spec, and a payload turns the request into a POST for a GraphQL introspection.
     """
     if scheme == "https":
         context = ssl.create_default_context()
-        context.check_hostname = False
-        context.verify_mode = ssl.CERT_NONE
+        if not verify:
+            context.check_hostname = False
+            context.verify_mode = ssl.CERT_NONE
         raw = socket.create_connection((ip, 443), timeout=_TIMEOUT)
-        sock = context.wrap_socket(raw, server_hostname=name)
+        # Close the raw socket if the TLS handshake fails, else a host that keeps 443 open but
+        # is not TLS leaks a file descriptor on every probe and a scan exhausts the fd limit.
+        try:
+            sock = context.wrap_socket(raw, server_hostname=name)
+        except Exception:
+            raw.close()
+            raise
         conn = http.client.HTTPSConnection(name, timeout=_TIMEOUT)
         conn.sock = sock
     else:

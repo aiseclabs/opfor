@@ -773,3 +773,57 @@ def test_distinct_treats_a_differing_redirect_location_as_a_real_endpoint():
     other = {"status": 302, "location": "https://h/admin/dashboard"}
     assert _distinct(same, baseline) is False
     assert _distinct(other, baseline) is True
+
+
+def test_openapi_paths_apply_the_declared_base_path():
+    from opfor.scenarios.attacksurface.classes.domain.parsers import paths_from_openapi
+    # Swagger 2 basePath and OpenAPI 3 servers url both move an operation off the host root,
+    # so the real unauthenticated surface is probed rather than a 404 at /users
+    swagger = {"basePath": "/api/v2", "paths": {"/users": {"get": {}}}}
+    assert "GET /api/v2/users" in paths_from_openapi(swagger)
+    oas3 = {"servers": [{"url": "https://h/api/v3"}], "paths": {"/orders": {"get": {}}}}
+    assert any(p.endswith("/api/v3/orders") and "GET" in p for p in paths_from_openapi(oas3))
+
+
+def test_openapi_path_item_without_verbs_is_a_get_candidate_not_a_write():
+    from opfor.scenarios.attacksurface.classes.domain.parsers import (
+        paths_from_openapi, split_operation)
+    ops = paths_from_openapi({"paths": {"/ref-path": {"$ref": "#/components/x"}}})
+    assert ops == ["GET /ref-path"]
+    methods, path = split_operation(ops[0])
+    assert "GET" in methods and path == "/ref-path"
+
+
+def test_distinct_ignores_a_path_echoing_login_redirect_query():
+    from opfor.scenarios.attacksurface.classes.domain.capabilities.common import _distinct
+    # a login wall that echoes the requested path in ?next= gives every path a different raw
+    # location, but it is one catch-all, so not distinct
+    baseline = {"status": 302, "location": "https://h/login?next=/x", "content_type": "", "body": ""}
+    echoed = {"status": 302, "location": "https://h/login?next=/admin"}
+    assert _distinct(echoed, baseline) is False
+    # a real redirect to a genuinely different path is still distinct
+    assert _distinct({"status": 302, "location": "https://h/admin/dashboard"}, baseline) is True
+
+
+def test_endpoint_probe_flags_when_the_baseline_cannot_be_established():
+    from opfor.core import Done, Task
+    from opfor.scenarios.attacksurface.classes.domain.capabilities.http import Endpoints
+    from opfor.scenarios.attacksurface.classes.domain.types import DomainData
+
+    world = World()
+    world.add(Node(id="domain:h", type="domain", payload=DomainData(name="h", root="h", source="s")))
+
+    def fetch(name, addresses, path):
+        # only the real path answers, the baseline catch-all probes get no response
+        if path == "/real":
+            return {"status": 200, "url": f"https://{name}{path}", "content_type": "text/html",
+                    "server": "", "title": "", "body": "x", "location": ""}
+        return {"status": None, "url": f"https://{name}{path}", "content_type": "",
+                "server": "", "title": "", "body": "", "location": ""}
+
+    outcome = Endpoints(fetch).run(
+        Task(capability="domain_endpoints", node="domain:h", params={"paths": ["/real"]}), world)
+    assert isinstance(outcome, Done)
+    gaps = [f.payload for f in outcome.facts if f.kind == "coverage_gap"]
+    # a baseline that could not be established is flagged, so an unfiltered surface is loud
+    assert gaps and any("baseline" in r for r in gaps[0].reasons)

@@ -175,6 +175,11 @@ class Endpoints(Capability):
         baseline = self._baseline(name, addresses)
         endpoints: list[Node] = []
         skipped: list[str] = []
+        if baseline.get("status") is None and candidates:
+            # the catch-all baseline could not be established, so distinctness cannot filter a
+            # blanket-200 or blanket-redirect front, and any endpoint minted here is unfiltered.
+            # Say so rather than let the failure pass as a confidently enumerated surface.
+            skipped.append("baseline could not be established, endpoint distinctness is unreliable")
         if len(cleaned) > len(candidates):
             # the candidate set is capped, so say how many paths were left unprobed rather
             # than let a bounded probe read as the host's whole surface, invariant 5

@@ -773,3 +773,37 @@ def test_registrable_root_recognizes_country_second_levels_generally():
     assert registrable_root("host.example.co.uk") == "example.co.uk"
     assert registrable_root("a.b.example.com") == "example.com"
     assert registrable_root("api.example.com") == "example.com"
+
+
+def test_resolve_host_treats_a_servfail_as_a_resolver_error_not_a_no_address(monkeypatch):
+    import urllib.request
+
+    from opfor.scenarios.attacksurface.classes.domain import http as domains
+
+    class _Resp:
+        def __init__(self, payload):
+            self._payload = payload
+
+        def read(self):
+            return json.dumps(self._payload).encode("utf-8")
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+    calls = {"n": 0}
+
+    def fake_urlopen(request, timeout=0):
+        calls["n"] += 1
+        # the first resolver SERVFAILs on both A and AAAA, the second answers with an address
+        if calls["n"] <= 2:
+            return _Resp({"Status": 2, "Answer": []})
+        return _Resp({"Status": 0, "Answer": [{"type": 1, "data": "1.2.3.4"}]})
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+    result = domains.resolve_host("h.example.com")
+    # a SERVFAIL is not accepted as a confirmed no-address, the next resolver is consulted
+    assert result["resolvable"] is True and "1.2.3.4" in result["addresses"]
+    assert calls["n"] >= 3

@@ -12,22 +12,44 @@ import re
 import urllib.parse
 
 
+def _openapi_base(doc: dict) -> str:
+    """The base path a spec declares its operations under, so a path key such as /users is
+    probed at the real /api/v2/users. Swagger 2 names it in `basePath`, OpenAPI 3 in the path
+    of the first `servers` url, absolute or relative. Empty when the spec declares none."""
+    base = doc.get("basePath")
+    if isinstance(base, str) and base.strip("/ "):
+        return "/" + base.strip().strip("/")
+    servers = doc.get("servers")
+    if isinstance(servers, list) and servers and isinstance(servers[0], dict):
+        url = str(servers[0].get("url") or "")
+        path = urllib.parse.urlsplit(url).path if "://" in url else url
+        if path.strip("/ "):
+            return "/" + path.strip().strip("/")
+    return ""
+
+
 def paths_from_openapi(doc) -> list[str]:
     """Declared operations of an OpenAPI or Swagger document, each as `METHODS path`.
 
     Both OpenAPI 3 and Swagger 2 carry a `paths` map, so this reads that map and names the
-    HTTP methods under each path. A document without a `paths` map declares nothing here.
+    HTTP methods under each path, prefixed with the document's base path so an operation is
+    probed at its real location rather than at the host root. A path item that declares no
+    inline verb, such as a $ref path item, is emitted as a GET candidate rather than an
+    unprobed write, since a safe GET is the recon default. A document without a `paths` map
+    declares nothing here.
     """
     if not isinstance(doc, dict):
         return []
     paths = doc.get("paths")
     if not isinstance(paths, dict):
         return []
+    base = _openapi_base(doc)
     verbs = ("get", "post", "put", "delete", "patch", "head", "options")
     out: list[str] = []
     for path, item in paths.items():
+        full = base + ("" if str(path).startswith("/") else "/") + str(path)
         methods = [m.upper() for m in item if m.lower() in verbs] if isinstance(item, dict) else []
-        out.append(f"{','.join(sorted(methods))} {path}" if methods else str(path))
+        out.append(f"{','.join(sorted(methods))} {full}" if methods else f"GET {full}")
     return sorted(out)
 
 

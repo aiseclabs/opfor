@@ -36,6 +36,11 @@ _DOH_RESOLVERS = ("https://dns.google/resolve", "https://cloudflare-dns.com/dns-
 _DNS_A = 1
 _DNS_AAAA = 28
 _DNS_CNAME = 5
+# DoH response codes. NOERROR and NXDOMAIN are real answers, a name that resolves or one that
+# provably does not exist. Any other rcode, SERVFAIL or REFUSED, is a resolver-side error, not
+# a confirmed absence of an address.
+_DNS_NOERROR = 0
+_DNS_NXDOMAIN = 3
 
 
 def resolve_host(name: str) -> dict:
@@ -45,17 +50,26 @@ def resolve_host(name: str) -> dict:
     The CNAME chain is kept rather than discarded, since a name that answers a CNAME but no
     address is the classic dangling-takeover signal, it points at a target that no longer
     exists. `resolvable` tracks addresses alone, so a CNAME to an unclaimed target reads as
-    unresolvable with its target preserved, exactly the takeover candidate. The failure is
-    raised only when every resolver errors, so a broken resolver is loud rather than a
-    silent wall of false danglings.
+    unresolvable with its target preserved, exactly the takeover candidate.
+
+    A resolver-side error rcode such as SERVFAIL, an HTTP 200 with an empty answer, is not a
+    confirmed no-address, so it is treated like a failed resolver, the next one is tried, and
+    only when every resolver errors is the failure raised. This keeps a transient resolver
+    problem from becoming a wall of false danglings.
     """
     last: Exception | None = None
     for resolver in _DOH_RESOLVERS:
         try:
-            answers = _doh_answers(resolver, name, "A") + _doh_answers(resolver, name, "AAAA")
+            a_status, a_ans = _doh_query(resolver, name, "A")
+            aaaa_status, aaaa_ans = _doh_query(resolver, name, "AAAA")
         except Exception as exc:
             last = exc
             continue
+        real = (_DNS_NOERROR, _DNS_NXDOMAIN)
+        if a_status not in real and aaaa_status not in real:
+            last = RuntimeError(f"DoH resolver error for {name}, rcodes A={a_status} AAAA={aaaa_status}")
+            continue
+        answers = a_ans + aaaa_ans
         addresses = tuple(dict.fromkeys(
             str(a["data"]) for a in answers
             if a.get("type") in (_DNS_A, _DNS_AAAA) and a.get("data")))
@@ -66,14 +80,15 @@ def resolve_host(name: str) -> dict:
     raise RuntimeError(f"all DoH resolvers failed for {name}: {last}")
 
 
-def _doh_answers(resolver: str, name: str, rtype: str) -> list[dict]:
-    """The raw DoH answer records for one name and one record type."""
+def _doh_query(resolver: str, name: str, rtype: str) -> tuple[int, list[dict]]:
+    """The DoH response code and answer records for one name and one record type. The rcode
+    is returned alongside the answers so a resolver error is told apart from a real no-answer."""
     url = f"{resolver}?name={urllib.parse.quote(name)}&type={rtype}"
     request = urllib.request.Request(
         url, headers={"Accept": "application/dns-json", "User-Agent": _UA})
     with urllib.request.urlopen(request, timeout=_TIMEOUT) as resp:
         body = json.loads(resp.read().decode("utf-8", "replace"))
-    return body.get("Answer", []) or []
+    return int(body.get("Status", 0)), (body.get("Answer") or [])
 
 
 def public_addresses(addresses) -> list[str]:

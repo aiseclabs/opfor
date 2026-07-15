@@ -55,12 +55,22 @@ def _distinct(result: dict, baseline: dict) -> bool:
         return True
     if not (200 <= int(base_status) < 300):
         # a uniform non-2xx catch-all still hides an endpoint that redirects elsewhere, such
-        # as /admin answering 302 to /admin/dashboard behind a blanket 302 to /login
-        location = result.get("location")
-        return bool(location and location != baseline.get("location"))
+        # as /admin answering 302 to /admin/dashboard behind a blanket 302 to /login. The
+        # query is stripped before comparing, since a login wall that echoes the requested
+        # path in a next parameter gives every path a different raw location and would
+        # otherwise make every probe look distinct.
+        location = _redirect_target(result.get("location"))
+        return bool(location and location != _redirect_target(baseline.get("location")))
     if _ct_family(result.get("content_type", "")) != _ct_family(baseline.get("content_type", "")):
         return True
     return abs(len(result.get("body", "")) - len(baseline.get("body", ""))) > 128
+
+
+def _redirect_target(location) -> str:
+    """A redirect Location reduced to its path, dropping the query and fragment, so a login
+    wall that echoes the requested path in a next parameter is recognized as one catch-all
+    rather than a distinct target per path."""
+    return str(location or "").split("?")[0].split("#")[0]
 
 
 def _ct_family(content_type: str) -> str:

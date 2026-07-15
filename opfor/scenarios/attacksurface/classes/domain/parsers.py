@@ -22,10 +22,21 @@ def _openapi_base(doc: dict) -> str:
     servers = doc.get("servers")
     if isinstance(servers, list) and servers and isinstance(servers[0], dict):
         url = str(servers[0].get("url") or "")
-        path = urllib.parse.urlsplit(url).path if "://" in url else url
+        # Split always, so a protocol-relative url such as //cdn.example.com/api keeps only its
+        # path and not its authority. Reading the raw string when there is no scheme would turn
+        # that authority into a base of /cdn.example.com/api and garble every probe path.
+        path = urllib.parse.urlsplit(url).path
         if path.strip("/ "):
             return "/" + path.strip().strip("/")
     return ""
+
+
+# A ceiling on the operations parsed from one specification, so a hostile or degenerate
+# document declaring hundreds of thousands of path keys cannot balloon the blackboard fact it
+# is stored in. Far above any real API and above the downstream probe cap, so a real spec is
+# never truncated, and a caller compares the declared count to the parsed count to say loud
+# when this bit, invariant 5.
+_MAX_SPEC_PATHS = 2000
 
 
 def paths_from_openapi(doc) -> list[str]:
@@ -36,7 +47,8 @@ def paths_from_openapi(doc) -> list[str]:
     probed at its real location rather than at the host root. A path item that declares no
     inline verb, such as a $ref path item, is emitted as a GET candidate rather than an
     unprobed write, since a safe GET is the recon default. A document without a `paths` map
-    declares nothing here.
+    declares nothing here. The parse stops at a ceiling so a degenerate document cannot grow
+    the stored fact without bound, the caller reports the drop.
     """
     if not isinstance(doc, dict):
         return []
@@ -47,6 +59,8 @@ def paths_from_openapi(doc) -> list[str]:
     verbs = ("get", "post", "put", "delete", "patch", "head", "options")
     out: list[str] = []
     for path, item in paths.items():
+        if len(out) >= _MAX_SPEC_PATHS:
+            break
         full = base + ("" if str(path).startswith("/") else "/") + str(path)
         methods = [m.upper() for m in item if m.lower() in verbs] if isinstance(item, dict) else []
         out.append(f"{','.join(sorted(methods))} {full}" if methods else f"GET {full}")

@@ -896,3 +896,145 @@ def test_sql_dump_clue_covers_every_probed_sql_path():
     sql = [c for c in data["clues"] if c.get("id") == "exposed-sql-dump"]
     # a suffix path so /dump.sql, /db.sql, /database.sql all match, not only /backup.sql
     assert sql and sql[0]["path"] == ".sql"
+
+
+def test_javascript_extraction_dedups_and_caps_a_hostile_bundle():
+    # a bundle packing far more distinct quoted paths than the cap must be read out in bounded
+    # time and bounded length, not grow an unbounded list on a quadratic membership scan
+    from opfor.scenarios.attacksurface.classes.domain.javascript import (
+        _MAX_JS_STRINGS,
+        paths_in_javascript,
+        urls_in_javascript,
+    )
+
+    paths = "".join(f'"/a{i}x"' for i in range(_MAX_JS_STRINGS + 500))
+    got = paths_in_javascript(paths)
+    assert len(got) == _MAX_JS_STRINGS
+    # a repeated path is deduped rather than counted twice
+    assert paths_in_javascript('"/same" "/same" "/same"') == ["/same"]
+
+    urls = "".join(f'"https://h/u{i}"' for i in range(_MAX_JS_STRINGS + 500))
+    assert len(urls_in_javascript(urls)) == _MAX_JS_STRINGS
+
+
+def test_secrets_in_text_keeps_two_keys_sharing_a_prefix_and_length():
+    # two distinct AWS keys with the same six-char prefix and identical length must both be
+    # reported, not collapsed to one by a redaction-keyed dedup that loses a real secret
+    from opfor.scenarios.attacksurface.classes.domain import sources as domains
+
+    patterns = [{"id": "aws-access-key-id", "regex": "AKIA[0-9A-Z]{16}", "note": "key"}]
+    body = "a='AKIA000000000000AAAA'; b='AKIA000000000000BBBB';"
+    hits = domains.secrets_in_text(body, patterns)
+    assert len(hits) == 2
+
+
+def test_paths_from_openapi_caps_and_expand_spec_reports_the_drop():
+    from opfor.core import Done, Task
+    from opfor.scenarios.attacksurface.classes.domain.capabilities.specs import ExpandSpec
+    from opfor.scenarios.attacksurface.classes.domain.parsers import _MAX_SPEC_PATHS
+    from opfor.scenarios.attacksurface.classes.domain.sources import paths_from_openapi
+    from opfor.scenarios.attacksurface.classes.domain.types import Endpoint
+
+    doc = {"paths": {f"/p{i}": {"get": {}} for i in range(_MAX_SPEC_PATHS + 300)}}
+    parsed = paths_from_openapi(doc)
+    assert len(parsed) == _MAX_SPEC_PATHS
+
+    world = World()
+    world.add(Node(id="endpoint:h/openapi.json", type="endpoint",
+                   payload=Endpoint(url="https://h/openapi.json", path="/openapi.json",
+                                    status=200, content_type="application/json")))
+    import json as _json
+    fetch = lambda host, path: {"status": 200, "text": _json.dumps(doc)}
+    out = ExpandSpec(fetch).run(Task(capability="endpoint_expand_spec", node="endpoint:h/openapi.json"), world)
+    assert isinstance(out, Done)
+    gaps = [f.payload for f in out.facts if f.kind == "coverage_gap"]
+    assert gaps and gaps[0].scan == "spec_parse", "a capped spec parse must report a coverage gap"
+
+
+def test_openapi_base_drops_a_protocol_relative_authority():
+    from opfor.scenarios.attacksurface.classes.domain.parsers import _openapi_base
+
+    # //evil.com/api must keep only its path, never turn the authority into the base path
+    assert _openapi_base({"servers": [{"url": "//evil.com/api"}]}) == "/api"
+    assert _openapi_base({"servers": [{"url": "https://h/api/v2"}]}) == "/api/v2"
+    assert _openapi_base({"basePath": "/v1"}) == "/v1"
+
+
+def test_looks_like_host_rejects_a_slash_label_and_keeps_a_wildcard():
+    from opfor.scenarios.attacksurface.net import looks_like_host
+
+    assert looks_like_host("api.example.com") is True
+    assert looks_like_host("*.dev.example.com") is True
+    # a cert SAN or DNS export value with a slash must not be admitted as a host node
+    assert looks_like_host("evil.com/x.example.com") is False
+    assert looks_like_host("a b.example.com") is False
+    assert looks_like_host("user@example.com") is False
+
+
+def test_cve_render_ranks_by_cvss_and_notes_truncation():
+    from opfor.core import Fact
+    from opfor.scenarios.attacksurface.classes.domain.types import CVE, CVEScan, DomainData, HTTP, Resolved
+    from opfor.scenarios.attacksurface.render import SurfaceRenderer
+
+    world = World()
+    world.add(Node(id="domain:h", type="domain", payload=DomainData(name="h", root="h", source="s")))
+    world.absorb([
+        Fact(kind="resolved", about="domain:h", payload=Resolved(resolvable=True, addresses=("1.2.3.4",))),
+        Fact(kind="http", about="domain:h", payload=HTTP(alive=True, status=200, url="https://h/")),
+    ])
+    # eleven CVEs, the critical one last in database order so a blind head slice would drop it
+    cves = tuple(CVE(id=f"CVE-{i}", cvss=1.0, severity="LOW", summary="low") for i in range(10))
+    cves += (CVE(id="CVE-CRIT", cvss=9.8, severity="CRITICAL", summary="rce"),)
+    world.absorb([Fact(kind="cve_scanned", about="domain:h",
+                       payload=CVEScan(product="acme", version="1.0", cves=cves))])
+    report = "\n".join(SurfaceRenderer(clues=[], takeover=[]).units(world))
+    # the highest-scored CVE reaches the report despite being last in database order
+    assert "CVE-CRIT" in report
+    # the truncation is stated rather than silent
+    assert "more CVE(s) not shown" in report
+
+
+def test_resolve_error_records_an_errored_fact_and_a_gap_not_a_bare_failed():
+    from opfor.core import Done, Task
+    from opfor.scenarios.attacksurface.classes.domain.capabilities.dns import ResolveDomain
+    from opfor.scenarios.attacksurface.classes.domain.types import DomainData
+
+    world = World()
+    world.add(Node(id="domain:h", type="domain", payload=DomainData(name="h", root="h", source="s")))
+
+    def boom(name):
+        raise RuntimeError("all DoH resolvers failed")
+
+    out = ResolveDomain(boom).run(Task(capability="domain_resolve", node="domain:h"), world)
+    # a resolver outage still records a resolved fact, so an org-level barrier is not wedged,
+    # and a coverage gap keeps the failure loud rather than a bare Failed that leaves no trace
+    assert isinstance(out, Done)
+    resolved = [f.payload for f in out.facts if f.kind == "resolved"]
+    assert resolved and resolved[0].errored is True and resolved[0].resolvable is False
+    assert any(f.kind == "coverage_gap" for f in out.facts)
+
+
+def test_harvest_crash_still_records_harvested_and_a_gap(monkeypatch):
+    from opfor.core import Done, Fact, Task
+    from opfor.scenarios.attacksurface.classes.domain.capabilities import http as cap_http
+    from opfor.scenarios.attacksurface.classes.domain.capabilities.http import HarvestPaths
+    from opfor.scenarios.attacksurface.classes.domain.types import DomainData, Resolved
+
+    world = World()
+    world.add(Node(id="domain:h", type="domain", payload=DomainData(name="h", root="h", source="s")))
+    world.absorb([Fact(kind="resolved", about="domain:h",
+                       payload=Resolved(resolvable=True, addresses=("1.2.3.4",)))])
+
+    def boom(_text):
+        raise RuntimeError("harvest parse blew up")
+
+    # an un-tolerated error outside the per-source guards, so the run must still emit the
+    # harvested fact plus a gap, else a factless live host silently suppresses endpoint
+    # enumeration for every host while the run still closes
+    monkeypatch.setattr(cap_http, "cloud_refs_in_text", boom)
+    out = HarvestPaths(lambda *a: {"text": "<html></html>"},
+                       lambda *a: {"text": "<html></html>"}, lambda *a: set()).run(
+        Task(capability="domain_harvest", node="domain:h"), world)
+    assert isinstance(out, Done)
+    kinds = {f.kind for f in out.facts}
+    assert "harvested" in kinds and "coverage_gap" in kinds

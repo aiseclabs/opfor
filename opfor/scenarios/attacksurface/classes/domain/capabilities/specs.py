@@ -6,7 +6,7 @@ import json
 from urllib.parse import urlparse
 
 from opfor.core import Capability, Done, Fact, Failed, Outcome, Phase, Task, World
-from opfor.scenarios.attacksurface.classes.domain.capabilities.common import _distinct
+from opfor.scenarios.attacksurface.classes.domain.capabilities.common import _coverage_gap, _distinct
 from opfor.scenarios.attacksurface.classes.domain.capabilities.http import Endpoints
 from opfor.scenarios.attacksurface.classes.domain.sources import (
     info_from_openapi,
@@ -58,7 +58,18 @@ class ExpandSpec(Capability):
         title, version = info_from_openapi(parsed)
         payload = APISpec(base=endpoint.url, paths=tuple(paths), count=len(paths),
                           title=title, version=version)
-        return Done(facts=(Fact(kind="api_spec", about=task.node, payload=payload),))
+        facts = [Fact(kind="api_spec", about=task.node, payload=payload)]
+        declared = len(parsed.get("paths")) if isinstance(parsed.get("paths"), dict) else 0
+        if declared > len(paths):
+            # the parse stopped at its ceiling, so more operations were declared than stored.
+            # Say how many were dropped rather than let a capped spec read as the whole API
+            # surface, invariant 5
+            gap = _coverage_gap("spec_parse", host, declared, [
+                f"{endpoint.url}: {declared - len(paths)} of {declared} declared operations "
+                "beyond the parse ceiling were not recorded"])
+            if gap is not None:
+                facts.append(Fact(kind="coverage_gap", about=task.node, payload=gap))
+        return Done(facts=tuple(facts))
 
 
 class ProbeSpec(Capability):

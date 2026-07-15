@@ -54,6 +54,25 @@ def registrable_root(name: str) -> str:
     return ".".join(labels[-2:])
 
 
+_HOST_LABEL_CHARS = frozenset(
+    "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_")
+
+
 def looks_like_host(name: str) -> bool:
-    """Whether a name has the shape of a host, no user part, no space, no empty label."""
-    return "@" not in name and " " not in name and all(part for part in name.split("."))
+    """Whether a name has the shape of a host.
+
+    Rejects a user part, an empty label, or a label holding a character outside the hostname
+    alphabet, so a certificate SAN or a DNS-export value such as evil.com/x.example.com is not
+    admitted as a bogus host node with a slash in its id. A single leading wildcard label is
+    allowed, since a wildcard SAN is kept with its star for the caller to handle.
+    """
+    if not name or "@" in name:
+        return False
+    for index, part in enumerate(name.split(".")):
+        if not part:
+            return False
+        if part == "*" and index == 0:
+            continue
+        if any(char not in _HOST_LABEL_CHARS for char in part):
+            return False
+    return True

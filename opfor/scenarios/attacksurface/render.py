@@ -64,8 +64,10 @@ class SurfaceRenderer:
         http_data = http.payload if http else None
         resolved_data = resolved.payload if resolved else None
         alive = http_data is not None and http_data.alive
+        # An errored resolution is not a confirmed non-resolving host, so it is not rendered as
+        # a dangling one. The resolver failure is surfaced by its own coverage gap instead.
         dangling = (resolved_data is not None and not resolved_data.resolvable
-                    and data.source == "passive")
+                    and not resolved_data.errored and data.source == "passive")
         if not alive and not dangling:
             return None
         bits = [f"host {data.name}", f"source {data.source}"]
@@ -93,10 +95,21 @@ class SurfaceRenderer:
         if scan is not None and scan.payload.product:
             version = f" {scan.payload.version}" if scan.payload.version else ""
             line += f"\n  product: {scan.payload.product}{version}"
-            for cve in scan.payload.cves[:_MAX_CVES]:
+            # Rank by CVSS descending so the highest-scored vulnerabilities reach the model
+            # first. The public database returns them in its own order, not by score, so a
+            # blind head slice could drop a critical and show only low ones, and the model
+            # would never see the one worth minting.
+            ranked = sorted(scan.payload.cves,
+                            key=lambda c: c.cvss if c.cvss is not None else -1.0, reverse=True)
+            for cve in ranked[:_MAX_CVES]:
                 line += f"\n  CVE {cve.id} CVSS {cve.cvss} {cve.severity}: {cve.summary}"
                 if cve.references:
                     line += f"\n    refs: {', '.join(cve.references)}"
+            if len(ranked) > _MAX_CVES:
+                # say how many were held back rather than let the top slice read as the whole
+                # vulnerability set, invariant 5
+                line += (f"\n  {len(ranked) - _MAX_CVES} more CVE(s) not shown, ranked below "
+                         f"the {_MAX_CVES} highest-scored")
         maps = world.latest("source_maps", node.id)
         if maps is not None and maps.payload.leaks:
             for leak in maps.payload.leaks:

@@ -12,6 +12,11 @@ _JS_PATH = re.compile(r"""["'`](/[A-Za-z0-9_.\-/]{1,160})["'`]""")
 _JS_URL = re.compile(r"""["'`](https?://[A-Za-z0-9.\-]+(?::\d+)?(?:/[A-Za-z0-9_.\-/]{0,200})?)["'`]""")
 
 _MAX_SECRET_MATCHES = 20
+# A ceiling on the path-like and url-like strings read out of one script body, so a hostile
+# bundle packing hundreds of thousands of distinct quoted paths into the document byte limit
+# cannot tie a worker thread or grow an unbounded candidate list. Far above the downstream
+# probe cap, so a real bundle is never truncated and no probed path is lost to this.
+_MAX_JS_STRINGS = 2000
 
 
 def script_sources(body: str, host: str) -> list[str]:
@@ -21,10 +26,14 @@ def script_sources(body: str, host: str) -> list[str]:
     step to reading the app's own interface surface rather than guessing it.
     """
     out: list[str] = []
+    seen: set[str] = set()
     for src in _SCRIPT_SRC.findall(body or ""):
         path = same_host_path(src, host)
-        if path and path.split("?")[0].lower().endswith(".js") and path not in out:
+        if path and path.split("?")[0].lower().endswith(".js") and path not in seen:
+            seen.add(path)
             out.append(path)
+            if len(out) >= _MAX_JS_STRINGS:
+                break
     return out
 
 
@@ -33,18 +42,23 @@ def paths_in_javascript(text: str) -> list[str]:
 
     A bundle names the API routes it calls, so this reads them out. It is noisy by nature,
     a string that looks like a path is not always one, so the caller probes each to confirm
-    rather than trusting it.
+    rather than trusting it. Dedup is set-backed and the count is capped, so a large or
+    hostile bundle is read out in linear time rather than quadratic.
     """
     out: list[str] = []
+    seen: set[str] = set()
     for match in _JS_PATH.findall(text or ""):
         path = match.split("?")[0]
-        if path.startswith("//") or len(path) < 2 or path in out:
+        if path.startswith("//") or len(path) < 2 or path in seen:
             continue
         # A path with no letter is a version or an index fragment such as /1 or /0/0, not a
         # route, so it is dropped before it becomes a wasted probe.
         if not any(c.isalpha() for c in path):
             continue
+        seen.add(path)
         out.append(path)
+        if len(out) >= _MAX_JS_STRINGS:
+            break
     return out
 
 
@@ -52,12 +66,18 @@ def urls_in_javascript(text: str) -> list[str]:
     """Absolute http urls from a JavaScript body, deduped in appearance order.
 
     A single-page app names the API it calls on a sibling host by full url, so these are
-    how a cross-host interface surface is read out rather than missed.
+    how a cross-host interface surface is read out rather than missed. Dedup is set-backed
+    and the count is capped, so a large or hostile bundle is read out in linear time.
     """
     out: list[str] = []
+    seen: set[str] = set()
     for match in _JS_URL.findall(text or ""):
-        if match not in out:
-            out.append(match)
+        if match in seen:
+            continue
+        seen.add(match)
+        out.append(match)
+        if len(out) >= _MAX_JS_STRINGS:
+            break
     return out
 
 
@@ -103,10 +123,13 @@ def secrets_in_text(text: str, patterns) -> list[dict]:
     the fetch so a test drives it without a network call.
 
     Each pattern is a dict with an id, a regex, and a note. Every distinct match is reported,
-    deduped by redacted sample, so a bundle holding several keys of one shape surfaces all of
-    them rather than only the first, bounded by a cap. A malformed regex is not swallowed
-    here, patterns are validated loudly at load, so a bad one fails the run rather than
-    silently disabling a whole secret class. Whether a match is live is triage's judgment.
+    deduped by the full matched value, so a bundle holding several keys of one shape surfaces
+    all of them rather than only the first, bounded by a cap. Dedup is on the whole match, not
+    its redacted sample, so two keys that share a prefix and a length are not collapsed into
+    one and a real second secret is never dropped. The full value keys a transient local set
+    only, it is never stored or logged. A malformed regex is not swallowed here, patterns are
+    validated loudly at load, so a bad one fails the run rather than silently disabling a whole
+    secret class. Whether a match is live is triage's judgment.
     """
     out: list[dict] = []
     body = text or ""
@@ -117,12 +140,13 @@ def secrets_in_text(text: str, patterns) -> list[dict]:
             continue
         pid = str(pattern.get("id", ""))
         for match in re.finditer(regex, body):
-            sample = _redact(match.group(0))
-            key = (pid, sample)
+            value = match.group(0)
+            key = (pid, value)
             if key in seen:
                 continue
             seen.add(key)
-            out.append({"pattern": pid, "note": str(pattern.get("note", "")), "sample": sample})
+            out.append({"pattern": pid, "note": str(pattern.get("note", "")),
+                        "sample": _redact(value)})
             if len(out) >= _MAX_SECRET_MATCHES:
                 return out
     return out

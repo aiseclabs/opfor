@@ -4,13 +4,17 @@ The default backend is the operator's Claude Code subscription through `claude -
 run judges with no provider key. `OPFOR_EXECUTOR` chooses the seat. `auto`, the default,
 calls the vendor API when a key is reachable and otherwise runs on the subscription.
 `api` always calls the API and requires a key. `subscription` always runs `claude -p`.
-Every value is read once here so a backend is set in the environment, see `.env.example`,
-rather than named on every call.
+
+Every value is read from the environment once, in `ProviderConfig.from_env`, at the call
+that builds a provider, never at import. So a long-lived process or a test that changes the
+environment sees the change, and importing this module triggers no environment read.
 """
 
 from __future__ import annotations
 
 import os
+from dataclasses import dataclass
+from typing import Mapping
 
 from opfor.core.providers.anthropic import AnthropicProvider
 from opfor.core.providers.base import Provider
@@ -22,28 +26,53 @@ PROVIDERS = ("anthropic", "openai")
 # Only anthropic has a keyless subscription backend through `claude -p`, so it is the one
 # provider `auto` can run without a key.
 _KEYLESS_PROVIDERS = ("anthropic",)
-DEFAULT_PROVIDER = os.environ.get("OPFOR_PROVIDER", "anthropic")
-DEFAULT_MODEL = os.environ.get("OPFOR_MODEL", "claude-opus-4-8")
-DEFAULT_API_KEY = os.environ.get("OPFOR_API_KEY")
-DEFAULT_API_BASE = os.environ.get("OPFOR_API_BASE")
-DEFAULT_EXECUTOR = os.environ.get("OPFOR_EXECUTOR", "auto")
-DEFAULT_WIRE_API = os.environ.get("OPFOR_WIRE_API", "chat")
-DEFAULT_RETRIES = int(os.environ.get("OPFOR_RETRIES", "2"))
-DEFAULT_TIMEOUT = float(os.environ.get("OPFOR_TIMEOUT", "240"))
 
 # The vendor SDK reads this when no explicit key is passed, so a seat can authenticate an
 # API call from the environment alone. Used to decide whether `auto` has a reachable key.
 _SDK_KEY_ENV = {"anthropic": "ANTHROPIC_API_KEY", "openai": "OPENAI_API_KEY"}
 
 
+@dataclass(frozen=True, kw_only=True)
+class ProviderConfig:
+    """The provider settings a run reads from the environment. Built by `from_env` at the
+    call that needs it, so no value is frozen at import and a changed environment is seen."""
+
+    provider: str = "anthropic"
+    model: str = "claude-opus-4-8"
+    api_key: str | None = None
+    api_base: str | None = None
+    executor: str = "auto"
+    wire_api: str = "chat"
+    retries: int = 2
+    timeout: float = 240.0
+    triage_mode: str = "standard"
+
+    @classmethod
+    def from_env(cls, env: Mapping[str, str] | None = None) -> "ProviderConfig":
+        """Read the provider settings from the environment, `os.environ` by default. A test
+        passes its own mapping to drive a backend without touching the process environment."""
+        env = os.environ if env is None else env
+        return cls(
+            provider=env.get("OPFOR_PROVIDER", "anthropic"),
+            model=env.get("OPFOR_MODEL", "claude-opus-4-8"),
+            api_key=env.get("OPFOR_API_KEY"),
+            api_base=env.get("OPFOR_API_BASE"),
+            executor=env.get("OPFOR_EXECUTOR", "auto"),
+            wire_api=env.get("OPFOR_WIRE_API", "chat"),
+            retries=int(env.get("OPFOR_RETRIES", "2")),
+            timeout=float(env.get("OPFOR_TIMEOUT", "240")),
+            triage_mode=env.get("OPFOR_TRIAGE_MODE", "standard"),
+        )
+
+
 def default_model() -> str:
-    """The model name a scenario uses when it names none, env-backed."""
-    return DEFAULT_MODEL
+    """The model name a scenario uses when it names none, env-backed, read at the call."""
+    return ProviderConfig.from_env().model
 
 
 def triage_mode() -> str:
     """The triage judging mode, `standard` single-model by default or `adversarial`."""
-    return os.environ.get("OPFOR_TRIAGE_MODE", "standard")
+    return ProviderConfig.from_env().triage_mode
 
 
 def role_model(role: str, base: str) -> str:
@@ -70,16 +99,21 @@ def make_provider(
     api_base: str | None = None,
     executor: str | None = None,
     wire_api: str | None = None,
-    retries: int = DEFAULT_RETRIES,
-    timeout: float = DEFAULT_TIMEOUT,
+    retries: int | None = None,
+    timeout: float | None = None,
+    config: ProviderConfig | None = None,
 ) -> Provider:
     """Build the provider the environment selects. A keyless `auto` or `subscription` seat
-    runs the headless `claude -p` agent, otherwise the vendor API wrapped in retries."""
-    name = name or DEFAULT_PROVIDER
-    api_key = api_key if api_key is not None else DEFAULT_API_KEY
-    api_base = api_base if api_base is not None else DEFAULT_API_BASE
-    executor = executor or DEFAULT_EXECUTOR
-    wire_api = wire_api or DEFAULT_WIRE_API
+    runs the headless `claude -p` agent, otherwise the vendor API wrapped in retries. The
+    config is read from the environment at this call unless one is passed."""
+    config = config or ProviderConfig.from_env()
+    name = name or config.provider
+    api_key = api_key if api_key is not None else config.api_key
+    api_base = api_base if api_base is not None else config.api_base
+    executor = executor or config.executor
+    wire_api = wire_api or config.wire_api
+    retries = config.retries if retries is None else retries
+    timeout = config.timeout if timeout is None else timeout
 
     if name not in PROVIDERS:
         raise RuntimeError(f"unknown provider {name!r}, known: {', '.join(PROVIDERS)}")

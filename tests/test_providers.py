@@ -20,7 +20,7 @@ from opfor.core.json_parse import require_json_object as _require
 from opfor.core.markdown_docs import iter_md_docs
 from opfor.core.providers.anthropic import AnthropicProvider
 from opfor.core.providers.claude_agent import ClaudeAgentProvider, _envelope_error, _fold_prompt
-from opfor.core.providers.factory import make_provider
+from opfor.core.providers.factory import ProviderConfig, make_provider
 from opfor.core.providers.openai import OpenAIProvider
 from opfor.core.providers.retry import RetryProvider
 
@@ -187,6 +187,30 @@ def test_openai_without_a_key_has_no_subscription_fallback(monkeypatch):
 def test_unknown_provider_fails_loud():
     with pytest.raises(RuntimeError):
         make_provider("gemini", executor="api", api_key="k")
+
+
+def test_provider_config_reads_the_environment_at_the_call_not_at_import(monkeypatch):
+    # an explicit mapping is read field by field, so a test drives a backend without the
+    # process environment
+    cfg = ProviderConfig.from_env({"OPFOR_PROVIDER": "openai", "OPFOR_MODEL": "m-1",
+                                   "OPFOR_EXECUTOR": "api", "OPFOR_TRIAGE_MODE": "adversarial"})
+    assert cfg.provider == "openai" and cfg.model == "m-1"
+    assert cfg.executor == "api" and cfg.triage_mode == "adversarial"
+    # the environment is read at each call, so a change between calls is seen rather than
+    # frozen at import, the whole point of moving the read off the module top
+    monkeypatch.setenv("OPFOR_MODEL", "first")
+    assert ProviderConfig.from_env().model == "first"
+    monkeypatch.setenv("OPFOR_MODEL", "second")
+    assert ProviderConfig.from_env().model == "second"
+    # an empty environment falls back to the documented defaults
+    default = ProviderConfig.from_env({})
+    assert default.provider == "anthropic" and default.executor == "auto"
+
+
+def test_make_provider_honors_an_explicit_config(monkeypatch):
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    cfg = ProviderConfig.from_env({"OPFOR_EXECUTOR": "subscription"})
+    assert isinstance(make_provider(config=cfg), ClaudeAgentProvider)
 
 
 # --- the openai provider, both wires ---------------------------------------------------

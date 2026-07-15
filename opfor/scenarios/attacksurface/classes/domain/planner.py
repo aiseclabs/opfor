@@ -9,11 +9,13 @@ never probed, and each rule that touches the target carries the host for scope.
 This module reads two capability action-config files, the probe path list and the static-
 asset lists, so the planner hands them to the endpoint probe rather than the capability
 reading a knowledge file. They are the domain class's own data, so they live under its
-knowledge tree.
+knowledge tree. The files are loaded once at assemble time into a `DomainPlanConfig`, not at
+import, so the content root stays swappable and importing the module triggers no file IO.
 """
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -22,30 +24,43 @@ import yaml
 from opfor.core import Task, World, each
 from opfor.scenarios.attacksurface.classes import class_enabled
 
-_KNOWLEDGE = Path(__file__).resolve().parent / "knowledge"
 
-_PATHS = yaml.safe_load((_KNOWLEDGE / "paths.yaml").read_text(encoding="utf-8")) or {}
-_PROBE_PATHS = [str(p) for p in (_PATHS.get("paths") or [])]
+@dataclass(frozen=True, kw_only=True)
+class DomainPlanConfig:
+    """The domain class's capability action-config, the paths to probe, the static-asset
+    templates, and the secret and backup name templates the planner hands each capability so
+    the capability reads no knowledge file, invariant 1. This is action config, not triage
+    knowledge. Loaded once at assemble time by `load_plan_config`, so import triggers no IO."""
 
-# The endpoint probe reads no knowledge file, so the planner loads the static-asset lists
-# here and hands them to it, the same way it hands the probe path list.
-_INTERFACES = yaml.safe_load((_KNOWLEDGE / "interfaces.yaml").read_text(encoding="utf-8")) or {}
-_STATIC = _INTERFACES.get("static_assets") or {}
-_STATIC_SUFFIXES = [str(s) for s in (_STATIC.get("suffixes") or [])]
-_STATIC_PREFIXES = [str(p) for p in (_STATIC.get("prefixes") or [])]
+    probe_paths: tuple[str, ...] = ()
+    static_suffixes: tuple[str, ...] = ()
+    static_prefixes: tuple[str, ...] = ()
+    secret_patterns: tuple[dict, ...] = ()
+    backup_append: tuple[str, ...] = ()
+    backup_rename: tuple[str, ...] = ()
+    backup_swap: tuple[str, ...] = ()
 
-# Secret patterns for the script scan, loaded here and handed to the capability, so no
-# capability reads a knowledge file.
-_SECRETS = yaml.safe_load((_KNOWLEDGE / "secret_patterns.yaml").read_text(encoding="utf-8")) or {}
-_SECRET_PATTERNS = [dict(p) for p in (_SECRETS.get("patterns") or [])]
 
-# Backup name templates for the backup scan, loaded here and handed to the capability, so no
-# capability reads a knowledge file.
-_BACKUPS = yaml.safe_load((_KNOWLEDGE / "backups.yaml").read_text(encoding="utf-8")) or {}
-_BACKUP_APPEND = [str(s) for s in (_BACKUPS.get("append") or [])]
-_BACKUP_RENAME = [str(s) for s in (_BACKUPS.get("rename") or [])]
-_BACKUP_SWAP = [str(s) for s in (_BACKUPS.get("swap") or [])]
+def load_plan_config(knowledge: Path) -> DomainPlanConfig:
+    """Load the domain plan config from the class's knowledge tree, once, at build time. So
+    the file IO the planner needs happens when a scenario is assembled, never at import."""
+    def load(name: str) -> dict:
+        path = knowledge / name
+        return yaml.safe_load(path.read_text(encoding="utf-8")) or {} if path.exists() else {}
 
+    paths = load("paths.yaml")
+    static = load("interfaces.yaml").get("static_assets") or {}
+    secrets = load("secret_patterns.yaml")
+    backups = load("backups.yaml")
+    return DomainPlanConfig(
+        probe_paths=tuple(str(p) for p in (paths.get("paths") or [])),
+        static_suffixes=tuple(str(s) for s in (static.get("suffixes") or [])),
+        static_prefixes=tuple(str(p) for p in (static.get("prefixes") or [])),
+        secret_patterns=tuple(dict(p) for p in (secrets.get("patterns") or [])),
+        backup_append=tuple(str(s) for s in (backups.get("append") or [])),
+        backup_rename=tuple(str(s) for s in (backups.get("rename") or [])),
+        backup_swap=tuple(str(s) for s in (backups.get("swap") or [])),
+    )
 
 
 def _live_domains(world: World) -> list:
@@ -90,7 +105,7 @@ def _harvest_rule(world: World) -> list[Task]:
     return tasks
 
 
-def _endpoints_rule(world: World) -> list[Task]:
+def _endpoints_rule(world: World, config: DomainPlanConfig) -> list[Task]:
     """Enumerate interfaces on every live domain, once every live host is harvested.
 
     The barrier holds probing until harvesting is done across all hosts, so a cross-host
@@ -105,8 +120,9 @@ def _endpoints_rule(world: World) -> list[Task]:
         if world.has_fact(node.id, "endpoints"):
             continue
         tasks.append(Task(capability="domain_endpoints", node=node.id,
-                          params={"paths": _PROBE_PATHS, "static_suffixes": _STATIC_SUFFIXES,
-                                  "static_prefixes": _STATIC_PREFIXES},
+                          params={"paths": list(config.probe_paths),
+                                  "static_suffixes": list(config.static_suffixes),
+                                  "static_prefixes": list(config.static_prefixes)},
                           scope_host=node.payload.name))
     return tasks
 
@@ -179,7 +195,7 @@ def _source_map_rule(world: World) -> list[Task]:
     return tasks
 
 
-def _secret_scan_rule(world: World) -> list[Task]:
+def _secret_scan_rule(world: World, config: DomainPlanConfig) -> list[Task]:
     """Scan every live host's scripts for secret-like strings, once per host, handing the
     capability the patterns. It reads the target's bundles, so the task carries the host."""
     tasks: list[Task] = []
@@ -187,11 +203,12 @@ def _secret_scan_rule(world: World) -> list[Task]:
         if world.has_fact(node.id, "secrets_in_js"):
             continue
         tasks.append(Task(capability="secret_scan", node=node.id,
-                          params={"patterns": _SECRET_PATTERNS}, scope_host=node.payload.name))
+                          params={"patterns": list(config.secret_patterns)},
+                          scope_host=node.payload.name))
     return tasks
 
 
-def _backup_rule(world: World) -> list[Task]:
+def _backup_rule(world: World, config: DomainPlanConfig) -> list[Task]:
     """Probe backup twins of a live host's observed files, once per host, after its interfaces
     are enumerated so the observed file set is complete. Hands the capability the name
     templates, so it reads no knowledge file, and carries the host, since it touches the
@@ -203,8 +220,9 @@ def _backup_rule(world: World) -> list[Task]:
         if world.has_fact(node.id, "backups"):
             continue
         tasks.append(Task(capability="backup_scan", node=node.id,
-                          params={"append": _BACKUP_APPEND, "rename": _BACKUP_RENAME,
-                                  "swap": _BACKUP_SWAP},
+                          params={"append": list(config.backup_append),
+                                  "rename": list(config.backup_rename),
+                                  "swap": list(config.backup_swap)},
                           scope_host=node.payload.name))
     return tasks
 
@@ -265,20 +283,21 @@ def map_rules(*, with_registrant: bool):
     return rules
 
 
-def enrich_rules(*, with_cve: bool = False):
+def enrich_rules(config: DomainPlanConfig, *, with_cve: bool = False):
     """The domain ENRICH pipeline, resolve then probe then harvest then enumerate, and the
-    CVE scan last when its seams are wired, once a host's surface is enumerated."""
+    CVE scan last when its seams are wired, once a host's surface is enumerated. The config
+    is the capability action-config the config-driven rules hand their capabilities."""
     rules = [
         each("domain", run="domain_resolve", unless_fact="resolved"),
         _http_rule,
         _harvest_rule,
-        _endpoints_rule,
+        lambda world: _endpoints_rule(world, config),
         _spec_rule,
         _spec_probe_rule,
         _graphql_rule,
         _source_map_rule,
-        _secret_scan_rule,
-        _backup_rule,
+        lambda world: _secret_scan_rule(world, config),
+        lambda world: _backup_rule(world, config),
         _bucket_rule,
     ]
     if with_cve:

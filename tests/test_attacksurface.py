@@ -944,12 +944,14 @@ def test_cve_scan_fails_loud_when_identification_errors():
 
 
 def test_probe_list_includes_product_identity_and_version_paths():
+    from opfor.scenarios.attacksurface.classes import domain as domain_class
     from opfor.scenarios.attacksurface.classes.domain import planner
 
     # the product identity and version endpoints are data in paths.yaml, probed by the
     # existing endpoint capability, so a later step can read the version for a cve match
+    probe_paths = planner.load_plan_config(domain_class.KNOWLEDGE).probe_paths
     for path in ("/actuator/info", "/version", "/.well-known/openid-configuration", "/nacos/"):
-        assert path in planner._PROBE_PATHS
+        assert path in probe_paths
 
 
 def test_batch_one_exposure_coverage_is_loaded():
@@ -958,8 +960,9 @@ def test_batch_one_exposure_coverage_is_loaded():
     from opfor.scenarios.attacksurface.triage import _load_classes, _load_clues
 
     # new fixed-path leaks are probed, pure data in paths.yaml, no code
+    probe_paths = planner.load_plan_config(domain_class.KNOWLEDGE).probe_paths
     for path in ("/.ssh/id_rsa", "/web.config", "/backup.sql", "/.git/index", "/.npmrc"):
-        assert path in planner._PROBE_PATHS
+        assert path in probe_paths
 
     knowledge = domain_class.KNOWLEDGE
     # new deterministic clues direct the model at the buried signals
@@ -1231,6 +1234,21 @@ def test_triage_judge_mints_findings_and_mutates_no_world_node():
     assert world.nodes("finding")  # the grounded finding is now materialized for reproduce
     # the scenario wires the grounder as its post-triage step
     assert isinstance(_make().post_triage, FindingGrounder)
+
+
+def test_importing_the_scenario_builds_nothing_until_requested():
+    """The eager module-level build is gone, so importing the package or the registry
+    constructs no provider and reads no knowledge tree. A scenario is built on first use and
+    cached, keeping import cheap and side-effect free."""
+    import opfor.scenarios.attacksurface as pkg
+    from opfor.scenarios import registry
+
+    # the eager ATTACKSURFACE singleton no longer exists, building is on demand
+    assert not hasattr(pkg, "ATTACKSURFACE")
+    # get_scenario builds and caches, so two calls return the same object
+    first = registry.get_scenario("attacksurface")
+    assert first is registry.get_scenario("attacksurface")
+    assert first.name == pkg.NAME
 
 
 def test_default_run_stays_at_triage_and_reproduces_nothing():

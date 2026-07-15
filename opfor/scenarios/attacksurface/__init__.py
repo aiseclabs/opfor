@@ -32,6 +32,8 @@ from opfor.scenarios.attacksurface.grounding import FindingGrounder
 from opfor.scenarios.attacksurface.reproduce import ReproduceFinding, reproduce_rule
 from opfor.scenarios.attacksurface.types import Org
 
+NAME = "attacksurface"
+
 # Sentinel so build can tell an unset reverse-WHOIS seam from one a caller passed, even
 # a fake in a test, and default the real seam to on only when a provider key is set.
 _DEFAULT = object()
@@ -128,7 +130,7 @@ def build(
         terminal = Phase.CONFIRM
 
     return Scenario(
-        name="attacksurface",
+        name=NAME,
         content_root=Path(__file__).resolve().parent,
         capabilities=capabilities,
         planner=RuleSet(rules),
@@ -149,6 +151,3 @@ def seed(name: str, *, domains=(), hosts=()) -> World:
     world.add(Node(id=f"org:{name}", type="org",
                    payload=Org(name=name, domains=tuple(domains), hosts=tuple(hosts))))
     return world
-
-
-ATTACKSURFACE = build()

@@ -61,11 +61,14 @@ def assemble(*, enumerate_fn, pivot_fn, resolve_fn, probe_fn, fetch_fn, fetch_do
         capabilities.append(DomainRegistrant(reverse_whois_fn))
     if identify_fn is not None and cve_fn is not None:
         capabilities.append(CveScan(identify_fn, cve_fn))
+    # The plan config is loaded here, at assemble time, not at planner import, so the content
+    # root stays swappable and importing the class triggers no file IO.
+    config = planner.load_plan_config(KNOWLEDGE)
     return ClassBundle(
         name="domain",
         capabilities=tuple(capabilities),
         map_rules=tuple(planner.map_rules(with_registrant=reverse_whois_fn is not None)),
         enrich_rules=tuple(planner.enrich_rules(
-            with_cve=identify_fn is not None and cve_fn is not None)),
+            config, with_cve=identify_fn is not None and cve_fn is not None)),
         knowledge_dir=KNOWLEDGE,
     )

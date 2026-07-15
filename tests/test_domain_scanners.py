@@ -762,3 +762,14 @@ def test_endpoint_probe_reports_truncation_when_the_candidate_cap_is_hit():
     gaps = [f.payload for f in outcome.facts if f.kind == "coverage_gap"]
     # the 400-candidate cap is surfaced, not a silent bound read as the whole surface
     assert gaps and any("cap" in r for r in gaps[0].reasons)
+
+
+def test_distinct_treats_a_differing_redirect_location_as_a_real_endpoint():
+    from opfor.scenarios.attacksurface.classes.domain.capabilities.common import _distinct
+    # a host that answers a blanket 302 to /login for unknown paths still hides a real /admin
+    # that redirects to its own dashboard, so a differing location is distinct
+    baseline = {"status": 302, "location": "https://h/login", "content_type": "", "body": ""}
+    same = {"status": 302, "location": "https://h/login"}
+    other = {"status": 302, "location": "https://h/admin/dashboard"}
+    assert _distinct(same, baseline) is False
+    assert _distinct(other, baseline) is True

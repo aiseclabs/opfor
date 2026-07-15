@@ -44,8 +44,9 @@ def _distinct(result: dict, baseline: dict) -> bool:
 
     When the catch-all is a positive page, a single-page app that answers 200 for every
     path, an endpoint counts only if it differs in status, in content type, or clearly in
-    body size. When the catch-all was a 404 or a redirect, any answer that got past the
-    404 filter is already a real endpoint.
+    body size. When the catch-all is a uniform non-2xx, a blanket login redirect or a
+    front-proxy 403, an endpoint that answers the same status but redirects to a different
+    location is still real, so a differing location counts as distinct.
     """
     base_status = baseline.get("status")
     if base_status is None:
@@ -53,7 +54,10 @@ def _distinct(result: dict, baseline: dict) -> bool:
     if result.get("status") != base_status:
         return True
     if not (200 <= int(base_status) < 300):
-        return False
+        # a uniform non-2xx catch-all still hides an endpoint that redirects elsewhere, such
+        # as /admin answering 302 to /admin/dashboard behind a blanket 302 to /login
+        location = result.get("location")
+        return bool(location and location != baseline.get("location"))
     if _ct_family(result.get("content_type", "")) != _ct_family(baseline.get("content_type", "")):
         return True
     return abs(len(result.get("body", "")) - len(baseline.get("body", ""))) > 128

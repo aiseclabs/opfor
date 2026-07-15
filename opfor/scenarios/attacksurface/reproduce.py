@@ -59,6 +59,12 @@ class Reproduction:
     size: int = 0
     excerpt: str = ""
     error: str = ""
+    # The raw Location of a redirect, captured not followed, so confirm can tell a redirect
+    # to a login flow from an open resource rather than seeing the followed page.
+    location: str = ""
+    # What the request returned when triage observed it, carried from the grounded request so
+    # confirm compares the live receipt against the original observation, not against prose.
+    expect: str = ""
 
 
 _SECRET = re.compile(
@@ -109,6 +115,7 @@ class ReproduceFinding(Capability):
             method=method, url=request.url, status=status,
             content_type=str(result.get("content_type") or ""), size=len(body),
             excerpt=self._redact(body)[:_EXCERPT],
+            location=str(result.get("location") or ""), expect=request.expect,
             error="" if status is not None else "no response")
         return Done(facts=(Fact(kind="reproduction", about=task.node, payload=repro),))
 

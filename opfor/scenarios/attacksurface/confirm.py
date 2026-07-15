@@ -96,6 +96,8 @@ class ConfirmTriage(Confirm):
     @staticmethod
     def _case(finding: Finding, receipt) -> str:
         """The finding and its live receipt, the shared input the model regrades against."""
+        redirect = f"redirect to {receipt.location}\n" if receipt.location else ""
+        expected = f"expected at observation {receipt.expect}\n" if receipt.expect else ""
         return (
             "## Finding as judged\n"
             f"severity {finding.severity}\n"
@@ -104,7 +106,9 @@ class ConfirmTriage(Confirm):
             f"evidence {finding.evidence}\n\n"
             "## Live receipt of replaying its safe-read request\n"
             f"request {receipt.method} {receipt.url}\n"
+            f"{expected}"
             f"status {receipt.status}\n"
+            f"{redirect}"
             f"content-type {receipt.content_type or 'unknown'}\n"
             f"size {receipt.size} bytes\n"
             f"error {receipt.error or 'none'}\n"

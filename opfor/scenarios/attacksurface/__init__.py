@@ -81,7 +81,7 @@ def build(
     judge_model: str | None = None,
     reproduce: bool = False,
     confirm: bool = False,
-    reproduce_fetch_fn=domain_src.fetch_public_url,
+    reproduce_fetch_fn=domain_src.fetch_readonly,
 ) -> Scenario:
     # The registrant pivot is the reliable core, but its provider has no keyless mode, so
     # the real seam turns on only when a key is set. A test passes its own fake to wire it

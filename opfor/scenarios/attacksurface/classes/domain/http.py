@@ -170,6 +170,49 @@ def fetch_public_url(url: str) -> dict:
         return {"status": None, "url": url, "content_type": "", "body": ""}
 
 
+# The read-only reproduce replay must never follow a redirect. Following one would chase a
+# server-controlled Location, which can be an off-scope host or a GET that triggers an
+# action, breaking the read-only and in-scope guarantees. A larger body cap than the bucket
+# probe, so the receipt size reflects a real exposed document rather than a 4096-byte floor.
+_REPRODUCE_BODY = 262_144
+
+
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    """A redirect handler that never redirects, so a 3xx is returned raw rather than chased."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
+_READ_ONLY_OPENER = urllib.request.build_opener(_NoRedirect)
+
+
+def fetch_readonly(url: str) -> dict:
+    """A single anonymous GET that never follows a redirect, for the read-only reproduce
+    replay. A 3xx is captured raw with its Location, so a redirect to a login flow or an
+    off-site host is recorded rather than chased, keeping the replay read-only and inside the
+    authorized host. No credential is ever sent, and a connection error returns a null status.
+    """
+    request = urllib.request.Request(url, headers={"User-Agent": _UA})
+    try:
+        with _READ_ONLY_OPENER.open(request, timeout=_PUBLIC_URL_TIMEOUT) as resp:
+            body = resp.read(_REPRODUCE_BODY).decode("utf-8", "replace")
+            return {"status": resp.status, "url": url,
+                    "content_type": resp.headers.get("Content-Type", ""),
+                    "location": resp.headers.get("Location", ""), "body": body}
+    except urllib.error.HTTPError as exc:
+        try:
+            body = exc.read(_REPRODUCE_BODY).decode("utf-8", "replace")
+        except Exception:
+            body = ""
+        headers = exc.headers
+        return {"status": exc.code, "url": url,
+                "content_type": headers.get("Content-Type", "") if headers else "",
+                "location": headers.get("Location", "") if headers else "", "body": body}
+    except Exception:
+        return {"status": None, "url": url, "content_type": "", "location": "", "body": ""}
+
+
 # --- self-declared interfaces: an app maps its own API --------------------
 
 _DOCUMENT_LIMIT = 2_000_000

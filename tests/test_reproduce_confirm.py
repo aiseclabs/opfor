@@ -383,3 +383,36 @@ def test_regression_grounding_never_replays_an_unobserved_url():
     assert invented is not None
     assert "poc_request" not in invented.data  # never grounded on an unobserved url
     assert fetched == []  # so the EXPLOIT phase replayed nothing
+
+
+def test_reproduce_records_a_redirect_raw_with_location_and_expect():
+    from opfor.core import Node, Task, World
+    from opfor.scenarios.attacksurface.reproduce import FindingClaim, PoCRequest, ReproduceFinding
+
+    world = World()
+    world.add(Node(id="finding:x", type="finding", payload=FindingClaim(
+        finding_id="finding:x", title="Open panel", severity="HIGH", where="https://h/panel",
+        request=PoCRequest(method="GET", url="https://h/panel", expect="HTTP 200 text/html"))))
+
+    def fetch(url):
+        # a live redirect, which a following fetch would chase off-site, is captured raw
+        return {"status": 302, "url": url, "content_type": "text/html",
+                "location": "https://accounts.google.com/login", "body": "redirecting"}
+
+    outcome = ReproduceFinding(fetch).run(
+        Task(capability="reproduce_finding", node="finding:x"), world)
+    repro = outcome.facts[0].payload
+    # the 302 stays a 302, not a followed 200, and its location and the grounded expect ride
+    # the receipt so confirm can tell a login redirect from an open resource
+    assert repro.status == 302
+    assert repro.location == "https://accounts.google.com/login"
+    assert repro.expect == "HTTP 200 text/html"
+
+
+def test_readonly_fetch_uses_a_non_following_redirect_handler():
+    from opfor.scenarios.attacksurface.classes.domain.http import _NoRedirect
+    # returning None from redirect_request means a 3xx is returned raw rather than chased, so
+    # the reproduce replay never follows a server-controlled redirect off-scope or into a GET
+    # side effect
+    handler = _NoRedirect()
+    assert handler.redirect_request(None, None, 302, "Found", {}, "https://evil/") is None

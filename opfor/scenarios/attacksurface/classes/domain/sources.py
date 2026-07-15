@@ -14,6 +14,7 @@ from opfor.scenarios.attacksurface.classes.domain.http import (
     _signal_headers,
     fetch_document,
     fetch_public_url,
+    fetch_readonly,
     fetch_url,
     graphql_introspect,
     http_probe,

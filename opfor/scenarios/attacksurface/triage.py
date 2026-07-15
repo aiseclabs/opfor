@@ -164,26 +164,29 @@ class SurfaceTriage(Triage):
         self._class_ids = frozenset(c["id"] for c in self._classes)
         self._class_impact = {c["id"]: c["impact"] for c in self._classes}
         self._renderer = SurfaceRenderer(self._clues, self._takeover)
+        # The structural findings, declared in one place rather than scattered through judge.
+        # Each is a deterministic run-completeness or inventory rule, not a semantic verdict,
+        # so it stays in code, and naming them here keeps the set of what triage mints outside
+        # the model auditable at a glance. The resolution caveat is control flow, not a rule
+        # here, since it also short-circuits the model pass.
+        self._structural = (self._roots, self._wildcards, self._truncated,
+                            self._coverage_gaps, self._github)
 
     def judge(self, world: World) -> list[Finding]:
         findings: list[Finding] = []
-        findings.extend(self._roots(world))
-        findings.extend(self._wildcards(world))
-        findings.extend(self._truncated(world))
-        findings.extend(self._coverage_gaps(world))
+        for rule in self._structural:
+            findings.extend(rule(world))
 
         caveat = self._resolution_caveat(world)
         if caveat is not None:
             # The resolver is down, so probing and dangling results are unreliable. Say so
             # and do not ask the model to judge a surface the run could not fairly reach.
             findings.append(caveat)
-            findings.extend(self._github(world))
             return findings
 
         units = self._renderer.units(world)
         if units:
             findings.extend(self._judge_units(units))
-        findings.extend(self._github(world))
         return self._dedup(findings)
 
     def _judge_units(self, units: list[str]) -> list[Finding]:

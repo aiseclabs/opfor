@@ -661,6 +661,50 @@ def test_endpoint_probe_records_a_coverage_gap_on_a_transport_failure_not_only_a
                for g in gaps), "a transport failure must record a coverage_gap, not vanish"
 
 
+def test_a_resolvable_but_unreachable_seed_host_reports_a_gap_not_a_bare_clean():
+    # a host resolves to a public address but times out on every probe, the ALB-behind-a-
+    # firewall case. The run must not close clean with no notes, it must surface the reach it
+    # could not achieve as a coverage gap, invariant 3 and 5.
+    def probe(name, addresses=()):
+        if name == ROOT:
+            return {"alive": False, "status": None, "reason": "unreachable"}
+        return _probe(name, addresses)
+
+    report, _scenario, _world = _run_capturing(probe_fn=probe)
+    gap_findings = [f for f in report.findings
+                    if f.data.get("kind") == "coverage_gap" and f.data.get("scan") == "domain_http"]
+    assert any(ROOT in f.where for f in gap_findings), (
+        "a resolvable host the run could not reach must surface a domain_http coverage gap, "
+        "never a bare closed-with-no-notes clean result")
+
+
+def test_http_domain_records_a_gap_when_unreachable_but_not_when_refused():
+    # a resolvable host that answers no connection reads as alive=False, the same shape a
+    # host that genuinely serves no web content gives. A uniform timeout is a coverage gap,
+    # the run could not reach the host, while a refused connection is a real negative, so the
+    # gap is recorded for the first and not the second, invariant 3 and 5.
+    from opfor.core import Done, Fact, Task
+    from opfor.scenarios.attacksurface.classes.domain.capabilities.http import HTTPDomain
+    from opfor.scenarios.attacksurface.classes.domain.types import DomainData, Resolved
+
+    world = World()
+    world.add(Node(id="domain:h", type="domain", payload=DomainData(name="h", root="h", source="s")))
+    world.absorb([Fact(kind="resolved", about="domain:h",
+                       payload=Resolved(resolvable=True, addresses=("8.8.8.8",)))])
+    task = Task(capability="domain_http", node="domain:h")
+
+    unreachable = HTTPDomain(
+        lambda name, addresses: {"alive": False, "status": None, "reason": "unreachable"}).run(task, world)
+    assert isinstance(unreachable, Done)
+    gaps = [f.payload for f in unreachable.facts if f.kind == "coverage_gap"]
+    assert len(gaps) == 1 and gaps[0].scan == "domain_http" and gaps[0].host == "h"
+
+    refused = HTTPDomain(
+        lambda name, addresses: {"alive": False, "status": None, "reason": "refused"}).run(task, world)
+    assert isinstance(refused, Done)
+    assert not any(f.kind == "coverage_gap" for f in refused.facts)
+
+
 def test_graphql_capability_marks_an_errored_introspection_failed_not_disabled():
     from opfor.core import Failed, Task
     from opfor.scenarios.attacksurface.classes.domain.capabilities.specs import GraphQLIntrospect

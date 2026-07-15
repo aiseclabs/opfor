@@ -175,8 +175,29 @@ def test_http_probe_tries_every_public_ip_retries_timeouts_and_raises_the_unexpe
     with pytest.raises(ValueError):
         domains.http_probe("host.example.com", ("8.8.8.8",))
 
-    # a private-only host has no public address, reported not alive without a connection
-    assert domains.http_probe("host.example.com", ("10.0.0.1",))["alive"] is False
+    # a private-only host has no public address, a real negative, not a coverage gap
+    private = domains.http_probe("host.example.com", ("10.0.0.1",))
+    assert private["alive"] is False
+    assert private["reason"] == "no-public-address"
+
+    # a refused connection is evidence there is no web service, a real negative, not a gap
+    def refuse_all(name, ip, scheme, path, **kw):
+        raise ConnectionRefusedError()
+
+    monkeypatch.setattr(domains, "_connect", refuse_all)
+    refused = domains.http_probe("host.example.com", ("8.8.8.8",))
+    assert refused["alive"] is False
+    assert refused["reason"] == "refused"
+
+    # a uniform timeout across every address and scheme means the run could not reach the
+    # host, a coverage gap the caller records rather than a confirmed dead host
+    def timeout_all(name, ip, scheme, path, **kw):
+        raise TimeoutError()
+
+    monkeypatch.setattr(domains, "_connect", timeout_all)
+    unreachable = domains.http_probe("host.example.com", ("8.8.8.8", "1.1.1.1"))
+    assert unreachable["alive"] is False
+    assert unreachable["reason"] == "unreachable"
 
     # the redirect target is captured, so a host fronted by an identity proxy is visible to
     # triage rather than read as a plain live host

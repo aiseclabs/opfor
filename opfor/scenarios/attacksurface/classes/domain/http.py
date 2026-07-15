@@ -129,8 +129,18 @@ def http_probe(name: str, addresses=()) -> dict:
     slow read must not mark a live host dead, while a refused or reset connection is a real
     answer that moves on. Only connection errors are caught, so an unexpected error is
     raised loud rather than passing as not alive, invariant 5.
+
+    When no address answers, the reason is kept so the caller tells a genuine negative from a
+    coverage gap, invariant 3. A refused or reset connection is evidence there is no web
+    service, a real negative. A uniform timeout across every address and scheme is evidence
+    the run could not reach the host at all, filtered or down, a gap in coverage rather than a
+    confirmed absence, so the caller records it rather than reading a clean not-alive.
     """
-    for ip in public_addresses(addresses):
+    public = public_addresses(addresses)
+    if not public:
+        return _dead("no-public-address")
+    refused = False
+    for ip in public:
         for scheme in ("https", "http"):
             for _ in range(_PROBE_ATTEMPTS):
                 try:
@@ -138,9 +148,10 @@ def http_probe(name: str, addresses=()) -> dict:
                 except TimeoutError:
                     continue
                 except (OSError, http.client.HTTPException):
+                    refused = True
                     break
                 return _result(True, status, f"{scheme}://{name}/", server, body, location, hdrs)
-    return _dead()
+    return _dead("refused" if refused else "unreachable")
 
 
 def fetch_url(name: str, addresses, path: str) -> dict:
@@ -421,9 +432,12 @@ def _result(alive: bool, status, url: str, server: str, body: str, location: str
     match = _TITLE.search(body)
     return {"alive": alive, "status": status, "url": url, "server": server,
             "title": match.group(1).strip()[:200] if match else "", "body": body.lower(),
-            "location": location, "headers": headers}
+            "location": location, "headers": headers, "reason": ""}
 
 
-def _dead() -> dict:
+def _dead(reason: str = "unreachable") -> dict:
+    """A not-alive probe result. `reason` tells a genuine negative from a coverage gap.
+    `no-public-address` and `refused` are real negatives, `unreachable` is a gap the caller
+    records so a host the run never reached is not read as a confirmed dead host."""
     return {"alive": False, "status": None, "url": "", "server": "", "title": "", "body": "",
-            "location": "", "headers": ()}
+            "location": "", "headers": (), "reason": reason}

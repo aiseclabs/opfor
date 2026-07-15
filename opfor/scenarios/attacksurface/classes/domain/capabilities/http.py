@@ -57,7 +57,19 @@ class HTTPDomain(Capability):
             location=str(result.get("location", "")),
             headers=tuple((str(k), str(v)) for k, v in result.get("headers", ())),
         )
-        return Done(facts=(Fact(kind="http", about=task.node, payload=payload),))
+        facts = [Fact(kind="http", about=task.node, payload=payload)]
+        if not payload.alive and result.get("reason") == "unreachable":
+            # the host resolved to a public address but no address answered on either scheme
+            # and every attempt timed out, so the run could not reach it, filtered or down.
+            # That is a gap in coverage, not a confirmed absence of a web service, so record it
+            # rather than let a clean not-alive read as a host that simply serves nothing,
+            # invariant 3 and 5. A refused connection is a real negative and records no gap.
+            gap = _coverage_gap("domain_http", name, 1, [
+                f"{name}: no address answered on either scheme and every attempt timed out, "
+                "so the host is filtered or down rather than confirmed to serve no web content"])
+            if gap is not None:
+                facts.append(Fact(kind="coverage_gap", about=task.node, payload=gap))
+        return Done(facts=tuple(facts))
 
 
 class HarvestPaths(Capability):

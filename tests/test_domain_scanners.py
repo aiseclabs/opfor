@@ -842,3 +842,13 @@ def test_urls_in_javascript_extracts_an_explicit_port():
     from opfor.scenarios.attacksurface.classes.domain.javascript import urls_in_javascript
     body = 'const api = "https://api.host.com:8443/v1/users";'
     assert "https://api.host.com:8443/v1/users" in urls_in_javascript(body)
+
+
+def test_sql_dump_clue_covers_every_probed_sql_path():
+    import yaml
+
+    from opfor.scenarios.attacksurface.classes import domain as domain_class
+    data = yaml.safe_load((domain_class.KNOWLEDGE / "exposures.yaml").read_text(encoding="utf-8"))
+    sql = [c for c in data["clues"] if c.get("id") == "exposed-sql-dump"]
+    # a suffix path so /dump.sql, /db.sql, /database.sql all match, not only /backup.sql
+    assert sql and sql[0]["path"] == ".sql"

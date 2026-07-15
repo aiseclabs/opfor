@@ -47,6 +47,8 @@ SYSTEM = (
 )
 
 _EXCERPT = 400
+# The verdicts the confirm judge may return, so an out-of-set value is not stored raw.
+_VERDICTS = ("confirmed", "weakened", "refuted", "unconfirmed")
 
 
 class ConfirmError(RuntimeError):
@@ -91,7 +93,11 @@ class ConfirmTriage(Confirm):
             message="the confirm reply had no verdict, so it is a failed confirmation rather "
                     "than a silent pass of the finding as judged",
         )
-        verdict = str(obj.get("verdict", "")).strip().lower() or "unconfirmed"
+        verdict = str(obj.get("verdict", "")).strip().lower()
+        # constrain the verdict to the documented set, so an injected or hallucinated value
+        # does not land raw in the structured axes an operator filters on
+        if verdict not in _VERDICTS:
+            verdict = "unconfirmed"
         severity = str(obj.get("severity", "")).strip().upper()
         if severity not in SEVERITIES:
             severity = finding.severity

@@ -484,15 +484,18 @@ class SurfaceTriage(Triage):
 
     @staticmethod
     def _dedup(findings: list[Finding]) -> list[Finding]:
-        """Drop findings that repeat an id, keeping the first. A finding's id is
+        """Drop findings that repeat an id and title, keeping the first. A finding's id is
         finding:<category>:<where>, so the same asset judged in two chunks or by two rounds
-        collapses to one, which is why the category is normalized to a stable class id."""
-        seen: set[str] = set()
+        collapses to one. The title is part of the key so two genuinely distinct issues of one
+        class at one location, two separate CVEs on a host, are both kept rather than the
+        second silently dropped."""
+        seen: set[tuple[str, str]] = set()
         out: list[Finding] = []
         for f in findings:
-            if f.id in seen:
+            key = (f.id, f.title)
+            if key in seen:
                 continue
-            seen.add(f.id)
+            seen.add(key)
             out.append(f)
         return out
 
@@ -547,6 +550,17 @@ def _finding_from_dict(data: object, *, known_ids: frozenset[str] = frozenset(),
         poc=str(data.get("poc", "")),
         data={
             "kind": category,
-            "confidence": data.get("confidence"),
+            "confidence": _confidence(data.get("confidence")),
         },
     )
+
+
+def _confidence(value: object) -> float | None:
+    """A confidence coerced to a float in the range 0 to 1, or None. So a string, a null, or
+    an out-of-range value the model may return does not land raw in the structured axes an
+    operator filters and sorts on."""
+    try:
+        conf = float(value)
+    except (TypeError, ValueError):
+        return None
+    return max(0.0, min(1.0, conf))

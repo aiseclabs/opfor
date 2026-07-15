@@ -100,5 +100,5 @@ clues:
     content_type: "json"
   - id: exposed-sql-dump
     note: a SQL dump is present, it may expose the database contents
-    path: "/backup.sql"
+    path: ".sql"
     body_regex: "insert into|create table|-- mysql dump"

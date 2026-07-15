@@ -426,3 +426,24 @@ def test_malformed_findings_are_dropped_loudly_with_a_degraded_marker():
     assert degraded[0].severity == "INFO"
     # the well-formed finding still comes through
     assert any(f.where == "https://h/a" for f in found)
+
+
+def test_confidence_is_coerced_to_a_float_or_none():
+    from opfor.scenarios.attacksurface.triage import _confidence
+    # a string, a null, or an out-of-range value never lands raw in the structured axes
+    assert _confidence("high") is None
+    assert _confidence(None) is None
+    assert _confidence(1.5) == 1.0
+    assert _confidence(0.7) == 0.7
+
+
+def test_dedup_keeps_two_distinct_titles_at_one_location():
+    from opfor.core.result import Finding
+    from opfor.scenarios.attacksurface.triage import SurfaceTriage
+    a = Finding(id="finding:known-vulnerability:h", title="CVE-1", severity="HIGH", where="h")
+    b = Finding(id="finding:known-vulnerability:h", title="CVE-2", severity="HIGH", where="h")
+    dup = Finding(id="finding:known-vulnerability:h", title="CVE-1", severity="HIGH", where="h")
+    out = SurfaceTriage._dedup([a, b, dup])
+    # two genuinely distinct issues of one class at one location both survive, the exact
+    # duplicate is dropped
+    assert len(out) == 2 and {f.title for f in out} == {"CVE-1", "CVE-2"}

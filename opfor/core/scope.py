@@ -24,6 +24,14 @@ def tier_rank(tier: str) -> int:
     return TIERS.index(tier)
 
 
+def _normalize_host(name: str) -> str:
+    """A host reduced to its canonical comparison form, lowercased with surrounding
+    whitespace and a trailing root dot removed. A hostname is case-insensitive and
+    `example.com.` names the same host as `example.com`, so scope must match them the same,
+    and this belongs in the gate rather than in every caller that hands it a host."""
+    return str(name).strip().lower().rstrip(".")
+
+
 @dataclass(frozen=True, kw_only=True)
 class Decision:
     allowed: bool
@@ -48,8 +56,10 @@ class Scope:
     ) -> None:
         tier_rank(max_tier)
         self.max_tier = max_tier
-        self.hosts = tuple(hosts)
-        self.resources = tuple(str(r).lower() for r in resources)
+        # Normalize scope hosts once, here at the gate, and drop any that normalize to empty,
+        # so a blank or bare-dot entry cannot sit in scope and match through the suffix rule.
+        self.hosts = tuple(h for h in (_normalize_host(x) for x in hosts) if h)
+        self.resources = tuple(str(r).strip().lower() for r in resources)
         self.authorized = authorized
 
     def authorize(self, tier: str, *, osint: bool, host: str | None = None,
@@ -57,7 +67,7 @@ class Scope:
         if osint and tier_rank(tier) == 0:
             return Decision(allowed=True, reason="passive osint")
         if resource is not None:
-            if resource.lower() not in self.resources:
+            if resource.strip().lower() not in self.resources:
                 return Decision(allowed=False, reason=f"resource out of scope: {resource!r}")
         elif host is not None:
             if not self._in_scope(host):
@@ -71,4 +81,8 @@ class Scope:
         return Decision(allowed=True, reason="in scope")
 
     def _in_scope(self, host: str) -> bool:
+        # Normalize the candidate the same way the scope hosts were, so a match never depends
+        # on the caller having lowercased or stripped a trailing dot first. A candidate that
+        # normalizes to empty matches nothing, since every stored host is non-empty.
+        host = _normalize_host(host)
         return any(host == h or host.endswith("." + h) for h in self.hosts)

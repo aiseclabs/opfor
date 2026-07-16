@@ -207,6 +207,39 @@ def test_provider_config_reads_the_environment_at_the_call_not_at_import(monkeyp
     assert default.provider == "anthropic" and default.executor == "auto"
 
 
+def test_from_env_rejects_an_unknown_enum_naming_the_variable_to_set():
+    """A typo in an enum setting fails loud at config read, so it is never silently ignored,
+    an unknown executor falling through to a keyless API seat or an unknown triage mode
+    quietly running the standard pass instead of the adversarial one asked for."""
+    for var, bad in (("OPFOR_PROVIDER", "gemini"), ("OPFOR_EXECUTOR", "local"),
+                     ("OPFOR_WIRE_API", "grpc"), ("OPFOR_TRIAGE_MODE", "adverserial")):
+        with pytest.raises(ValueError) as exc:
+            ProviderConfig.from_env({var: bad})
+        assert var in str(exc.value) and bad in str(exc.value)
+
+
+def test_from_env_rejects_a_non_numeric_or_out_of_range_number():
+    with pytest.raises(ValueError) as exc:
+        ProviderConfig.from_env({"OPFOR_TIMEOUT": "soon"})
+    assert "OPFOR_TIMEOUT" in str(exc.value)
+    with pytest.raises(ValueError) as exc:
+        ProviderConfig.from_env({"OPFOR_RETRIES": "lots"})
+    assert "OPFOR_RETRIES" in str(exc.value)
+    with pytest.raises(ValueError):
+        ProviderConfig.from_env({"OPFOR_RETRIES": "-1"})
+    with pytest.raises(ValueError):
+        ProviderConfig.from_env({"OPFOR_TIMEOUT": "0"})
+
+
+def test_a_directly_constructed_config_is_validated_too():
+    """Validation lives in __post_init__, so a config built in code, not from the
+    environment, is guarded the same way rather than only the env path."""
+    with pytest.raises(ValueError):
+        ProviderConfig(executor="nope")
+    # a valid direct config still constructs
+    assert ProviderConfig(provider="openai", wire_api="responses", retries=0).retries == 0
+
+
 def test_make_provider_honors_an_explicit_config(monkeypatch):
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     cfg = ProviderConfig.from_env({"OPFOR_EXECUTOR": "subscription"})

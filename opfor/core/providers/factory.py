@@ -23,9 +23,44 @@ from opfor.core.providers.openai import OpenAIProvider
 from opfor.core.providers.retry import RetryProvider
 
 PROVIDERS = ("anthropic", "openai")
+# The runtime knobs that take one of a fixed set of values, so a typo is caught at config
+# read rather than silently ignored. An unknown executor would otherwise fall through to a
+# keyless API seat, and an unknown triage mode would run the standard pass instead of the
+# adversarial one the operator asked for, a wrong result with no error.
+EXECUTORS = ("auto", "api", "subscription")
+WIRE_APIS = ("chat", "responses")
+TRIAGE_MODES = ("standard", "adversarial")
 # Only anthropic has a keyless subscription backend through `claude -p`, so it is the one
 # provider `auto` can run without a key.
 _KEYLESS_PROVIDERS = ("anthropic",)
+
+
+def _require_one_of(value: str, allowed: tuple[str, ...], label: str, var: str) -> None:
+    """Fail loud when a setting is not one of its allowed values, naming the knob to set."""
+    if value not in allowed:
+        raise ValueError(
+            f"{label} {value!r} is not supported, set {var} to one of {', '.join(allowed)}")
+
+
+def _int_env(env: Mapping[str, str], var: str, default: str) -> int:
+    """An integer read from the environment, failing loud and naming the variable when the
+    value is not an integer, rather than the bare `invalid literal for int()` of a raw cast."""
+    raw = env.get(var, default)
+    try:
+        return int(raw)
+    except (TypeError, ValueError):
+        raise ValueError(f"{var}={raw!r} is not an integer") from None
+
+
+def _float_env(env: Mapping[str, str], var: str, default: str) -> float:
+    """A float read from the environment, failing loud and naming the variable when the value
+    is not a number."""
+    raw = env.get(var, default)
+    try:
+        return float(raw)
+    except (TypeError, ValueError):
+        raise ValueError(f"{var}={raw!r} is not a number") from None
+
 
 # The vendor SDK reads this when no explicit key is passed, so a seat can authenticate an
 # API call from the environment alone. Used to decide whether `auto` has a reachable key.
@@ -47,10 +82,29 @@ class ProviderConfig:
     timeout: float = 240.0
     triage_mode: str = "standard"
 
+    def __post_init__(self) -> None:
+        """Validate every setting at config read, so a bad value fails here with a clear
+        reason rather than late inside a provider call or, worse, silently ignored. This
+        guards every construction path, the environment read and a direct config alike."""
+        _require_one_of(self.provider, PROVIDERS, "provider", "OPFOR_PROVIDER")
+        _require_one_of(self.executor, EXECUTORS, "executor", "OPFOR_EXECUTOR")
+        _require_one_of(self.wire_api, WIRE_APIS, "wire API", "OPFOR_WIRE_API")
+        _require_one_of(self.triage_mode, TRIAGE_MODES, "triage mode", "OPFOR_TRIAGE_MODE")
+        if self.retries < 0:
+            raise ValueError(
+                f"retries must be zero or more, set OPFOR_RETRIES to a non-negative integer, "
+                f"got {self.retries}")
+        if self.timeout <= 0:
+            raise ValueError(
+                f"timeout must be greater than zero, set OPFOR_TIMEOUT to a positive number, "
+                f"got {self.timeout}")
+
     @classmethod
     def from_env(cls, env: Mapping[str, str] | None = None) -> "ProviderConfig":
         """Read the provider settings from the environment, `os.environ` by default. A test
-        passes its own mapping to drive a backend without touching the process environment."""
+        passes its own mapping to drive a backend without touching the process environment.
+        Every value is validated in `__post_init__`, so a bad enum or a non-numeric timeout
+        fails loud here rather than late inside a provider call."""
         env = os.environ if env is None else env
         return cls(
             provider=env.get("OPFOR_PROVIDER", "anthropic"),
@@ -59,8 +113,8 @@ class ProviderConfig:
             api_base=env.get("OPFOR_API_BASE"),
             executor=env.get("OPFOR_EXECUTOR", "auto"),
             wire_api=env.get("OPFOR_WIRE_API", "chat"),
-            retries=int(env.get("OPFOR_RETRIES", "2")),
-            timeout=float(env.get("OPFOR_TIMEOUT", "240")),
+            retries=_int_env(env, "OPFOR_RETRIES", "2"),
+            timeout=_float_env(env, "OPFOR_TIMEOUT", "240"),
             triage_mode=env.get("OPFOR_TRIAGE_MODE", "standard"),
         )
 

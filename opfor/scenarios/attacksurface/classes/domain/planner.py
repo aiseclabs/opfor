@@ -296,6 +296,24 @@ def _cve_rule(world: World) -> list[Task]:
     return tasks
 
 
+def _permute_rule(world: World) -> list[Task]:
+    """Permute observed labels into candidate subdomains, once per root, after passive
+    enumeration has run so the observed set is populated. Gating on the root's `enumerated`
+    fact holds the permutation until passive discovery named the labels it permutes, so it
+    extends observed evidence rather than firing on an empty set."""
+    tasks: list[Task] = []
+    for node in world.nodes("domain"):
+        payload = node.payload
+        if payload.name != payload.root:
+            continue
+        if not world.has_fact(node.id, "enumerated"):
+            continue
+        if world.has_fact(node.id, "permuted"):
+            continue
+        tasks.append(Task(capability="domain_permute", node=node.id))
+    return tasks
+
+
 def map_rules(*, with_registrant: bool):
     """The domain MAP rules, discovery and the evidence pivots. The registrant pivot rides
     only when its keyed source is wired, so a keyless run omits it rather than failing."""
@@ -306,6 +324,7 @@ def map_rules(*, with_registrant: bool):
              where=lambda p: p.name == p.root),
         each("domain", run="domain_subdomains", unless_fact="enumerated",
              where=lambda p: p.name == p.root),
+        _permute_rule,
     ]
     if with_registrant:
         rules.append(each("org", run="domain_registrant", unless_fact="registrant",

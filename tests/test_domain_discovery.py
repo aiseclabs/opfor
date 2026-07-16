@@ -817,6 +817,79 @@ def test_signal_headers_capture_security_headers_complete_past_the_identificatio
     assert captured["x-frame-options"] == "DENY"
 
 
+def test_permutation_candidates_cross_pollinate_observed_labels_only():
+    from opfor.scenarios.attacksurface.classes.domain.capabilities.discovery import (
+        permutation_candidates)
+
+    observed = ["api.example.com", "dev.eu.example.com"]
+    candidates = permutation_candidates("example.com", observed)
+    # every observed leftmost label is tried at every observed structure, drawing only on what
+    # was seen, so the label dev lands at the api structure and api at the eu structure
+    assert "dev.example.com" in candidates
+    assert "api.eu.example.com" in candidates
+    # an observed name is never re-emitted, and no label comes from outside the observed set
+    assert "api.example.com" not in candidates
+    assert not any(c.startswith(("www.", "staging.", "admin.")) for c in candidates)
+
+
+def test_permute_subdomains_confirms_only_resolving_candidates_and_skips_a_wildcard_zone():
+    from opfor.core import Done, Node, Task, World
+    from opfor.scenarios.attacksurface.classes.domain.capabilities.discovery import (
+        PermuteSubdomains, _WILDCARD_PROBE)
+    from opfor.scenarios.attacksurface.classes.domain.types import DomainData
+
+    def seed():
+        world = World()
+        world.add(Node(id="domain:example.com", type="domain",
+                       payload=DomainData(name="example.com", root="example.com", source="hint")))
+        for name in ("api.example.com", "dev.eu.example.com"):
+            world.add(Node(id=f"domain:{name}", type="domain",
+                           payload=DomainData(name=name, root="example.com", source="passive")))
+        return world
+
+    resolving = {"dev.example.com"}
+
+    def resolve(name):
+        answers = name in resolving
+        return {"resolvable": answers, "addresses": ("1.2.3.4",) if answers else (), "cnames": ()}
+
+    out = PermuteSubdomains(resolve).run(
+        Task(capability="domain_permute", node="domain:example.com"), seed())
+    assert isinstance(out, Done)
+    minted = {n.id for f in out.facts for n in f.yields}
+    # a candidate that resolves under a no-wildcard root is confirmed and minted, one that does
+    # not resolve is not, so a name is never invented without evidence
+    assert "domain:dev.example.com" in minted
+    assert "domain:api.eu.example.com" not in minted
+
+    def wildcard(name):
+        return {"resolvable": True, "addresses": ("9.9.9.9",), "cnames": ()}
+
+    out2 = PermuteSubdomains(wildcard).run(
+        Task(capability="domain_permute", node="domain:example.com"), seed())
+    # a wildcard zone answers every name, so nothing is confirmed, only the bare fact is recorded
+    assert isinstance(out2, Done)
+    assert not any(f.yields for f in out2.facts)
+    assert any(f.kind == "permuted" for f in out2.facts)
+
+
+def test_permute_rule_waits_for_passive_enumeration_then_runs_once():
+    from opfor.core import Fact, Node, World
+    from opfor.scenarios.attacksurface.classes.domain.planner import _permute_rule
+    from opfor.scenarios.attacksurface.classes.domain.types import DomainData
+
+    world = World()
+    world.add(Node(id="domain:example.com", type="domain",
+                   payload=DomainData(name="example.com", root="example.com", source="hint")))
+    # before passive enumeration named the labels, there is nothing principled to permute
+    assert _permute_rule(world) == []
+    world.absorb((Fact(kind="enumerated", about="domain:example.com"),))
+    assert [t.capability for t in _permute_rule(world)] == ["domain_permute"]
+    # once it has run, its fact keeps it from firing again
+    world.absorb((Fact(kind="permuted", about="domain:example.com"),))
+    assert _permute_rule(world) == []
+
+
 def test_tls_probe_reports_a_valid_certificate_with_its_expiry(monkeypatch):
     from opfor.scenarios.attacksurface.classes.domain import http as domains
 

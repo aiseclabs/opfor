@@ -10,6 +10,7 @@ from opfor.scenarios.attacksurface.classes.domain.capabilities.discovery import 
     DiscoverDomains,
     DomainPivot,
     DomainRegistrant,
+    PermuteSubdomains,
     Subdomains,
 )
 from opfor.scenarios.attacksurface.classes.domain.capabilities.dns import (
@@ -42,6 +43,7 @@ __all__ = [
     "GraphQLIntrospect",
     "HarvestPaths",
     "HTTPDomain",
+    "PermuteSubdomains",
     "ProbeSpec",
     "ResolveDomain",
     "SecretScan",

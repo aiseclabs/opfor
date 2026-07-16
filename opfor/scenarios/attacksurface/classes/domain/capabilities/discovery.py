@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from opfor.core import Capability, Done, Fact, Failed, Node, Outcome, Phase, Task, World
 from opfor.scenarios.attacksurface import config
-from opfor.scenarios.attacksurface.net import registrable_root
+from opfor.scenarios.attacksurface.net import looks_like_host, registrable_root
+from opfor.scenarios.attacksurface.classes.domain.capabilities.common import _coverage_gap
 from opfor.scenarios.attacksurface.classes.domain.types import CoverageGap, DomainData
 
 
@@ -156,4 +157,95 @@ class Subdomains(Capability):
                 scan="domain_subdomains", host=root,
                 attempted=getattr(names, "source_count", len(errors)),
                 failed=len(errors), reasons=tuple(errors[:5]))))
+        return Done(facts=tuple(facts))
+
+
+# An unlikely label that should not exist, resolved first so a wildcard zone, which answers
+# every name, is detected before a permutation would read its blanket answer as real hosts.
+_WILDCARD_PROBE = "opfor-wildcard-probe-6f3a9c2e"
+_MAX_PERMUTATION_CANDIDATES = 256
+
+
+def permutation_candidates(root: str, observed) -> list[str]:
+    """Candidate subdomains built only from the labels and structures already observed under a
+    root, so enumeration extends the seen surface rather than guessing from a generic
+    dictionary. For each observed `label.suffix`, every observed leftmost label is tried at
+    every observed suffix, and a name already observed is dropped. This is principled
+    enumeration, a permutation of evidence, never a blind wordlist."""
+    labels: set[str] = set()
+    suffixes: set[str] = set()
+    seen = set(observed)
+    for name in seen:
+        if name == root or not name.endswith("." + root):
+            continue
+        head, _, rest = name.partition(".")
+        if head and rest:
+            labels.add(head)
+            suffixes.add(rest)
+    candidates: set[str] = set()
+    for suffix in suffixes:
+        for label in labels:
+            candidate = f"{label}.{suffix}"
+            if candidate not in seen and looks_like_host(candidate):
+                candidates.add(candidate)
+    return sorted(candidates)
+
+
+class PermuteSubdomains(Capability):
+    """MAP: confirm subdomains permuted from observed labels, gated by a wildcard baseline.
+
+    Passive discovery names the subdomains seen in the wild. This extends that set without
+    guessing from a dictionary: it permutes the labels and structures already observed under a
+    root and confirms each candidate by resolution. A wildcard zone answers every name, so
+    resolution there proves nothing, so this first resolves an unlikely name and skips the
+    whole permutation when that answers, recording a bare fact rather than a flood of false
+    hosts. Resolving public DNS never touches the target, so it is osint.
+    """
+
+    name = "domain_permute"
+    phase = Phase.MAP
+    osint = True
+
+    def __init__(self, resolve_fn) -> None:
+        self._resolve = resolve_fn
+
+    def run(self, task: Task, world: World) -> Outcome:
+        root = world.node(task.node).payload.name
+        observed = tuple(n.payload.name for n in world.nodes("domain")
+                         if n.payload.root == root and n.payload.name != root)
+        try:
+            baseline = self._resolve(f"{_WILDCARD_PROBE}.{root}")
+        except Exception as exc:
+            return Failed(reason=f"wildcard baseline {type(exc).__name__}: {exc}")
+        # a wildcard zone resolves every name, so a permutation cannot be confirmed here, the
+        # blind spot is already surfaced by the enumeration wildcard flag, so just record the
+        # fact and mint nothing rather than a flood of names that all resolve to the catch-all
+        if baseline.get("resolvable"):
+            return Done(facts=(Fact(kind="permuted", about=task.node),))
+        candidates = permutation_candidates(root, observed)
+        probed = candidates[:_MAX_PERMUTATION_CANDIDATES]
+        found: list[Node] = []
+        skipped: list[str] = []
+        for candidate in probed:
+            if world.node(f"domain:{candidate}") is not None:
+                continue
+            try:
+                result = self._resolve(candidate)
+            except Exception as exc:
+                skipped.append(f"{candidate}: {type(exc).__name__}")
+                continue
+            if result.get("resolvable"):
+                found.append(Node(
+                    id=f"domain:{candidate}", type="domain",
+                    payload=DomainData(name=candidate, root=root, source="permuted",
+                                       confidence="confirmed",
+                                       evidence="permuted from an observed label, resolves under "
+                                                "an owned root with no wildcard")))
+        if len(candidates) > len(probed):
+            skipped.append(f"{len(candidates) - len(probed)} more candidates beyond the "
+                           f"{_MAX_PERMUTATION_CANDIDATES} cap were not probed")
+        facts = [Fact(kind="permuted", about=task.node, yields=tuple(found))]
+        gap = _coverage_gap("domain_permute", root, len(probed), skipped)
+        if gap is not None:
+            facts.append(Fact(kind="coverage_gap", about=task.node, payload=gap))
         return Done(facts=tuple(facts))

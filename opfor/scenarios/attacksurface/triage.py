@@ -29,6 +29,7 @@ import yaml
 
 from opfor.core import Finding, Message, Provider, SEVERITIES, Triage, World, iter_md_docs
 from opfor.core.json_parse import require_json_object
+from opfor.scenarios.attacksurface import structural
 from opfor.scenarios.attacksurface.render import SurfaceRenderer
 
 SYSTEM = (
@@ -173,20 +174,17 @@ class SurfaceTriage(Triage):
         self._class_ids = frozenset(c["id"] for c in self._classes)
         self._class_impact = {c["id"]: c["impact"] for c in self._classes}
         self._renderer = SurfaceRenderer(self._clues, self._takeover)
-        # The structural findings, declared in one place rather than scattered through judge.
-        # Each is a deterministic run-completeness or inventory rule, not a semantic verdict,
-        # so it stays in code, and naming them here keeps the set of what triage mints outside
-        # the model auditable at a glance. The resolution caveat is control flow, not a rule
-        # here, since it also short-circuits the model pass.
-        self._structural = (self._roots, self._wildcards, self._truncated,
-                            self._coverage_gaps, self._github)
 
     def judge(self, world: World) -> list[Finding]:
         findings: list[Finding] = []
-        for rule in self._structural:
+        # The structural findings live in `structural`, each a deterministic completeness or
+        # inventory rule rather than a semantic verdict, so the judge here stays about the
+        # model call. The resolution caveat is control flow, not one of the set, since it also
+        # short-circuits the model pass when the resolver is down.
+        for rule in structural.STRUCTURAL:
             findings.extend(rule(world))
 
-        caveat = self._resolution_caveat(world)
+        caveat = structural.resolution_caveat(world)
         if caveat is not None:
             # The resolver is down, so probing and dangling results are unreliable. Say so
             # and do not ask the model to judge a surface the run could not fairly reach.
@@ -333,154 +331,6 @@ class SurfaceTriage(Triage):
 
     def _map_finding(self, data: object) -> Finding | None:
         return _finding_from_dict(data, known_ids=self._class_ids, impacts=self._class_impact)
-
-    def _roots(self, world: World) -> list[Finding]:
-        """Report each associated root the run discovered beyond the operator's hints, an
-        INFO inventory line carrying the evidence that attributes it to the target. This is
-        a fact about what the run found, not a semantic judgment, so it stays in code."""
-        out: list[Finding] = []
-        for node in world.nodes("domain"):
-            data = node.payload
-            if data.name != data.root or data.source == "hint":
-                continue
-            out.append(Finding(
-                id=f"finding:root:{data.root}",
-                title=f"Associated root domain {data.root}",
-                severity="INFO",
-                where=data.root,
-                evidence=data.evidence or "discovered as an associated root",
-                data={"kind": "root", "source": data.source, "confidence": data.confidence},
-            ))
-        return out
-
-    def _wildcards(self, world: World) -> list[Finding]:
-        """Report the wildcard certificates the run saw as a named blind spot. A wildcard
-        such as *.dev.example.com covers every host under it, so certificate transparency never
-        names the individual hosts and passive discovery cannot see them. This is a fact
-        about the reach of the run, not a semantic judgment, so it stays in code, and saying
-        it keeps a silent gap from reading as a clean, complete result."""
-        bases = sorted(n.payload.name for n in world.nodes("domain")
-                       if getattr(n.payload, "wildcard", False))
-        if not bases:
-            return []
-        shown = ", ".join(bases[:10]) + (f", and {len(bases) - 10} more" if len(bases) > 10 else "")
-        return [Finding(
-            id="finding:blindspot:wildcard",
-            title=f"Wildcard certificate blind spot, {len(bases)} base(s) hide their subdomains",
-            severity="INFO",
-            where=shown,
-            evidence=f"a wildcard certificate such as *.{bases[0]} covers every hostname under "
-                     "it, so certificate transparency never names the individual hosts and "
-                     "passive discovery cannot see them. Enumerate these bases from DNS or an "
-                     "internal source to close the gap",
-            data={"kind": "blindspot", "bases": bases},
-        )]
-
-    def _truncated(self, world: World) -> list[Finding]:
-        """Report the roots whose passive enumeration hit a source page cap as a blind spot.
-        A bounded walk that stopped short left subdomains unfetched, so the surface under
-        these roots is incomplete. This is a fact about the reach of the run, not a semantic
-        judgment, so it stays in code, and saying it keeps a truncated set from reading as a
-        clean, complete result."""
-        roots = sorted(n.payload.name for n in world.nodes("domain")
-                       if world.has_fact(n.id, "enumeration_truncated"))
-        if not roots:
-            return []
-        shown = ", ".join(roots[:10]) + (f", and {len(roots) - 10} more" if len(roots) > 10 else "")
-        return [Finding(
-            id="finding:blindspot:enumeration",
-            title=f"Passive enumeration truncated, {len(roots)} root(s) hide subdomains beyond the page cap",
-            severity="INFO",
-            where=shown,
-            evidence="a passive source returned more subdomains than the page cap fetched, so "
-                     "the enumeration under these roots is incomplete. Raise the cap or "
-                     "enumerate from DNS or an internal source to close the gap",
-            data={"kind": "blindspot", "roots": roots},
-        )]
-
-    def _coverage_gaps(self, world: World) -> list[Finding]:
-        """Report each scan that finished but skipped items on per-item errors, an INFO line
-        so a partial scan does not read as a clean negative. A fact about the reach of the
-        run, not a semantic judgment, so it stays in code, and saying it keeps a dropped item
-        from passing as covered, invariant 5."""
-        out: list[Finding] = []
-        for fact in world.facts("coverage_gap"):
-            gap = fact.payload
-            sample = "; ".join(gap.reasons)
-            out.append(Finding(
-                id=f"finding:coverage_gap:{gap.scan}:{gap.host}",
-                title=f"{gap.scan} skipped {gap.failed} of {gap.attempted} item(s) on errors",
-                severity="INFO",
-                where=gap.host,
-                evidence=f"{gap.failed} of {gap.attempted} items were skipped on fetch or "
-                         f"probe errors, so the surface {gap.scan} reports for {gap.host} is "
-                         f"partial rather than complete. Sample: {sample}. Rerun to cover the "
-                         "skipped items",
-                data={"kind": "coverage_gap", "scan": gap.scan, "failed": gap.failed,
-                      "attempted": gap.attempted},
-            ))
-        return out
-
-    def _resolution_caveat(self, world: World) -> Finding | None:
-        """When almost nothing resolved the resolver is the problem, not the target, so
-        probing and dangling results would be a wall of false positives. Above a high
-        failure rate, say the run is incomplete rather than judging an unreachable surface.
-        This trades a little recall for not lying, and it says so."""
-        domains = world.nodes("domain")
-        if not domains:
-            return None
-        unresolved = sum(
-            1 for n in domains
-            if not ((r := world.latest("resolved", n.id)) is not None and r.payload.resolvable)
-        )
-        if unresolved / len(domains) < 0.9:
-            return None
-        return Finding(
-            id="finding:incomplete:resolution",
-            title=f"Resolution unavailable, {unresolved} of {len(domains)} names did not resolve",
-            severity="INFO",
-            where="(resolver)",
-            evidence="almost nothing resolved, so probing and dangling checks were suppressed "
-                     "to avoid false positives, rerun from a host with a working resolver to "
-                     "assess reachability",
-            data={"kind": "incomplete", "unresolved": unresolved, "domains": len(domains)},
-        )
-
-    def _github(self, world: World) -> list[Finding]:
-        """The GitHub org inventory. An attributed org, one whose profile ties it to an
-        in-scope domain, is an INFO line with its public repo count. Orgs that only match the
-        name are collapsed into one caveat line rather than passed off as the target's, so a
-        namesake does not read as reachable code surface. A fact about what the run found and
-        how sure it is, not a semantic judgment, so it stays in code."""
-        out: list[Finding] = []
-        unattributed: list[str] = []
-        for node in world.nodes("github_org"):
-            payload = node.payload
-            if not payload.attributed:
-                unattributed.append(payload.login)
-                continue
-            login = payload.login
-            repos = [r for r in world.nodes("github_repo") if r.id.startswith(f"github_repo:{login}/")]
-            out.append(Finding(
-                id=f"finding:github_org:{login}",
-                title=f"GitHub org {login}, {len(repos)} public repo(s)",
-                severity="INFO",
-                where=login,
-                evidence=payload.evidence or f"reachable code surface at {payload.url}",
-                data={"kind": "github_org", "login": login, "repos": len(repos), "url": payload.url},
-            ))
-        if unattributed:
-            out.append(Finding(
-                id="finding:github_unattributed",
-                title=f"{len(unattributed)} GitHub org(s) match the name but are unattributed",
-                severity="INFO",
-                where=", ".join(sorted(unattributed)[:10]),
-                evidence="the account name matches the target but nothing in the profile ties it to "
-                         "an in-scope domain, so ownership is unverified, confirm before treating a "
-                         "namesake as the target's code surface",
-                data={"kind": "github_unattributed", "logins": sorted(unattributed)},
-            ))
-        return out
 
     @staticmethod
     def _dedup(findings: list[Finding]) -> list[Finding]:

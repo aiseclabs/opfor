@@ -29,6 +29,31 @@ def test_dangling_name_is_surfaced():
     assert "does not resolve, seen only passively" in p
 
 
+def test_takeover_catalogue_is_expanded_and_a_new_signature_raises_its_clue():
+    from opfor.core import Fact
+    from opfor.scenarios.attacksurface.classes.domain import KNOWLEDGE
+    from opfor.scenarios.attacksurface.classes.domain.types import DomainData, HTTP as HTTPData
+    from opfor.scenarios.attacksurface.render import SurfaceRenderer
+    from opfor.scenarios.attacksurface.triage import _load_takeover
+
+    takeover = _load_takeover(KNOWLEDGE / "takeover.yaml")
+    services = {service for service, _ in takeover}
+    assert {"Zendesk", "Kinsta", "UserVoice"} <= services
+    # every signature is non-empty and lowercased, so the lowercased-body match is reliable
+    for service, signature in takeover:
+        assert signature and signature == signature.lower()
+
+    # a body carrying a newly added unclaimed-page signature raises its clue for the judge
+    world = World()
+    world.add(Node(id="domain:h.example.com", type="domain",
+                   payload=DomainData(name="h.example.com", root="example.com", source="hint")))
+    world.absorb((Fact(kind="http", about="domain:h.example.com",
+                       payload=HTTPData(alive=True, status=404, url="https://h.example.com/",
+                                        body="<html>help center closed</html>")),))
+    text = "\n".join(SurfaceRenderer([], takeover).units(world))
+    assert "matched Zendesk unclaimed-resource page" in text
+
+
 def test_dangling_cname_target_is_surfaced_for_takeover_judgment():
     # the CNAME target is the most direct takeover evidence, a dangling name pointing at an
     # unclaimed service, so it must reach the model rather than being reduced to a bool

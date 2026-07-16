@@ -203,6 +203,12 @@ def _probe_url(url):
     return {"status": 404, "url": url, "content_type": "", "body": ""}
 
 
+def _dns(domain):
+    # By default a root sets no email authentication and no CAA and is unsigned, so the posture
+    # scan surfaces the absences. A test overrides this seam to drive a configured domain.
+    return {"spf": (), "dmarc": "", "caa": (), "dnssec": False}
+
+
 def _make(**over):
     """Build the scenario with every seam faked, so no test touches the network or the
     model. A MockProvider stands in for the triage model, returning an empty result by
@@ -211,7 +217,7 @@ def _make(**over):
     seams = dict(search_fn=_search, repos_fn=_repos, enumerate_fn=_enumerate, pivot_fn=_pivot,
                  resolve_fn=_resolve, probe_fn=_probe, fetch_fn=_fetch, fetch_doc_fn=_fetch_doc,
                  introspect_fn=_introspect, wayback_fn=_wayback, identify_fn=_identify, cve_fn=_cves,
-                 probe_url_fn=_probe_url)
+                 probe_url_fn=_probe_url, dns_fn=_dns)
     seams.update(over)
     seams.setdefault("provider", MockProvider(default='{"findings": []}'))
     seams.setdefault("model", "test-model")
@@ -313,6 +319,7 @@ __all__ = [
     '_identify',
     '_cves',
     '_probe_url',
+    '_dns',
     '_make',
     '_scenario',
     '_seed',

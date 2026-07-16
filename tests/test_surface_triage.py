@@ -439,6 +439,37 @@ def test_render_lists_present_security_headers_as_set_and_omits_them_from_missin
     assert "not set: content-security-policy, x-content-type-options, referrer-policy, permissions-policy" in text
 
 
+def test_dns_email_posture_is_read_on_roots_only_and_surfaced_for_the_judge():
+    _, sc, world = _run_capturing()
+    # the root carries the posture fact, and email authentication is a root property, so a
+    # discovered subdomain is never given the fact
+    assert world.latest("dns_email", "domain:example.com") is not None
+    for node in world.nodes("domain"):
+        if node.payload.name != node.payload.root:
+            assert world.latest("dns_email", node.id) is None
+    prompt = _prompt(sc)
+    assert "email/DNS security: SPF absent" in prompt
+    assert "Weak Email Authentication" in _knowledge(sc)
+
+
+def test_render_shows_a_configured_root_email_and_dns_posture_even_without_a_website():
+    from opfor.core import Fact
+    from opfor.scenarios.attacksurface.classes.domain.types import DnsEmailPosture, DomainData
+    from opfor.scenarios.attacksurface.render import SurfaceRenderer
+
+    # no http fact, so the root serves no website, yet the email posture must still be judged
+    world = World()
+    world.add(Node(id="domain:example.com", type="domain",
+                   payload=DomainData(name="example.com", root="example.com", source="hint")))
+    world.absorb((Fact(kind="dns_email", about="domain:example.com",
+                       payload=DnsEmailPosture(domain="example.com", spf=("v=spf1 -all",),
+                                               dmarc="v=DMARC1; p=reject",
+                                               caa=('0 issue "letsencrypt.org"',), dnssec=True)),))
+    text = "\n".join(SurfaceRenderer([], []).units(world))
+    assert ("email/DNS security: SPF v=spf1 -all; DMARC v=DMARC1; p=reject; "
+            "DNSSEC validated; CAA 1 record(s)") in text
+
+
 def test_system_prompts_frame_target_text_as_untrusted():
     from opfor.scenarios.attacksurface import confirm as confirm_mod
     from opfor.scenarios.attacksurface import triage as triage_mod

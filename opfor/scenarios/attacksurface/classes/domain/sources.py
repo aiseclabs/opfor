@@ -12,6 +12,7 @@ from opfor.scenarios.attacksurface.classes.domain.http import (
     _TIMEOUT,
     _UA,
     _signal_headers,
+    dns_email_posture,
     fetch_document,
     fetch_public_url,
     fetch_readonly,

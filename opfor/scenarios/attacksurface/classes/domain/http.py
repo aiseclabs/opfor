@@ -44,6 +44,8 @@ _DOH_RESOLVERS = ("https://dns.google/resolve", "https://cloudflare-dns.com/dns-
 _DNS_A = 1
 _DNS_AAAA = 28
 _DNS_CNAME = 5
+_DNS_TXT = 16
+_DNS_CAA = 257
 # A ceiling on a JSON response body read from a resolver or a passive source, so a degenerate
 # or hostile upstream cannot exhaust memory with a multi-gigabyte reply. Generous, since a
 # real certificate-transparency or vulnerability response for a large domain can be several
@@ -96,12 +98,78 @@ def resolve_host(name: str) -> dict:
 def _doh_query(resolver: str, name: str, rtype: str) -> tuple[int, list[dict]]:
     """The DoH response code and answer records for one name and one record type. The rcode
     is returned alongside the answers so a resolver error is told apart from a real no-answer."""
+    status, answers, _ad = _doh_records(resolver, name, rtype)
+    return status, answers
+
+
+def _doh_records(resolver: str, name: str, rtype: str) -> tuple[int, list[dict], bool]:
+    """The DoH response code, answer records, and DNSSEC AD flag for one name and record type.
+    The AD flag is True when the resolver validated the zone's signature, so a DNSSEC posture
+    read needs no separate query."""
     url = f"{resolver}?name={urllib.parse.quote(name)}&type={rtype}"
     request = urllib.request.Request(
         url, headers={"Accept": "application/dns-json", "User-Agent": _UA})
     with urllib.request.urlopen(request, timeout=_TIMEOUT) as resp:
         body = json.loads(resp.read(_JSON_LIMIT).decode("utf-8", "replace"))
-    return int(body.get("Status", 0)), (body.get("Answer") or [])
+    return int(body.get("Status", 0)), (body.get("Answer") or []), bool(body.get("AD", False))
+
+
+# --- email authentication and DNS integrity posture ------------------------
+
+
+def _doh_lookup(name: str, rtype: str) -> tuple[list[dict], bool]:
+    """Answer records of one type for a name over DoH, with the DNSSEC AD flag, failing over
+    resolvers and raising only when every resolver errors, so a real no-record answer is told
+    apart from a resolver outage, the same contract resolve_host keeps, invariant 5."""
+    last: Exception | None = None
+    for resolver in _DOH_RESOLVERS:
+        try:
+            status, answers, ad = _doh_records(resolver, name, rtype)
+        except Exception as exc:
+            last = exc
+            continue
+        if status not in (_DNS_NOERROR, _DNS_NXDOMAIN):
+            last = RuntimeError(f"DoH resolver error for {name} {rtype}, rcode {status}")
+            continue
+        return answers, ad
+    raise RuntimeError(f"all DoH resolvers failed for {name} {rtype}: {last}")
+
+
+def _unquote_txt(data: str) -> str:
+    """A TXT datum with its surrounding DoH quotes stripped, so a match reads the record text
+    rather than the quoting a resolver wraps it in."""
+    text = str(data).strip()
+    if len(text) >= 2 and text[0] == '"' and text[-1] == '"':
+        text = text[1:-1]
+    return text
+
+
+def txt_strings(answers) -> list[str]:
+    """The TXT record strings in a DoH answer set, parsed apart from the network so a test
+    drives it without a query."""
+    return [_unquote_txt(a["data"]) for a in answers
+            if a.get("type") == _DNS_TXT and a.get("data")]
+
+
+def caa_strings(answers) -> list[str]:
+    """The CAA record strings in a DoH answer set, parsed apart from the network."""
+    return [str(a["data"]).strip() for a in answers
+            if a.get("type") == _DNS_CAA and a.get("data")]
+
+
+def dns_email_posture(domain: str) -> dict:
+    """The email-authentication and DNS-integrity posture of a registrable domain from public
+    DNS. `spf` is every `v=spf1` TXT at the domain, so more than one, an invalid setup, stays
+    visible. `dmarc` is the `_dmarc` TXT record, empty when absent. `caa` is the domain's CAA
+    records, and `dnssec` is the resolver's AD flag on the domain lookup. Querying public DNS
+    never touches the target, so this is osint. Whether a missing record is a finding is
+    triage's judgment, this reports the raw facts."""
+    answers, ad = _doh_lookup(domain, "TXT")
+    spf = tuple(t for t in txt_strings(answers) if t.lower().startswith("v=spf1"))
+    dmarc_answers, _ = _doh_lookup(f"_dmarc.{domain}", "TXT")
+    dmarc = next((t for t in txt_strings(dmarc_answers) if t.lower().startswith("v=dmarc1")), "")
+    caa_answers, _ = _doh_lookup(domain, "CAA")
+    return {"spf": spf, "dmarc": dmarc, "caa": tuple(caa_strings(caa_answers)), "dnssec": ad}
 
 
 def public_addresses(addresses) -> list[str]:

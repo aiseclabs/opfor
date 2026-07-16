@@ -17,6 +17,7 @@ from opfor.scenarios.attacksurface.classes.domain.capabilities import (
     BucketScan,
     CveScan,
     DiscoverDomains,
+    DnsEmailSecurity,
     DomainPivot,
     DomainRegistrant,
     Endpoints,
@@ -35,7 +36,7 @@ KNOWLEDGE = Path(__file__).resolve().parent / "knowledge"
 
 
 def assemble(*, enumerate_fn, pivot_fn, resolve_fn, probe_fn, fetch_fn, fetch_doc_fn,
-             introspect_fn, wayback_fn, probe_url_fn, reverse_whois_fn=None,
+             introspect_fn, wayback_fn, probe_url_fn, dns_fn, reverse_whois_fn=None,
              identify_fn=None, cve_fn=None) -> ClassBundle:
     """The domain class's contribution. The seams are the passive and active sources,
     injected so a test drives the class with fixtures. The registrant pivot rides only when
@@ -46,6 +47,7 @@ def assemble(*, enumerate_fn, pivot_fn, resolve_fn, probe_fn, fetch_fn, fetch_do
         DomainPivot(pivot_fn),
         Subdomains(enumerate_fn),
         ResolveDomain(resolve_fn),
+        DnsEmailSecurity(dns_fn),
         HTTPDomain(probe_fn),
         HarvestPaths(fetch_fn, fetch_doc_fn, wayback_fn),
         Endpoints(fetch_fn),

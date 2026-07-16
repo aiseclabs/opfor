@@ -253,6 +253,22 @@ class CoverageGap:
 
 
 @dataclass(frozen=True, kw_only=True)
+class DnsEmailPosture:
+    """The email-authentication and DNS-integrity posture of a registrable domain, read from
+    public DNS. Each field is a raw fact, whether a missing SPF or a `p=none` DMARC rises to a
+    finding is triage's judgment. `spf` holds every `v=spf1` TXT found, so more than one, an
+    invalid configuration that breaks SPF, is visible rather than collapsed. `dmarc` is the
+    `_dmarc` TXT verbatim, empty when absent. `caa` holds the CAA records, and `dnssec` is
+    True when the resolver validated the zone's signature."""
+
+    domain: str
+    spf: tuple[str, ...] = ()
+    dmarc: str = ""
+    caa: tuple[str, ...] = ()
+    dnssec: bool = False
+
+
+@dataclass(frozen=True, kw_only=True)
 class CVE:
     """One known vulnerability record from a public database. `cvss` and `severity` are the
     published score, kept as raw facts, whether the CVE truly applies to the exposed surface

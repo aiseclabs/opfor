@@ -12,7 +12,10 @@ from opfor.scenarios.attacksurface.classes.domain.capabilities.discovery import 
     DomainRegistrant,
     Subdomains,
 )
-from opfor.scenarios.attacksurface.classes.domain.capabilities.dns import ResolveDomain
+from opfor.scenarios.attacksurface.classes.domain.capabilities.dns import (
+    DnsEmailSecurity,
+    ResolveDomain,
+)
 from opfor.scenarios.attacksurface.classes.domain.capabilities.http import (
     Endpoints,
     HarvestPaths,
@@ -30,6 +33,7 @@ __all__ = [
     "BucketScan",
     "CveScan",
     "DiscoverDomains",
+    "DnsEmailSecurity",
     "DomainPivot",
     "DomainRegistrant",
     "Endpoints",

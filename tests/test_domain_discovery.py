@@ -815,6 +815,67 @@ def test_signal_headers_capture_security_headers_complete_past_the_identificatio
     assert captured["x-frame-options"] == "DENY"
 
 
+def test_dns_email_posture_reads_spf_dmarc_caa_and_dnssec(monkeypatch):
+    from opfor.scenarios.attacksurface.classes.domain import http as domains
+
+    def lookup(name, rtype):
+        if name == "example.com" and rtype == "TXT":
+            # the ad flag on the domain lookup is the DNSSEC signal, and a non-spf TXT is ignored
+            return ([{"type": 16, "data": '"v=spf1 include:_spf.example.com -all"'},
+                     {"type": 16, "data": '"google-site-verification=abc"'}], True)
+        if name == "_dmarc.example.com" and rtype == "TXT":
+            return ([{"type": 16, "data": '"v=DMARC1; p=reject"'}], False)
+        if name == "example.com" and rtype == "CAA":
+            return ([{"type": 257, "data": '0 issue "letsencrypt.org"'}], False)
+        raise AssertionError((name, rtype))
+
+    monkeypatch.setattr(domains, "_doh_lookup", lookup)
+    posture = domains.dns_email_posture("example.com")
+    assert posture["spf"] == ("v=spf1 include:_spf.example.com -all",)
+    assert posture["dmarc"] == "v=DMARC1; p=reject"
+    assert posture["caa"] == ('0 issue "letsencrypt.org"',)
+    assert posture["dnssec"] is True
+
+
+def test_doh_lookup_fails_over_resolvers_and_raises_when_all_error(monkeypatch):
+    from opfor.scenarios.attacksurface.classes.domain import http as domains
+
+    tried = []
+
+    def records(resolver, name, rtype):
+        tried.append(resolver)
+        return (2, [], False)  # SERVFAIL on every resolver, a resolver error not a real answer
+
+    monkeypatch.setattr(domains, "_doh_records", records)
+    with pytest.raises(RuntimeError):
+        domains._doh_lookup("example.com", "TXT")
+    # every resolver was tried before the failure was raised, so one flaky resolver does not blind it
+    assert len(tried) == len(domains._DOH_RESOLVERS)
+
+
+def test_dns_email_capability_reports_records_and_fails_loud_on_error():
+    from opfor.core import Done, Failed, Node, Task, World
+    from opfor.scenarios.attacksurface.classes.domain.capabilities.dns import DnsEmailSecurity
+    from opfor.scenarios.attacksurface.classes.domain.types import DomainData
+
+    world = World()
+    world.add(Node(id="domain:example.com", type="domain",
+                   payload=DomainData(name="example.com", root="example.com", source="hint")))
+    task = Task(capability="dns_email", node="domain:example.com")
+
+    ok = DnsEmailSecurity(lambda d: {"spf": ("v=spf1 -all",), "dmarc": "", "caa": (), "dnssec": True})
+    out = ok.run(task, world)
+    assert isinstance(out, Done)
+    assert out.facts[0].payload.spf == ("v=spf1 -all",)
+    assert out.facts[0].payload.dnssec is True
+
+    def boom(domain):
+        raise RuntimeError("dns down")
+
+    # a lookup that fails is a loud Failed, never a silent clean absence of records
+    assert isinstance(DnsEmailSecurity(boom).run(task, world), Failed)
+
+
 def test_graphql_introspection_raises_on_a_server_error(monkeypatch):
     from opfor.scenarios.attacksurface.classes.domain import http as domains
     monkeypatch.setattr(domains, "resolve_host", lambda n: {"addresses": ("2.2.2.2",)})

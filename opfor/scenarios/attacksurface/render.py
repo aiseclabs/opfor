@@ -69,7 +69,11 @@ class SurfaceRenderer:
         # a dangling one. The resolver failure is surfaced by its own coverage gap instead.
         dangling = (resolved_data is not None and not resolved_data.resolvable
                     and not resolved_data.errored and data.source == "passive")
-        if not alive and not dangling:
+        # A root's email and DNS posture is judged even when it serves no web content, since a
+        # spoofable domain with no website is still a finding, so a root carrying that fact is
+        # rendered on its own.
+        dns_email = world.latest("dns_email", node.id)
+        if not alive and not dangling and dns_email is None:
             return None
         bits = [f"host {data.name}", f"source {data.source}"]
         if alive:
@@ -138,6 +142,14 @@ class SurfaceRenderer:
             for hit in backups.payload.hits:
                 line += (f"\n  backup file: {hit.url}, HTTP {hit.status}, "
                          f"{hit.content_type or 'unknown type'}, {hit.size} bytes")
+        if dns_email is not None:
+            p = dns_email.payload
+            spf = "; ".join(p.spf) if p.spf else "absent"
+            dmarc = p.dmarc if p.dmarc else "absent"
+            caa = f"{len(p.caa)} record(s): {', '.join(p.caa)}" if p.caa else "absent"
+            dnssec = "validated" if p.dnssec else "unsigned or unvalidated"
+            line += (f"\n  email/DNS security: SPF {spf}; DMARC {dmarc}; "
+                     f"DNSSEC {dnssec}; CAA {caa}")
         return line
 
     def _endpoint_line(self, ep) -> str:

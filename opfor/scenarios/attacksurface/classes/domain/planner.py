@@ -307,6 +307,11 @@ def enrich_rules(config: DomainPlanConfig, *, with_cve: bool = False):
     is the capability action-config the config-driven rules hand their capabilities."""
     rules = [
         each("domain", run="domain_resolve", unless_fact="resolved"),
+        # Email authentication is a property of the registrable root, so read the DNS posture
+        # on roots only. It reads public DNS, so `each` mints it with no scope host and scope
+        # waves it through as osint.
+        each("domain", run="dns_email", unless_fact="dns_email",
+             where=lambda p: p.name == p.root),
         _http_rule,
         _harvest_rule,
         lambda world: _endpoints_rule(world, config),

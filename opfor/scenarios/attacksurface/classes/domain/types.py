@@ -269,6 +269,27 @@ class DnsEmailPosture:
 
 
 @dataclass(frozen=True, kw_only=True)
+class TlsPosture:
+    """The TLS certificate and protocol posture of a host on 443. `reachable` is False when no
+    address answered on 443 or the port speaks no TLS, a real negative, not a finding. `valid`
+    is True when the certificate verified for the host, chain trusted, hostname matched, and
+    not expired, and `validity_error` names the reason when it did not, an expired, self-signed,
+    or mismatched certificate. `days_to_expiry` is negative when already expired and None when
+    unread. `protocol` and `cipher` are what a modern client negotiated. Each is a raw fact,
+    whether an expiring or untrusted certificate rises to a finding is triage's judgment."""
+
+    host: str
+    reachable: bool = False
+    reason: str = ""
+    valid: bool = False
+    validity_error: str = ""
+    not_after: str = ""
+    days_to_expiry: int | None = None
+    protocol: str = ""
+    cipher: str = ""
+
+
+@dataclass(frozen=True, kw_only=True)
 class CVE:
     """One known vulnerability record from a public database. `cvss` and `severity` are the
     published score, kept as raw facts, whether the CVE truly applies to the exposed surface

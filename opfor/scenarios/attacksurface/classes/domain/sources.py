@@ -21,6 +21,7 @@ from opfor.scenarios.attacksurface.classes.domain.http import (
     http_probe,
     public_addresses,
     resolve_host,
+    tls_probe,
 )
 from opfor.scenarios.attacksurface.classes.domain.passive import (
     Enumeration,

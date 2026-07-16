@@ -817,6 +817,76 @@ def test_signal_headers_capture_security_headers_complete_past_the_identificatio
     assert captured["x-frame-options"] == "DENY"
 
 
+def test_tls_probe_reports_a_valid_certificate_with_its_expiry(monkeypatch):
+    from opfor.scenarios.attacksurface.classes.domain import http as domains
+
+    def connect(name, ip, context):
+        return ({"notAfter": "Jun  1 12:00:00 2099 GMT"}, "TLSv1.3",
+                ("TLS_AES_256_GCM_SHA384", "TLSv1.3", 256))
+
+    monkeypatch.setattr(domains, "_tls_connect", connect)
+    out = domains.tls_probe("h.example.com", ("1.2.3.4",))
+    assert out["reachable"] and out["valid"]
+    assert out["protocol"] == "TLSv1.3"
+    assert out["days_to_expiry"] > 0
+
+
+def test_tls_probe_reports_an_untrusted_certificate_as_reachable_but_invalid(monkeypatch):
+    import ssl
+    from opfor.scenarios.attacksurface.classes.domain import http as domains
+
+    def connect(name, ip, context):
+        # the verifying context raises on a bad cert, the unverified reconnect still reads the
+        # protocol, so a reached host with a bad certificate is not mistaken for unreachable
+        if context.verify_mode == ssl.CERT_REQUIRED:
+            err = ssl.SSLCertVerificationError("self-signed certificate in certificate chain")
+            err.verify_message = "self-signed certificate in certificate chain"
+            raise err
+        return ({}, "TLSv1.2", ("ECDHE-RSA-AES128-GCM-SHA256", "TLSv1.2", 128))
+
+    monkeypatch.setattr(domains, "_tls_connect", connect)
+    out = domains.tls_probe("h.example.com", ("1.2.3.4",))
+    assert out["reachable"] and not out["valid"]
+    assert "self-signed" in out["validity_error"]
+    assert out["protocol"] == "TLSv1.2"
+
+
+def test_tls_probe_is_a_clean_not_reachable_when_the_port_does_not_answer(monkeypatch):
+    from opfor.scenarios.attacksurface.classes.domain import http as domains
+
+    assert domains.tls_probe("h.example.com", ("10.0.0.1",))["reason"] == "no-public-address"
+
+    def refuse(name, ip, context):
+        raise OSError("connection refused")
+
+    monkeypatch.setattr(domains, "_tls_connect", refuse)
+    out = domains.tls_probe("h.example.com", ("1.2.3.4",))
+    assert out["reachable"] is False
+
+
+def test_tls_capability_reports_posture_and_fails_loud_on_error():
+    from opfor.core import Done, Failed, Node, Task, World
+    from opfor.scenarios.attacksurface.classes.domain.capabilities.tls import TlsSecurity
+    from opfor.scenarios.attacksurface.classes.domain.types import DomainData
+
+    world = World()
+    world.add(Node(id="domain:h.example.com", type="domain",
+                   payload=DomainData(name="h.example.com", root="example.com", source="hint")))
+    task = Task(capability="tls", node="domain:h.example.com", scope_host="h.example.com")
+
+    ok = TlsSecurity(lambda n, a: {"reachable": True, "valid": False,
+                                   "validity_error": "certificate has expired"})
+    out = ok.run(task, world)
+    assert isinstance(out, Done)
+    assert out.facts[0].payload.valid is False
+    assert "expired" in out.facts[0].payload.validity_error
+
+    def boom(name, addresses):
+        raise RuntimeError("tls down")
+
+    assert isinstance(TlsSecurity(boom).run(task, world), Failed)
+
+
 def test_signal_headers_keep_cookie_flags_but_drop_the_secret_value():
     from opfor.scenarios.attacksurface.classes.domain import http as domains
 

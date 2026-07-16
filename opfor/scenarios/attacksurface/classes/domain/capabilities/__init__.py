@@ -27,6 +27,7 @@ from opfor.scenarios.attacksurface.classes.domain.capabilities.specs import (
     ProbeSpec,
 )
 from opfor.scenarios.attacksurface.classes.domain.capabilities.storage import BucketScan
+from opfor.scenarios.attacksurface.classes.domain.capabilities.tls import TlsSecurity
 
 __all__ = [
     "BackupScan",
@@ -46,4 +47,5 @@ __all__ = [
     "SecretScan",
     "SourceMapScan",
     "Subdomains",
+    "TlsSecurity",
 ]

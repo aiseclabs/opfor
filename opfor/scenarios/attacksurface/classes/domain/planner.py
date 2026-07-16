@@ -91,6 +91,18 @@ def _live_domains(world: World) -> list:
     return live
 
 
+def _tls_rule(world: World) -> list[Task]:
+    """Read the TLS posture of every live host once. It runs on hosts that answered HTTP, so a
+    name that serves nothing is not probed, and touching the target's port is a scoped act, so
+    the task carries the host for scope."""
+    tasks: list[Task] = []
+    for node in _live_domains(world):
+        if world.has_fact(node.id, "tls"):
+            continue
+        tasks.append(Task(capability="tls", node=node.id, scope_host=node.payload.name))
+    return tasks
+
+
 def _http_rule(world: World) -> list[Task]:
     """Probe every resolvable domain that has no HTTP fact yet.
 
@@ -313,6 +325,7 @@ def enrich_rules(config: DomainPlanConfig, *, with_cve: bool = False):
         each("domain", run="dns_email", unless_fact="dns_email",
              where=lambda p: p.name == p.root),
         _http_rule,
+        _tls_rule,
         _harvest_rule,
         lambda world: _endpoints_rule(world, config),
         _spec_rule,

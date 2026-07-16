@@ -142,6 +142,17 @@ class SurfaceRenderer:
             for hit in backups.payload.hits:
                 line += (f"\n  backup file: {hit.url}, HTTP {hit.status}, "
                          f"{hit.content_type or 'unknown type'}, {hit.size} bytes")
+        tls = world.latest("tls", node.id)
+        if tls is not None and tls.payload.reachable:
+            t = tls.payload
+            if t.valid:
+                expiry = f", expires {t.not_after}" if t.not_after else ""
+                days = f" ({t.days_to_expiry} days)" if t.days_to_expiry is not None else ""
+                status = f"valid{expiry}{days}"
+            else:
+                status = f"INVALID, {t.validity_error or 'certificate did not verify'}"
+            protocol = f"; protocol {t.protocol}" if t.protocol else ""
+            line += f"\n  TLS certificate: {status}{protocol}"
         if dns_email is not None:
             p = dns_email.payload
             spf = "; ".join(p.spf) if p.spf else "absent"

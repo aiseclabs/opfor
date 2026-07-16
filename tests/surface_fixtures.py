@@ -216,6 +216,12 @@ def _tls(name, addresses=()):
             "days_to_expiry": 300, "protocol": "TLSv1.3", "cipher": "TLS_AES_256_GCM_SHA384"}
 
 
+def _ports(name, addresses=()):
+    # By default a host exposes no sensitive service port, so the scan is a quiet clean result.
+    # A test overrides this seam to drive an exposed database or management service.
+    return {"reachable": True, "scanned": 24, "open": []}
+
+
 def _make(**over):
     """Build the scenario with every seam faked, so no test touches the network or the
     model. A MockProvider stands in for the triage model, returning an empty result by
@@ -224,7 +230,7 @@ def _make(**over):
     seams = dict(search_fn=_search, repos_fn=_repos, enumerate_fn=_enumerate, pivot_fn=_pivot,
                  resolve_fn=_resolve, probe_fn=_probe, fetch_fn=_fetch, fetch_doc_fn=_fetch_doc,
                  introspect_fn=_introspect, wayback_fn=_wayback, identify_fn=_identify, cve_fn=_cves,
-                 probe_url_fn=_probe_url, dns_fn=_dns, tls_fn=_tls)
+                 probe_url_fn=_probe_url, dns_fn=_dns, tls_fn=_tls, ports_fn=_ports)
     seams.update(over)
     seams.setdefault("provider", MockProvider(default='{"findings": []}'))
     seams.setdefault("model", "test-model")
@@ -328,6 +334,7 @@ __all__ = [
     '_probe_url',
     '_dns',
     '_tls',
+    '_ports',
     '_make',
     '_scenario',
     '_seed',

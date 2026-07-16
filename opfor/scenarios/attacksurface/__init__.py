@@ -107,6 +107,7 @@ def build(
     probe_url_fn=domain_src.fetch_public_url,
     dns_fn=domain_src.dns_email_posture,
     tls_fn=domain_src.tls_probe,
+    ports_fn=domain_src.port_scan,
     identify_fn=None,
     cve_fn=domain_src.nvd_cves,
     provider: Provider | None = None,
@@ -148,7 +149,7 @@ def build(
                         probe_fn=probe_fn, fetch_fn=fetch_fn, fetch_doc_fn=fetch_doc_fn,
                         introspect_fn=introspect_fn, wayback_fn=wayback_fn,
                         probe_url_fn=probe_url_fn, dns_fn=dns_fn, tls_fn=tls_fn,
-                        reverse_whois_fn=reverse_whois_fn,
+                        ports_fn=ports_fn, reverse_whois_fn=reverse_whois_fn,
                         identify_fn=identify_fn, cve_fn=cve_fn),
         github.assemble(search_fn=search_fn, repos_fn=repos_fn),
     ]

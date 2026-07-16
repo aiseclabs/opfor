@@ -91,6 +91,23 @@ def _live_domains(world: World) -> list:
     return live
 
 
+def _port_rule(world: World) -> list[Task]:
+    """Scan each resolvable host's sensitive service ports once. It runs on hosts that resolved
+    to an address, since a backend service host need not answer HTTP, and touching the target's
+    ports is a probe-tier scoped act, so the task carries the host for scope. Scope retires it
+    unauthorized until the operator raises the tier to probe, so a default recon run does not
+    port-scan, it only notes that it was skipped."""
+    tasks: list[Task] = []
+    for node in world.nodes("domain"):
+        resolved = world.latest("resolved", node.id)
+        if resolved is None or not resolved.payload.resolvable:
+            continue
+        if world.has_fact(node.id, "ports"):
+            continue
+        tasks.append(Task(capability="port_scan", node=node.id, scope_host=node.payload.name))
+    return tasks
+
+
 def _tls_rule(world: World) -> list[Task]:
     """Read the TLS posture of every live host once. It runs on hosts that answered HTTP, so a
     name that serves nothing is not probed, and touching the target's port is a scoped act, so
@@ -345,6 +362,7 @@ def enrich_rules(config: DomainPlanConfig, *, with_cve: bool = False):
              where=lambda p: p.name == p.root),
         _http_rule,
         _tls_rule,
+        _port_rule,
         _harvest_rule,
         lambda world: _endpoints_rule(world, config),
         _spec_rule,

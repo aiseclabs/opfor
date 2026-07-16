@@ -269,6 +269,31 @@ class DnsEmailPosture:
 
 
 @dataclass(frozen=True, kw_only=True)
+class OpenPort:
+    """One open service port found on a host. `service` is the well-known service for the port
+    number, `banner` is a short sanitized greeting the service volunteered, empty when it sent
+    none. Whether the exposure is a finding is triage's judgment, this is the raw fact."""
+
+    port: int
+    service: str = ""
+    banner: str = ""
+
+
+@dataclass(frozen=True, kw_only=True)
+class PortScan:
+    """The open service ports found on a host. `reachable` is False when the host had no public
+    address, a real negative. `scanned` is how many ports were probed, so an empty `open` reads
+    as a real no-exposure result rather than a scan that did not run, invariant 5. The scan
+    covers a curated set of sensitive non-web ports, not every port."""
+
+    host: str
+    reachable: bool = False
+    reason: str = ""
+    scanned: int = 0
+    open_ports: tuple[OpenPort, ...] = ()
+
+
+@dataclass(frozen=True, kw_only=True)
 class TlsPosture:
     """The TLS certificate and protocol posture of a host on 443. `reachable` is False when no
     address answered on 443 or the port speaks no TLS, a real negative, not a finding. `valid`

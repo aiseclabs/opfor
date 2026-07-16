@@ -17,6 +17,7 @@ from opfor.scenarios.attacksurface.classes.domain.http import (
     fetch_url,
     graphql_introspect,
     http_probe,
+    port_scan,
     public_addresses,
     resolve_host,
     tls_probe,

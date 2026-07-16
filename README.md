@@ -7,9 +7,10 @@
  ╚═════╝ ╚═╝     ╚═╝      ╚═════╝ ╚═╝  ╚═╝
 ```
 
-A universal offensive-security engine. One generic engine drives every scenario,
-web, internal network, AI agents, phishing. You change scenario by swapping data,
-plugins, and knowledge, never by editing the engine.
+AI-assisted offensive-security engine for reconnaissance and attack-surface mapping.
+
+One generic engine drives every scenario, web, internal network, AI agents, phishing.
+You change scenario by swapping data, plugins, and knowledge, never by editing the engine.
 
 opfor mirrors codejury's "generic engine, knowledge as data" decoupling. The
 difference is that codejury reads code and judges, while opfor acts on live

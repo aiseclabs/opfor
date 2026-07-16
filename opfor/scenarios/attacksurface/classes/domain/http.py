@@ -353,8 +353,20 @@ _NOISE_HEADERS = frozenset((
     "date", "content-length", "content-type", "connection", "keep-alive",
     "transfer-encoding", "accept-ranges", "cache-control", "expires", "age", "vary",
     "etag", "last-modified", "content-encoding", "content-language", "pragma",
-    "alt-svc", "report-to", "nel", "strict-transport-security", "content-security-policy",
+    "alt-svc", "report-to", "nel",
 ))
+# The response security headers whose presence, value, or absence is a finding. Kept out of
+# the noise set so they are captured, and kept complete past the identification cap by
+# `_signal_headers`, so the surface report states the full set a host sets and triage reads a
+# missing one as genuinely absent rather than dropped to bound the prompt.
+SECURITY_HEADERS = (
+    "strict-transport-security",
+    "content-security-policy",
+    "x-frame-options",
+    "x-content-type-options",
+    "referrer-policy",
+    "permissions-policy",
+)
 _MAX_HEADERS = 24
 _MAX_HEADER_VALUE = 160
 
@@ -362,9 +374,12 @@ _MAX_HEADER_VALUE = 160
 def _signal_headers(resp) -> tuple:
     """The response headers worth keeping for identification, name lowercased and value
     bounded. A `set-cookie` is reduced to its cookie name, since the name is signal and the
-    value is a secret. Noise headers are dropped, everything else a server volunteers is
-    kept for the model to judge."""
-    out: list[tuple[str, str]] = []
+    value is a secret. Noise headers are dropped, everything else a server volunteers is kept
+    for the model to judge. The security headers are always kept, ahead of the identification
+    cap, so triage sees the complete set a host sets and reads an absent one as genuinely
+    absent rather than one dropped to bound the prompt."""
+    security: list[tuple[str, str]] = []
+    other: list[tuple[str, str]] = []
     for raw_name, raw_value in resp.getheaders():
         name = str(raw_name).strip().lower()
         if name in _NOISE_HEADERS:
@@ -372,10 +387,9 @@ def _signal_headers(resp) -> tuple:
         value = str(raw_value).strip()
         if name == "set-cookie":
             value = value.split("=", 1)[0].strip()
-        out.append((name, value[:_MAX_HEADER_VALUE]))
-        if len(out) >= _MAX_HEADERS:
-            break
-    return tuple(out)
+        pair = (name, value[:_MAX_HEADER_VALUE])
+        (security if name in SECURITY_HEADERS else other).append(pair)
+    return tuple(security + other[:max(0, _MAX_HEADERS - len(security))])
 
 
 _READ_CHUNK = 65536

@@ -794,6 +794,27 @@ def test_fetch_public_url_is_loud_on_the_unexpected_and_names_unreachable(monkey
     assert domains.fetch_public_url("https://bucket.example.com/")["reason"] == "unreachable"
 
 
+def test_signal_headers_capture_security_headers_complete_past_the_identification_cap():
+    from opfor.scenarios.attacksurface.classes.domain import http as domains
+
+    # a wall of non-security headers beyond the identification cap, with the security family
+    # arriving last, so a naive cap would drop them and triage could not tell absent from cut
+    noise = [(f"x-app-{i}", "v") for i in range(40)]
+    headers = noise + [("Strict-Transport-Security", "max-age=63072000"),
+                       ("Content-Security-Policy", "default-src 'self'"),
+                       ("X-Frame-Options", "DENY")]
+
+    class Resp:
+        def getheaders(self):
+            return headers
+
+    captured = dict(domains._signal_headers(Resp()))
+    # HSTS and CSP are no longer dropped as noise, and every security header survives the cap
+    assert captured["strict-transport-security"] == "max-age=63072000"
+    assert captured["content-security-policy"] == "default-src 'self'"
+    assert captured["x-frame-options"] == "DENY"
+
+
 def test_graphql_introspection_raises_on_a_server_error(monkeypatch):
     from opfor.scenarios.attacksurface.classes.domain import http as domains
     monkeypatch.setattr(domains, "resolve_host", lambda n: {"addresses": ("2.2.2.2",)})

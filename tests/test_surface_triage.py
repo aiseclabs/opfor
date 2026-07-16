@@ -410,6 +410,35 @@ def test_adversarial_mode_wires_the_roles_from_the_env(monkeypatch):
     assert sc.triage._challenger_model == "challenger-model"
 
 
+def test_missing_security_headers_are_surfaced_and_the_class_is_selected():
+    # the fixture hosts set no security headers, so the posture line lists them all as not set
+    # and the knowledge class is selected by the trigger the line carries, so the judge is
+    # asked to weigh the omission rather than a keyword rule deciding in code
+    _, sc, _ = _run_capturing()
+    prompt = _prompt(sc)
+    assert "security response headers set: none" in prompt
+    assert "not set: strict-transport-security" in prompt
+    assert "Missing Security Response Header" in _knowledge(sc)
+
+
+def test_render_lists_present_security_headers_as_set_and_omits_them_from_missing():
+    from opfor.core import Fact
+    from opfor.scenarios.attacksurface.classes.domain.types import DomainData, HTTP as HTTPData
+    from opfor.scenarios.attacksurface.render import SurfaceRenderer
+
+    world = World()
+    world.add(Node(id="domain:h.example.com", type="domain",
+                   payload=DomainData(name="h.example.com", root="example.com", source="hint")))
+    world.absorb((Fact(kind="http", about="domain:h.example.com",
+                       payload=HTTPData(alive=True, status=200, url="https://h.example.com/",
+                                        headers=(("strict-transport-security", "max-age=31536000"),
+                                                 ("x-frame-options", "DENY")))),))
+    text = "\n".join(SurfaceRenderer([], []).units(world))
+    assert "security response headers set: strict-transport-security, x-frame-options" in text
+    # a header that is set is never listed as missing
+    assert "not set: content-security-policy, x-content-type-options, referrer-policy, permissions-policy" in text
+
+
 def test_system_prompts_frame_target_text_as_untrusted():
     from opfor.scenarios.attacksurface import confirm as confirm_mod
     from opfor.scenarios.attacksurface import triage as triage_mod

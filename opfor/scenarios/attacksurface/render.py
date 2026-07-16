@@ -11,6 +11,7 @@ from __future__ import annotations
 from urllib.parse import urlparse
 
 from opfor.core import World
+from opfor.scenarios.attacksurface.classes.domain.http import SECURITY_HEADERS
 
 _MAX_BODY = 600
 _MAX_LIST = 40
@@ -81,6 +82,16 @@ class SurfaceRenderer:
                 bits.append(f"redirect to {http_data.location}")
             for header_name, header_value in http_data.headers:
                 bits.append(f"header {header_name}: {header_value}")
+            # A deterministic posture line, so the judge sees which recommended security
+            # headers the host sets and which it omits. The captured set is complete, so a
+            # header not listed as set is genuinely absent, not merely dropped to bound the
+            # prompt. Whether an omission rises to a finding on this host is triage's call.
+            present = {name for name, _ in http_data.headers if name in SECURITY_HEADERS}
+            missing = [h for h in SECURITY_HEADERS if h not in present]
+            bits.append("security response headers set: "
+                        + (", ".join(sorted(present)) if present else "none"))
+            if missing:
+                bits.append("not set: " + ", ".join(missing))
         if dangling:
             bits.append("does not resolve, seen only passively")
         if resolved_data is not None and resolved_data.cnames:

@@ -57,6 +57,40 @@ def _payloads() -> dict[str, type]:
 _DEFAULT = object()
 
 
+def _resolve_provider(provider, model):
+    """The triage provider and model, built from the environment when the caller passed none,
+    keyless on the operator's Claude Code subscription by default. The model falls back to the
+    env-backed default. Read at build so a changed environment is seen, see the registry."""
+    if provider is None:
+        provider = make_provider()
+    return provider, model or default_model()
+
+
+def _adversarial_roles(provider, model, challenger, challenger_model, judge, judge_model):
+    """The challenger and judge roles for triage. In adversarial mode a challenger refutes
+    each finding and a judge breaks the tie, so a false positive must survive a skeptic. The
+    roles reuse the base provider by default with a per-role model override, and a caller may
+    inject its own. Standard mode leaves them off, the recall-safe single-model default."""
+    if triage_mode() != "adversarial":
+        return challenger, challenger_model, judge, judge_model
+    if challenger is None:
+        challenger, challenger_model = provider, role_model("challenger", model)
+    if judge is None:
+        judge, judge_model = provider, role_model("judge", model)
+    return challenger, challenger_model, judge, judge_model
+
+
+def _terminal_phase(*, reproduce, confirm):
+    """The phase a run stops at, TRIAGE by default. Confirm regrades findings against the
+    reproduction receipts the EXPLOIT phase records, so confirm implies reproduce and rises to
+    CONFIRM, while a bare reproduce rises to EXPLOIT for the read-only replay."""
+    if confirm:
+        return Phase.CONFIRM
+    if reproduce:
+        return Phase.EXPLOIT
+    return Phase.TRIAGE
+
+
 def build(
     *,
     search_fn=github_src.search_orgs,
@@ -91,12 +125,9 @@ def build(
     if reverse_whois_fn is _DEFAULT:
         reverse_whois_fn = domain_src.reverse_whois if config.reverse_whois_key() else None
 
-    # Triage is model-backed. Build the provider the environment selects, keyless on the
-    # operator's Claude Code subscription by default, and let a test inject its own. The
-    # model name defaults to the env-backed default.
-    if provider is None:
-        provider = make_provider()
-    model = model or default_model()
+    # Triage is model-backed. Build the provider and model the environment selects, keyless on
+    # the operator's Claude Code subscription by default, and let a test inject its own.
+    provider, model = _resolve_provider(provider, model)
 
     # The CVE scan identifies a host's product with the model, then looks the version up.
     # The identify seam is model-backed, wired from the same provider by default, so the
@@ -106,15 +137,8 @@ def build(
         def identify_fn(evidence):
             return identify.identify_service(provider, model, evidence)
 
-    # In adversarial mode a challenger refutes each finding and a judge breaks the tie, so a
-    # false positive needs the model to survive a skeptic. The roles reuse the base provider
-    # by default, with a per-role model override, and a test wires its own. Standard mode
-    # leaves them off, the recall-safe single-model default.
-    if triage_mode() == "adversarial":
-        if challenger is None:
-            challenger, challenger_model = provider, role_model("challenger", model)
-        if judge is None:
-            judge, judge_model = provider, role_model("judge", model)
+    challenger, challenger_model, judge, judge_model = _adversarial_roles(
+        provider, model, challenger, challenger_model, judge, judge_model)
 
     # The asset classes the scenario is built from. Each returns a bundle, its capabilities
     # and rules plus the knowledge its triage reads. The scenario concatenates them and
@@ -134,8 +158,7 @@ def build(
     knowledge_dirs = [bundle.knowledge_dir for bundle in bundles if bundle.knowledge_dir]
 
     # Confirm regrades findings against the reproduction receipts, so it needs the receipts
-    # the EXPLOIT phase records, so confirm implies reproduce. The terminal rises to EXPLOIT
-    # for a bare reproduce and to CONFIRM when the confirm regrade is asked for.
+    # the EXPLOIT phase records, so confirm implies reproduce.
     reproduce = reproduce or confirm
 
     # The read-only reproduce step and its rule are always registered but dormant, the
@@ -144,11 +167,7 @@ def build(
     capabilities = capabilities + (ReproduceFinding(reproduce_fetch_fn),)
     rules = {Phase.MAP: map_rules, Phase.ENRICH: enrich_rules, Phase.EXPLOIT: [reproduce_rule]}
 
-    terminal = Phase.TRIAGE
-    if reproduce:
-        terminal = Phase.EXPLOIT
-    if confirm:
-        terminal = Phase.CONFIRM
+    terminal = _terminal_phase(reproduce=reproduce, confirm=confirm)
 
     return Scenario(
         name=NAME,

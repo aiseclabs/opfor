@@ -227,8 +227,10 @@ def test_signal_headers_keeps_identity_drops_noise_and_masks_cookie_value():
     assert hdrs["www-authenticate"] == "Bearer realm=x"
     assert hdrs["server"] == "nginx"
     assert "date" not in hdrs and "content-length" not in hdrs
-    # a cookie is reduced to its name, the value is a secret and is dropped
-    assert hdrs["set-cookie"] == "_gitlab_session"
+    # a cookie keeps its name and attributes so the flags stay visible, but the value is a
+    # secret and is dropped
+    assert hdrs["set-cookie"] == "_gitlab_session; Path=/"
+    assert "secretvalue" not in hdrs["set-cookie"]
 
 
 def test_github_org_is_info_inventory():
@@ -813,6 +815,21 @@ def test_signal_headers_capture_security_headers_complete_past_the_identificatio
     assert captured["strict-transport-security"] == "max-age=63072000"
     assert captured["content-security-policy"] == "default-src 'self'"
     assert captured["x-frame-options"] == "DENY"
+
+
+def test_signal_headers_keep_cookie_flags_but_drop_the_secret_value():
+    from opfor.scenarios.attacksurface.classes.domain import http as domains
+
+    class Resp:
+        def getheaders(self):
+            return [("Set-Cookie", "sid=SECRETVALUE; Path=/; Secure; HttpOnly; SameSite=Lax"),
+                    ("Set-Cookie", "tracker=xyztoken")]
+
+    cookies = [v for n, v in domains._signal_headers(Resp()) if n == "set-cookie"]
+    # the flags survive so triage can judge them, but the secret value never enters the report
+    assert "sid; Path=/; Secure; HttpOnly; SameSite=Lax" in cookies
+    assert "tracker" in cookies
+    assert all("SECRETVALUE" not in v and "xyztoken" not in v for v in cookies)
 
 
 def test_dns_email_posture_reads_spf_dmarc_caa_and_dnssec(monkeypatch):

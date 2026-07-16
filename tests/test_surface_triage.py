@@ -439,6 +439,21 @@ def test_render_lists_present_security_headers_as_set_and_omits_them_from_missin
     assert "not set: content-security-policy, x-content-type-options, referrer-policy, permissions-policy" in text
 
 
+def test_insecure_cookie_flags_are_surfaced_and_the_class_is_selected():
+    # a session cookie set without Secure or HttpOnly, added to whichever hosts the fixture
+    # already reports alive, so aliveness is unchanged and only the cookie posture is new
+    def probe(name, addresses=()):
+        result = _probe(name, addresses)
+        if result.get("alive"):
+            return {**result, "headers": (("set-cookie", "sid; Path=/"),)}
+        return result
+
+    _, sc, _ = _run_capturing(probe_fn=probe)
+    prompt = _prompt(sc)
+    assert "set-cookie: sid; Path=/" in prompt
+    assert "Insecure Cookie Flags" in _knowledge(sc)
+
+
 def test_dns_email_posture_is_read_on_roots_only_and_surfaced_for_the_judge():
     _, sc, world = _run_capturing()
     # the root carries the posture fact, and email authentication is a root property, so a

@@ -441,11 +441,12 @@ _MAX_HEADER_VALUE = 160
 
 def _signal_headers(resp) -> tuple:
     """The response headers worth keeping for identification, name lowercased and value
-    bounded. A `set-cookie` is reduced to its cookie name, since the name is signal and the
-    value is a secret. Noise headers are dropped, everything else a server volunteers is kept
-    for the model to judge. The security headers are always kept, ahead of the identification
-    cap, so triage sees the complete set a host sets and reads an absent one as genuinely
-    absent rather than one dropped to bound the prompt."""
+    bounded. A `set-cookie` is reduced to its cookie name and attributes with the value
+    dropped, so its Secure, HttpOnly, and SameSite flags stay visible for triage while the
+    secret value never enters the report. Noise headers are dropped, everything else a server
+    volunteers is kept for the model to judge. The security headers are always kept, ahead of
+    the identification cap, so triage sees the complete set a host sets and reads an absent one
+    as genuinely absent rather than one dropped to bound the prompt."""
     security: list[tuple[str, str]] = []
     other: list[tuple[str, str]] = []
     for raw_name, raw_value in resp.getheaders():
@@ -454,10 +455,22 @@ def _signal_headers(resp) -> tuple:
             continue
         value = str(raw_value).strip()
         if name == "set-cookie":
-            value = value.split("=", 1)[0].strip()
+            value = _redact_cookie(value)
         pair = (name, value[:_MAX_HEADER_VALUE])
         (security if name in SECURITY_HEADERS else other).append(pair)
     return tuple(security + other[:max(0, _MAX_HEADERS - len(security))])
+
+
+def _redact_cookie(value: str) -> str:
+    """A Set-Cookie reduced to its cookie name and attributes, dropping the value. The value
+    is the secret, so it never enters the report, while the name and the Secure, HttpOnly, and
+    SameSite attributes stay so triage can judge whether a cookie is set safely. A flag not
+    listed here is genuinely absent on the cookie, since every attribute but the value is
+    kept."""
+    parts = [segment.strip() for segment in value.split(";")]
+    name = parts[0].split("=", 1)[0].strip() if parts else ""
+    attributes = [segment for segment in parts[1:] if segment]
+    return "; ".join([name] + attributes) if name else "; ".join(attributes)
 
 
 _READ_CHUNK = 65536

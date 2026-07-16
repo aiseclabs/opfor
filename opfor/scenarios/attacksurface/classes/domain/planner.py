@@ -152,15 +152,33 @@ def _harvest_rule(world: World) -> list[Task]:
     return tasks
 
 
-def _endpoints_rule(world: World, config: DomainPlanConfig) -> list[Task]:
-    """Enumerate interfaces on every live domain, once every live host is harvested.
+def _permute_paths_rule(world: World) -> list[Task]:
+    """Derive principled path candidates on every live host once it is harvested, before the
+    interface probe runs, so the probe confirms them against the host's catch-all baseline.
+    Gated on the host's harvested fact so it permutes observed paths, and on its own fact so it
+    runs once. It reads only gathered paths and makes no request, so it needs no scope host."""
+    tasks: list[Task] = []
+    for node in _live_domains(world):
+        if not world.has_fact(node.id, "harvested"):
+            continue
+        if world.has_fact(node.id, "path_permuted"):
+            continue
+        tasks.append(Task(capability="domain_permute_paths", node=node.id))
+    return tasks
 
-    The barrier holds probing until harvesting is done across all hosts, so a cross-host
-    candidate has landed on its target before that target is probed. Each task carries the
-    domain name for scope and the knowledge path list for the capability.
+
+def _endpoints_rule(world: World, config: DomainPlanConfig) -> list[Task]:
+    """Enumerate interfaces on every live domain, once every live host is harvested and its
+    observed paths permuted.
+
+    The barrier holds probing until harvesting and permutation are done across all hosts, so a
+    cross-host candidate and a derived path have both landed on their target before it is
+    probed. Each task carries the domain name for scope and the knowledge path list.
     """
     live = _live_domains(world)
     if any(not world.has_fact(node.id, "harvested") for node in live):
+        return []
+    if any(not world.has_fact(node.id, "path_permuted") for node in live):
         return []
     tasks: list[Task] = []
     for node in live:
@@ -364,6 +382,7 @@ def enrich_rules(config: DomainPlanConfig, *, with_cve: bool = False):
         _tls_rule,
         _port_rule,
         _harvest_rule,
+        _permute_paths_rule,
         lambda world: _endpoints_rule(world, config),
         _spec_rule,
         _spec_probe_rule,

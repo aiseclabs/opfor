@@ -197,3 +197,29 @@ def backup_candidates(path: str, *, append=(), rename=(), swap=()) -> list[str]:
             seen.add(candidate)
             result.append(candidate)
     return result
+
+
+_VERSION_SEGMENT = re.compile(r"^v(\d+)$")
+
+
+def path_permutations(paths) -> list[str]:
+    """Candidate paths derived only from observed paths, so content discovery extends the seen
+    surface rather than guessing from a dictionary. For each observed path it derives the parent
+    directories, where a listing above a known file would show, and the version-bumped twins of
+    any `vN` segment, where an older or newer API version often sits less guarded. A path already
+    observed is dropped. Principled permutation of evidence, never a blind wordlist."""
+    observed = {p for p in paths if isinstance(p, str) and p.startswith("/")}
+    out: set[str] = set()
+    for path in observed:
+        parts = [p for p in path.split("/") if p]
+        for i in range(1, len(parts)):
+            out.add("/" + "/".join(parts[:i]) + "/")
+        for i, segment in enumerate(parts):
+            match = _VERSION_SEGMENT.match(segment)
+            if match is None:
+                continue
+            number = int(match.group(1))
+            twins = {f"v{number + 1}", f"v{number - 1}" if number > 0 else "v0"}
+            for alt in twins:
+                out.add("/" + "/".join(parts[:i] + [alt] + parts[i + 1:]))
+    return sorted(out - observed)

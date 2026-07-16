@@ -12,6 +12,7 @@ from opfor.scenarios.attacksurface.classes.domain.capabilities.common import (
     _is_static_asset,
     _safe,
 )
+from opfor.scenarios.attacksurface.classes.domain.parsers import path_permutations
 from opfor.scenarios.attacksurface.classes.domain.sources import (
     cloud_refs_in_text,
     paths_in_javascript,
@@ -160,6 +161,32 @@ class HarvestPaths(Capability):
             if path:
                 paths += _safe(lambda p=path: sitemap_paths(self._fetch_doc(name, p).get("text", ""), name)) or []
         return paths
+
+
+class PermutePaths(Capability):
+    """ENRICH: derive principled path candidates from a host's observed paths.
+
+    Harvesting names the paths a host reveals. This extends that set without a dictionary, it
+    derives the parent directories and version-bumped twins of the observed paths and records
+    them as candidates the interface probe then confirms against the host's catch-all baseline.
+    It reads only paths already gathered and makes no request, so it needs no scope host, the
+    probe that follows carries it. It runs once per host, between harvesting and enumeration.
+    """
+
+    name = "domain_permute_paths"
+    phase = Phase.ENRICH
+    osint = True
+
+    def run(self, task: Task, world: World) -> Outcome:
+        observed: list[str] = []
+        for fact in world.facts("candidates", task.node):
+            observed.extend(fact.payload.paths)
+        derived = path_permutations(observed)
+        facts = [Fact(kind="path_permuted", about=task.node)]
+        if derived:
+            facts.append(Fact(kind="candidates", about=task.node,
+                              payload=Candidates(source="permuted-path", paths=tuple(derived))))
+        return Done(facts=tuple(facts))
 
 
 class Endpoints(Capability):

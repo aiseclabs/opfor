@@ -21,6 +21,7 @@ from opfor.scenarios.attacksurface.classes.domain.capabilities.http import (
     Endpoints,
     HarvestPaths,
     HTTPDomain,
+    PermutePaths,
 )
 from opfor.scenarios.attacksurface.classes.domain.capabilities.ports import PortServices
 from opfor.scenarios.attacksurface.classes.domain.capabilities.specs import (
@@ -44,6 +45,7 @@ __all__ = [
     "GraphQLIntrospect",
     "HarvestPaths",
     "HTTPDomain",
+    "PermutePaths",
     "PermuteSubdomains",
     "PortServices",
     "ProbeSpec",

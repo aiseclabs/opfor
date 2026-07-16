@@ -464,6 +464,31 @@ def test_render_lists_present_security_headers_as_set_and_omits_them_from_missin
     assert "not set: content-security-policy, x-content-type-options, referrer-policy, permissions-policy" in text
 
 
+def test_directory_listing_body_raises_the_exposure_clue():
+    from opfor.scenarios.attacksurface.classes.domain import KNOWLEDGE
+    from opfor.scenarios.attacksurface.classes.domain.types import Endpoint
+    from opfor.scenarios.attacksurface.render import SurfaceRenderer
+    from opfor.scenarios.attacksurface.triage import _load_clues
+
+    clues = _load_clues(KNOWLEDGE / "exposures.yaml")
+    renderer = SurfaceRenderer(clues, [])
+    # a parent directory the permutation probed that answers with an autoindex listing
+    endpoint = Endpoint(url="https://h.example.com/uploads/", path="/uploads/", status=200,
+                        content_type="text/html", body="<title>index of /uploads</title>")
+    assert any("directory-listing" in clue for clue in renderer._exposure_clues(endpoint))
+
+
+def test_path_permutation_runs_between_harvest_and_endpoints_without_deadlock():
+    from opfor.core.result import CLOSED
+
+    report, _, world = _run_capturing()
+    # the permutation barrier released, so every live host carries the marker and the run closed
+    live = [n for n in world.nodes("domain")
+            if (h := world.latest("http", n.id)) is not None and h.payload.alive]
+    assert live and all(world.latest("path_permuted", n.id) is not None for n in live)
+    assert report.status == CLOSED
+
+
 def test_port_scan_is_gated_behind_the_probe_tier():
     from opfor.core import Scope
 

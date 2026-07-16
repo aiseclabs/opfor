@@ -873,6 +873,38 @@ def test_permute_subdomains_confirms_only_resolving_candidates_and_skips_a_wildc
     assert any(f.kind == "permuted" for f in out2.facts)
 
 
+def test_path_permutations_derive_parents_and_version_twins_from_observed_only():
+    from opfor.scenarios.attacksurface.classes.domain.parsers import path_permutations
+
+    got = path_permutations(["/api/v1/users", "/static/app.js"])
+    # parent directories of an observed path, where a listing above a known file would show
+    assert {"/api/", "/api/v1/", "/static/"} <= set(got)
+    # version-bumped twins of a vN segment, where an older or newer version often sits less guarded
+    assert "/api/v2/users" in got and "/api/v0/users" in got
+    # an observed path is never re-emitted, and nothing comes from outside the observed segments
+    assert "/api/v1/users" not in got and "/static/app.js" not in got
+    assert not any("admin" in p or "backup" in p for p in got)
+
+
+def test_permute_paths_capability_emits_derived_candidates_from_observed():
+    from opfor.core import Done, Fact, Node, Task, World
+    from opfor.scenarios.attacksurface.classes.domain.capabilities.http import PermutePaths
+    from opfor.scenarios.attacksurface.classes.domain.types import Candidates, DomainData
+
+    world = World()
+    world.add(Node(id="domain:h.example.com", type="domain",
+                   payload=DomainData(name="h.example.com", root="example.com", source="hint")))
+    world.absorb((Fact(kind="candidates", about="domain:h.example.com",
+                       payload=Candidates(source="harvest", paths=("/api/v1/users",))),))
+    out = PermutePaths().run(
+        Task(capability="domain_permute_paths", node="domain:h.example.com"), world)
+    assert isinstance(out, Done)
+    # the run-once marker plus a candidates fact the interface probe will confirm
+    assert any(f.kind == "path_permuted" for f in out.facts)
+    derived = [p for f in out.facts if f.kind == "candidates" for p in f.payload.paths]
+    assert "/api/" in derived and "/api/v2/users" in derived
+
+
 def test_permute_rule_waits_for_passive_enumeration_then_runs_once():
     from opfor.core import Fact, Node, World
     from opfor.scenarios.attacksurface.classes.domain.planner import _permute_rule

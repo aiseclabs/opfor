@@ -63,6 +63,44 @@ def test_checkpoint_preserves_scope_and_budget():
     assert revived.budget.max_steps == 50 and revived.budget.steps == 7
 
 
+def test_checkpoint_carries_its_schema_version_and_refuses_another():
+    import json
+
+    import pytest
+
+    from opfor.core.checkpoint import CHECKPOINT_VERSION
+
+    scenario = get_scenario("attacksurface")
+    state = RunState(scenario=scenario, world=World(),
+                     scope=Scope(max_tier="recon", hosts=("h",)),
+                     budget=Budget(50), ledger=Ledger(), reached=Phase.ENRICH)
+    blob = checkpoint(state).to_json()
+    assert json.loads(blob)["version"] == CHECKPOINT_VERSION
+
+    # a checkpoint from another schema version, or one written before versioning existed, is
+    # refused rather than resumed from a shape this build may misread
+    bumped = json.dumps({**json.loads(blob), "version": CHECKPOINT_VERSION + 1})
+    with pytest.raises(ValueError):
+        Checkpoint.from_json(bumped)
+    unversioned = json.dumps({k: v for k, v in json.loads(blob).items() if k != "version"})
+    with pytest.raises(ValueError):
+        Checkpoint.from_json(unversioned)
+
+
+def test_restore_refuses_a_checkpoint_for_a_different_scenario():
+    import pytest
+
+    scenario = get_scenario("attacksurface")
+    state = RunState(scenario=scenario, world=World(),
+                     scope=Scope(max_tier="recon", hosts=("h",)),
+                     budget=Budget(50), ledger=Ledger(), reached=Phase.ENRICH)
+    cp = Checkpoint.from_json(checkpoint(state).to_json())
+    # restoring into the mock scenario would decode payloads against the wrong registry, so the
+    # scenario name mismatch is refused loud
+    with pytest.raises(ValueError):
+        restore(cp, get_scenario("mock"))
+
+
 def test_durable_checkpoint_resumes_across_a_simulated_process_restart():
     from tests.test_engine import _async_scenario
 

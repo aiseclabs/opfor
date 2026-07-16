@@ -36,6 +36,11 @@ from opfor.core.world import Fact, Node, World
 # its class and the codec rebuilds it. The scenario supplies it through `Scenario.payloads`.
 Registry = Mapping[str, type]
 
+# The checkpoint schema version. A restore refuses a checkpoint written by another version
+# rather than rebuilding a run from a shape it may misread, so an incompatible or pre-versioning
+# format fails loud instead of resuming wrong. Bump this whenever the serialized shape changes.
+CHECKPOINT_VERSION = 1
+
 
 def _encode(value: Any) -> Any:
     """Encode a scenario payload to JSON-safe data. A dataclass becomes a dict tagged with its
@@ -127,9 +132,11 @@ class Checkpoint:
     findings: list[dict]
     nodes: list[dict]
     facts: list[dict]
+    version: int = CHECKPOINT_VERSION
 
     def to_json(self) -> str:
         return json.dumps({
+            "version": self.version,
             "scenario": self.scenario, "status": self.status, "reached": self.reached,
             "resume_from": self.resume_from, "done": list(self.done), "pending": self.pending,
             "budget": self.budget, "scope": self.scope, "notes": list(self.notes),
@@ -140,7 +147,14 @@ class Checkpoint:
     @classmethod
     def from_json(cls, text: str) -> "Checkpoint":
         data = json.loads(text)
+        version = data.get("version")
+        if version != CHECKPOINT_VERSION:
+            raise ValueError(
+                f"checkpoint schema version {version!r} is not supported, this build reads "
+                f"version {CHECKPOINT_VERSION}, so a checkpoint written by another version is "
+                "refused rather than resumed from a shape it may misread")
         return cls(
+            version=version,
             scenario=data["scenario"], status=data["status"], reached=data["reached"],
             resume_from=data["resume_from"], done=tuple(data["done"]), pending=data["pending"],
             budget=data["budget"], scope=data["scope"], notes=tuple(data["notes"]),
@@ -153,6 +167,7 @@ def checkpoint(state) -> Checkpoint:
     """Snapshot a suspended run's live state into a durable checkpoint. The engine imports this
     lazily to avoid a cycle, `RunState` lives in engine and this module reads only its fields."""
     return Checkpoint(
+        version=CHECKPOINT_VERSION,
         scenario=state.scenario.name,
         status="suspended",
         reached=state.reached.name,
@@ -176,6 +191,14 @@ def restore(cp: Checkpoint, scenario: Scenario):
     registry, so the resumed run reads the same typed world it parked on."""
     from opfor.core.capability import Task
     from opfor.core.engine import RunState
+
+    # The world is rebuilt through this scenario's payload registry, so restoring into the
+    # wrong scenario would decode payloads against the wrong classes. Refuse the mismatch loud
+    # rather than rebuild a run that reads as this scenario but was written by another.
+    if cp.scenario != scenario.name:
+        raise ValueError(
+            f"checkpoint is for scenario {cp.scenario!r} but the scenario to restore into is "
+            f"{scenario.name!r}, look up and rebuild the matching scenario before restoring")
 
     registry = scenario.payloads
     world = World()

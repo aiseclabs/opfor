@@ -741,6 +741,59 @@ def test_fetch_url_tries_every_public_address_not_only_the_first(monkeypatch):
     assert result["status"] == 200 and "2.2.2.2" in seen
 
 
+def test_fetch_seams_are_loud_on_the_unexpected_and_name_why_no_address_answered(monkeypatch):
+    from opfor.scenarios.attacksurface.classes.domain import http as domains
+
+    # every fetch seam shares the alive probe's contract: only a transport error is caught and
+    # continued past, an unexpected error is raised loud rather than swallowed as a null status.
+    def raise_bug(name, ip, scheme, path, **kw):
+        raise ValueError("bug")
+
+    monkeypatch.setattr(domains, "_connect", raise_bug)
+    monkeypatch.setattr(domains, "resolve_host", lambda n: {"addresses": ("2.2.2.2",)})
+    with pytest.raises(ValueError):
+        domains.fetch_url("h.example.com", ("2.2.2.2",), "/x")
+    with pytest.raises(ValueError):
+        domains.fetch_document("h.example.com", "/x")
+    with pytest.raises(ValueError):
+        domains.fetch_readonly("https://h.example.com/x")
+
+    # a transport error on every address is not a real absent path, it is a coverage gap, so
+    # the null status names the reason rather than leaving the caller to guess at a bare null
+    def timeout_all(name, ip, scheme, path, **kw):
+        raise TimeoutError()
+
+    monkeypatch.setattr(domains, "_connect", timeout_all)
+    assert domains.fetch_url("h.example.com", ("2.2.2.2",), "/x")["reason"] == "unreachable"
+    assert domains.fetch_document("h.example.com", "/x")["reason"] == "unreachable"
+    assert domains.fetch_readonly("https://h.example.com/x")["reason"] == "unreachable"
+
+    # a host with no public address is told apart from a host that had one but did not answer
+    monkeypatch.setattr(domains, "resolve_host", lambda n: {"addresses": ("10.0.0.1",)})
+    assert domains.fetch_url("h.example.com", ("10.0.0.1",), "/x")["reason"] == "no-public-address"
+    assert domains.fetch_document("h.example.com", "/x")["reason"] == "no-public-address"
+    assert domains.fetch_readonly("https://h.example.com/x")["reason"] == "no-public-address"
+
+
+def test_fetch_public_url_is_loud_on_the_unexpected_and_names_unreachable(monkeypatch):
+    from opfor.scenarios.attacksurface.classes.domain import http as domains
+
+    class BugOpener:
+        def open(self, *a, **k):
+            raise ValueError("bug")
+
+    monkeypatch.setattr(domains, "_NO_REDIRECT_OPENER", BugOpener())
+    with pytest.raises(ValueError):
+        domains.fetch_public_url("https://bucket.example.com/")
+
+    class DeadOpener:
+        def open(self, *a, **k):
+            raise ConnectionResetError()
+
+    monkeypatch.setattr(domains, "_NO_REDIRECT_OPENER", DeadOpener())
+    assert domains.fetch_public_url("https://bucket.example.com/")["reason"] == "unreachable"
+
+
 def test_graphql_introspection_raises_on_a_server_error(monkeypatch):
     from opfor.scenarios.attacksurface.classes.domain import http as domains
     monkeypatch.setattr(domains, "resolve_host", lambda n: {"addresses": ("2.2.2.2",)})

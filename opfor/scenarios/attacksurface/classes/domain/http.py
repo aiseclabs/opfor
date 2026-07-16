@@ -159,25 +159,33 @@ def fetch_url(name: str, addresses, path: str) -> dict:
 
     Every public address is tried, not only the first, the same way the alive probe does, so
     a host that answers on a later address is enriched rather than read as empty because its
-    first address is dead. A null status is returned only when no address answered on either
-    scheme, so the caller can tell a transport failure from a real absent path, invariant 5.
+    first address is dead. A null status is returned only when no address answered, and it
+    carries a `reason`, `no-public-address` or `unreachable`, so the caller tells a transport
+    failure from a real absent path, invariant 5. Only transport errors are caught, so an
+    unexpected error is raised loud rather than swallowed as a null status, the same loud
+    contract the alive probe keeps.
     """
     public = public_addresses(addresses)
     if not public:
-        return {"status": None, "url": f"https://{name}{path}", "content_type": "",
-                "server": "", "title": "", "body": ""}
+        return _no_url_answer(name, path, "no-public-address")
     for ip in public:
         for scheme in ("https", "http"):
             try:
                 status, server, content_type, body, location, _hdrs = _connect(name, ip, scheme, path)
-            except Exception:
+            except (OSError, http.client.HTTPException):
                 continue
             match = _TITLE.search(body)
             return {"status": status, "url": f"{scheme}://{name}{path}", "content_type": content_type,
                     "server": server, "title": match.group(1).strip()[:200] if match else "",
-                    "body": body.lower(), "location": location}
-    return {"status": None, "url": f"https://{name}{path}", "content_type": "",
-            "server": "", "title": "", "body": "", "location": ""}
+                    "body": body.lower(), "location": location, "reason": ""}
+    return _no_url_answer(name, path, "unreachable")
+
+
+def _no_url_answer(name: str, path: str, reason: str) -> dict:
+    """A null-status `fetch_url` result carrying why no address answered, so the shape is the
+    same as a real answer and the caller reads the reason rather than guessing at a bare null."""
+    return {"status": None, "url": f"https://{name}{path}", "content_type": "", "server": "",
+            "title": "", "body": "", "location": "", "reason": reason}
 
 
 _PUBLIC_URL_TIMEOUT = 10
@@ -189,8 +197,10 @@ def fetch_public_url(url: str) -> dict:
 
     A 403 or a 404 is a meaningful answer, the bucket exists but is private or it does not
     exist, so an HTTP error is captured as its status rather than raised. A connection error
-    returns a null status, so a single unreachable candidate is skipped by the caller rather
-    than failing the whole scan. It never sends a credential, so it reads only what is public.
+    returns a null status with an `unreachable` reason, so a single unreachable candidate is
+    skipped by the caller rather than failing the whole scan. Only transport errors are
+    caught, so an unexpected error is raised loud rather than swallowed as a null status. It
+    never sends a credential, so it reads only what is public.
     """
     request = urllib.request.Request(url, headers={"User-Agent": _UA})
     try:
@@ -199,16 +209,16 @@ def fetch_public_url(url: str) -> dict:
         with _NO_REDIRECT_OPENER.open(request, timeout=_PUBLIC_URL_TIMEOUT) as resp:
             body = resp.read(_PUBLIC_URL_BODY).decode("utf-8", "replace")
             return {"status": resp.status, "url": url,
-                    "content_type": resp.headers.get("Content-Type", ""), "body": body}
+                    "content_type": resp.headers.get("Content-Type", ""), "body": body, "reason": ""}
     except urllib.error.HTTPError as exc:
         try:
             body = exc.read(_PUBLIC_URL_BODY).decode("utf-8", "replace")
-        except Exception:
+        except (OSError, http.client.HTTPException):
             body = ""
         content_type = exc.headers.get("Content-Type", "") if exc.headers else ""
-        return {"status": exc.code, "url": url, "content_type": content_type, "body": body}
-    except Exception:
-        return {"status": None, "url": url, "content_type": "", "body": ""}
+        return {"status": exc.code, "url": url, "content_type": content_type, "body": body, "reason": ""}
+    except (OSError, http.client.HTTPException):
+        return {"status": None, "url": url, "content_type": "", "body": "", "reason": "unreachable"}
 
 
 # The read-only reproduce replay must never follow a redirect. Following one would chase a
@@ -237,7 +247,9 @@ def fetch_readonly(url: str) -> dict:
     other probe uses. The certificate is verified, so a man in the middle cannot feed the
     replay fabricated content. A redirect is captured raw with its Location, never followed,
     so an off-site or login redirect is recorded rather than chased. A host with no public
-    address, or one that does not answer, returns a null status.
+    address, or one that does not answer, returns a null status carrying why, `no-public-address`
+    or `unreachable`. Only transport errors are caught, a certificate that fails verification
+    among them, so an unexpected error is raised loud rather than swallowed as a null status.
     """
     parts = urllib.parse.urlsplit(url)
     host = parts.hostname or ""
@@ -245,19 +257,21 @@ def fetch_readonly(url: str) -> dict:
     path = parts.path or "/"
     if parts.query:
         path = f"{path}?{parts.query}"
-    empty = {"status": None, "url": url, "content_type": "", "location": "", "body": ""}
+    def empty(reason: str) -> dict:
+        return {"status": None, "url": url, "content_type": "", "location": "", "body": "",
+                "reason": reason}
     public = public_addresses(resolve_host(host).get("addresses", ()))
     if not public:
-        return empty
+        return empty("no-public-address")
     for ip in public:
         try:
             status, _server, content_type, body, location, _headers = _connect(
                 host, ip, scheme, path, read_limit=_REPRODUCE_BODY, verify=True)
-        except Exception:
+        except (OSError, http.client.HTTPException):
             continue
         return {"status": status, "url": url, "content_type": content_type,
-                "location": location, "body": body}
-    return empty
+                "location": location, "body": body, "reason": ""}
+    return empty("unreachable")
 
 
 # --- self-declared interfaces: an app maps its own API --------------------
@@ -276,19 +290,22 @@ def fetch_document(name: str, path: str) -> dict:
 
     Resolves over DNS-over-HTTPS then connects to a public address with SNI, the same way
     the probe does, so it works where the local resolver does not. A host with no public
-    address is not reachable, reported as an empty document rather than raised.
+    address, or one that does not answer, returns a null status carrying why,
+    `no-public-address` or `unreachable`, rather than a bare empty document a caller could
+    read as a real no-content answer. Only transport errors are caught, so an unexpected
+    error is raised loud rather than swallowed as a null status, invariant 5.
     """
     public = public_addresses(resolve_host(name).get("addresses", ()))
     if not public:
-        return {"status": None, "content_type": "", "text": ""}
+        return {"status": None, "content_type": "", "text": "", "reason": "no-public-address"}
     for ip in public:
         for scheme in ("https", "http"):
             try:
                 status, _, content_type, body, _location, _hdrs = _connect(name, ip, scheme, path, read_limit=_DOCUMENT_LIMIT)
-            except Exception:
+            except (OSError, http.client.HTTPException):
                 continue
-            return {"status": status, "content_type": content_type, "text": body}
-    return {"status": None, "content_type": "", "text": ""}
+            return {"status": status, "content_type": content_type, "text": body, "reason": ""}
+    return {"status": None, "content_type": "", "text": "", "reason": "unreachable"}
 
 
 def graphql_introspect(name: str, path: str = "/graphql") -> dict | None:

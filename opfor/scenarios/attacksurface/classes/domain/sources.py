@@ -3,15 +3,13 @@
 Transport lives in `http`, passive OSINT source clients in `passive`, body and document
 parsers in `parsers`, JavaScript extraction in `javascript`, and cloud object-storage URL
 parsing in `storage`. This module gathers the public names in one place so a caller keeps a
-single import.
+single import. It re-exports public names only, a caller that needs a module's private detail
+imports it from the owning module, so the facade does not turn implementation into public API.
 """
 
 from __future__ import annotations
 
 from opfor.scenarios.attacksurface.classes.domain.http import (
-    _TIMEOUT,
-    _UA,
-    _signal_headers,
     dns_email_posture,
     fetch_document,
     fetch_public_url,
@@ -54,8 +52,6 @@ from opfor.scenarios.attacksurface.classes.domain.parsers import (
     split_operation,
 )
 from opfor.scenarios.attacksurface.classes.domain.javascript import (
-    _JS_PATH,
-    _JS_URL,
     paths_in_javascript,
     script_sources,
     secrets_in_text,

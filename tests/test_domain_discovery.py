@@ -213,7 +213,7 @@ def test_http_probe_tries_every_public_ip_retries_timeouts_and_raises_the_unexpe
 
 
 def test_signal_headers_keeps_identity_drops_noise_and_masks_cookie_value():
-    from opfor.scenarios.attacksurface.classes.domain import sources as domains
+    from opfor.scenarios.attacksurface.classes.domain import http as domains
 
     class _Resp:
         def getheaders(self):

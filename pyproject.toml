@@ -1,7 +1,7 @@
 [project]
 name = "opfor"
 version = "0.2.0"
-description = "AI-assisted engine for offensive reconnaissance and attack surface mapping."
+description = "AI-assisted offensive reconnaissance and attack surface mapping."
 readme = "README.md"
 requires-python = ">=3.12"
 license = "Apache-2.0"

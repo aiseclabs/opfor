@@ -154,6 +154,24 @@ def test_secrets_in_text_keeps_two_keys_sharing_a_prefix_and_length():
     hits = domains.secrets_in_text(body, patterns)
     assert len(hits) == 2
 
+def test_shipped_secret_patterns_do_not_backtrack_on_a_hostile_bundle():
+    # a bundle of repeated 'eyJ' with no dots made the old unbounded JWT pattern backtrack
+    # super-linearly and tie a worker. The possessive quantifier plus the body cap make the
+    # scan linear, so this returns effectively instantly rather than hanging.
+    import yaml
+
+    from opfor.scenarios.attacksurface.assets import domain as domain_class
+    from opfor.scenarios.attacksurface.assets.domain.sources.javascript import secrets_in_text
+
+    patterns = yaml.safe_load((domain_class.KNOWLEDGE / "secret_patterns.yaml").read_text())["patterns"]
+    hostile = "eyJ" * 300_000
+    assert secrets_in_text(hostile, patterns) == []
+    # a real JWT is still caught
+    real = "token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.abcDEF123456xyz"
+    hits = secrets_in_text(real, patterns)
+    assert any(h["pattern"] == "json-web-token" for h in hits)
+
+
 def test_secret_scan_flags_a_key_in_a_bundle_and_redacts_it():
     home = '<script src="/static/main.js"></script>'
     bundle = "var cfg={awsKey:'AKIAIOSFODNN7EXAMPLE'};"

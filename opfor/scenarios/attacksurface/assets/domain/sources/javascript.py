@@ -12,6 +12,11 @@ _JS_PATH = re.compile(r"""["'`](/[A-Za-z0-9_.\-/]{1,160})["'`]""")
 _JS_URL = re.compile(r"""["'`](https?://[A-Za-z0-9.\-]+(?::\d+)?(?:/[A-Za-z0-9_.\-/]{0,200})?)["'`]""")
 
 _MAX_SECRET_MATCHES = 20
+# A ceiling on how much of a body the secret patterns scan. A hostile bundle can arrive at the
+# full document byte limit, and a pattern with an unbounded repeat could then do super-linear
+# work on it and tie a worker thread. Real leaked keys sit near the top of a bundle, so this
+# bounds the scan without losing them, defense in depth beside the per-pattern anchoring.
+_MAX_SECRET_SCAN_BYTES = 512_000
 # A ceiling on the path-like and url-like strings read out of one script body, so a hostile
 # bundle packing hundreds of thousands of distinct quoted paths into the document byte limit
 # cannot tie a worker thread or grow an unbounded candidate list. Far above the downstream
@@ -132,7 +137,7 @@ def secrets_in_text(text: str, patterns) -> list[dict]:
     secret class. Whether a match is live is triage's judgment.
     """
     out: list[dict] = []
-    body = text or ""
+    body = (text or "")[:_MAX_SECRET_SCAN_BYTES]
     seen: set[tuple[str, str]] = set()
     for pattern in patterns or []:
         regex = str(pattern.get("regex", ""))

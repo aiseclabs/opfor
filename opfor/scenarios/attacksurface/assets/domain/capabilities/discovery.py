@@ -19,6 +19,7 @@ class DiscoverDomains(Capability):
 
     name = "discover_domains"
     phase = Phase.MAP
+    osint = True
 
     def run(self, task: Task, world: World) -> Outcome:
         org = world.node(task.node).payload
@@ -54,6 +55,7 @@ class DomainPivot(Capability):
 
     name = "domain_pivot"
     phase = Phase.MAP
+    osint = True
 
     def __init__(self, pivot_fn) -> None:
         self._pivot = pivot_fn
@@ -89,6 +91,7 @@ class DomainRegistrant(Capability):
 
     name = "domain_registrant"
     phase = Phase.MAP
+    osint = True
 
     def __init__(self, reverse_fn) -> None:
         self._reverse = reverse_fn
@@ -121,6 +124,7 @@ class Subdomains(Capability):
 
     name = "domain_subdomains"
     phase = Phase.MAP
+    osint = True
 
     def __init__(self, enumerate_fn) -> None:
         self._enumerate = enumerate_fn

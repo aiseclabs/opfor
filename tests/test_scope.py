@@ -87,3 +87,12 @@ def test_resource_scope_matches_case_and_whitespace_insensitively():
     scope = Scope(hosts=(), resources=("  Repo:Owner/Name  ",))
     assert scope.authorize("recon", osint=False, resource="repo:owner/name").allowed
     assert not scope.authorize("recon", osint=False, resource="repo:other/name").allowed
+
+
+def test_a_task_naming_both_a_host_and_a_resource_is_denied():
+    """A task names one locator, never both. Both set is ambiguous, so the gate denies it
+    loud rather than checking the resource and leaving the host silently unvalidated."""
+    scope = Scope(hosts=("example.com",), resources=("repo:owner/name",))
+    d = scope.authorize("recon", osint=False, host="evil.test", resource="repo:owner/name")
+    assert not d.allowed
+    assert "both" in d.reason

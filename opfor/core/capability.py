@@ -93,9 +93,11 @@ class Capability(ABC):
     name: str
     phase: Phase
     tier: str = "recon"
-    # True when the capability is a passive read of a public source, so a recon-tier
-    # task of it clears scope with no per-target authorization.
-    osint: bool = True
+    # False by default, so the scope gate stays deny-by-default: a capability that touches a
+    # target is authorized against scope unless it deliberately opts in. Set True only for a
+    # passive read of a public source, which a recon-tier task then clears with no per-target
+    # authorization. The default must not be the permissive value a forgotten flag inherits.
+    osint: bool = False
 
     @abstractmethod
     def run(self, task: Task, world: "World") -> Outcome:

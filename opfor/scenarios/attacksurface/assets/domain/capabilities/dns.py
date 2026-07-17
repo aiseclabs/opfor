@@ -12,6 +12,7 @@ class ResolveDomain(Capability):
 
     name = "domain_resolve"
     phase = Phase.ENRICH
+    osint = True  # a public DNS lookup of the target, a passive read
 
     def __init__(self, resolve_fn) -> None:
         self._resolve = resolve_fn

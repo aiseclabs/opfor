@@ -64,6 +64,11 @@ class Scope:
 
     def authorize(self, tier: str, *, osint: bool, host: str | None = None,
                   resource: str | None = None) -> Decision:
+        if host is not None and resource is not None:
+            # A task names one locator, a host or a resource, never both. Both set is an
+            # ambiguous request the gate cannot judge, so it is denied loud rather than
+            # letting the resource branch win and leave the host silently unchecked.
+            return Decision(allowed=False, reason="task names both a host and a resource")
         if osint and tier_rank(tier) == 0:
             return Decision(allowed=True, reason="passive osint")
         if resource is not None:

@@ -46,6 +46,7 @@ class DiscoverWidgets(Capability):
 
     name = "mock_discover"
     phase = Phase.MAP
+    osint = True  # the reference fixture reads a public seed, so it clears scope without hosts
 
     def run(self, task: Task, world: World) -> Outcome:
         widgets = tuple(
@@ -60,6 +61,7 @@ class InspectWidget(Capability):
 
     name = "mock_inspect"
     phase = Phase.ENRICH
+    osint = True
 
     def run(self, task: Task, world: World) -> Outcome:
         widget = world.node(task.node)

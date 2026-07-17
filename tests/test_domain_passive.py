@@ -279,7 +279,7 @@ def test_pivot_failure_still_closes_and_is_loud():
 
     scenario = _make(pivot_fn=boom)
     world = _seed()
-    report = run(scenario, world, scope=Scope(max_tier="recon", hosts=(ROOT,)), budget=Budget(500))
+    report = run(scenario, world, scope=Scope(max_tier="recon", matcher=HostScope(hosts=(ROOT,))), budget=Budget(500))
     assert report.closed
     assert any("failed" in n and "domain_pivot" in n for n in report.notes)
 
@@ -291,7 +291,7 @@ def test_registrant_pivot_is_off_without_a_key():
 
 def test_registrant_pivot_discovers_a_root_when_wired():
     world = _seed()
-    run(_with_reverse(), world, scope=Scope(max_tier="recon", hosts=(ROOT,)), budget=Budget(500))
+    run(_with_reverse(), world, scope=Scope(max_tier="recon", matcher=HostScope(hosts=(ROOT,))), budget=Budget(500))
     org = world.node("domain:example.org")
     assert org is not None
     assert org.payload.source == "reverse-whois"
@@ -300,7 +300,7 @@ def test_registrant_pivot_discovers_a_root_when_wired():
 
 def test_registrant_root_is_an_info_finding():
     world = _seed()
-    report = run(_with_reverse(), world, scope=Scope(max_tier="recon", hosts=(ROOT,)), budget=Budget(500))
+    report = run(_with_reverse(), world, scope=Scope(max_tier="recon", matcher=HostScope(hosts=(ROOT,))), budget=Budget(500))
     roots = {f.where: f for f in report.findings if f.data.get("kind") == "root"}
     assert "example.org" in roots
     assert roots["example.org"].data["source"] == "reverse-whois"
@@ -310,7 +310,7 @@ def test_registrant_pivot_failure_still_closes_and_is_loud():
         raise TimeoutError("provider slow")
 
     world = _seed()
-    report = run(_with_reverse(boom), world, scope=Scope(max_tier="recon", hosts=(ROOT,)), budget=Budget(500))
+    report = run(_with_reverse(boom), world, scope=Scope(max_tier="recon", matcher=HostScope(hosts=(ROOT,))), budget=Budget(500))
     assert report.closed
     assert any("failed" in n and "domain_registrant" in n for n in report.notes)
 

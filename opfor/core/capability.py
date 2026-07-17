@@ -39,11 +39,11 @@ class Task:
     capability: str
     node: str = ""
     params: Mapping[str, Any] = field(default_factory=dict)
-    # What scope authorizes this task against, filled by the planner because it
-    # knows the domain. A passive osint capability needs neither. A task names a
-    # host or a resource, never both, and scope gates on whichever is set.
-    scope_host: str | None = None
-    scope_resource: str | None = None
+    # The target scope authorizes this task against, an opaque locator the planner reads off
+    # the node because only the scenario knows what a target is. A passive osint capability
+    # needs none. The scenario's scope matcher decides whether the target is in scope, so the
+    # kernel names no host here.
+    scope_target: str | None = None
 
     @property
     def id(self) -> str:

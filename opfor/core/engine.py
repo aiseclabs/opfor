@@ -210,8 +210,7 @@ def _authorize(scenario, scope, world, phase, done, pending, ledger, notes) -> l
             continue
         seen.add(task.id)
         cap = scenario.capability(task.capability)
-        decision = scope.authorize(
-            cap.tier, osint=cap.osint, host=task.scope_host, resource=task.scope_resource)
+        decision = scope.authorize(cap.tier, osint=cap.osint, target=task.scope_target)
         if not decision.allowed:
             ledger.append("scope_denied", task=task.id, reason=decision.reason)
             notes.append(f"denied {task.id}: {decision.reason}")

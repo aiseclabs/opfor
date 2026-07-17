@@ -11,6 +11,7 @@ from __future__ import annotations
 from opfor.core import (Budget, Checkpoint, Fact, Node, Phase, Scope, World, checkpoint, restore,
                         resume, run)
 from opfor.core.engine import RunState
+from opfor.scenarios.attacksurface.hostnames import HostScope
 from opfor.core.ledger import Ledger
 from opfor.core.result import CLOSED, SUSPENDED
 from opfor.scenarios.registry import get_scenario
@@ -34,7 +35,7 @@ def test_checkpoint_round_trips_a_world_with_nested_dataclass_payloads():
                            CVE(id="CVE-2021-43798", cvss=7.5, severity="HIGH",
                                summary="path traversal", references=("https://x",)),)))])
     state = RunState(scenario=scenario, world=world,
-                     scope=Scope(max_tier="recon", hosts=("h",)),
+                     scope=Scope(max_tier="recon", matcher=HostScope(hosts=("h",))),
                      budget=Budget(50), ledger=Ledger(), reached=Phase.ENRICH)
 
     revived = restore(Checkpoint.from_json(checkpoint(state).to_json()), scenario)
@@ -54,12 +55,12 @@ def test_checkpoint_preserves_scope_and_budget():
     budget = Budget(50)
     budget.steps = 7
     state = RunState(scenario=scenario, world=World(),
-                     scope=Scope(max_tier="intrusive", hosts=("example.com",), authorized=True),
+                     scope=Scope(max_tier="intrusive", matcher=HostScope(hosts=("example.com",)), authorized=True),
                      budget=budget, ledger=Ledger(), reached=Phase.ENRICH)
     revived = restore(Checkpoint.from_json(checkpoint(state).to_json()), scenario)
     # an intrusive authorization must survive, so a resumed run keeps its recorded envelope
     assert revived.scope.max_tier == "intrusive" and revived.scope.authorized is True
-    assert revived.scope.hosts == ("example.com",)
+    assert revived.scope.matcher.hosts == ("example.com",)
     assert revived.budget.max_steps == 50 and revived.budget.steps == 7
 
 
@@ -72,7 +73,7 @@ def test_checkpoint_carries_its_schema_version_and_refuses_another():
 
     scenario = get_scenario("attacksurface")
     state = RunState(scenario=scenario, world=World(),
-                     scope=Scope(max_tier="recon", hosts=("h",)),
+                     scope=Scope(max_tier="recon", matcher=HostScope(hosts=("h",))),
                      budget=Budget(50), ledger=Ledger(), reached=Phase.ENRICH)
     blob = checkpoint(state).to_json()
     assert json.loads(blob)["version"] == CHECKPOINT_VERSION
@@ -92,7 +93,7 @@ def test_restore_refuses_a_checkpoint_for_a_different_scenario():
 
     scenario = get_scenario("attacksurface")
     state = RunState(scenario=scenario, world=World(),
-                     scope=Scope(max_tier="recon", hosts=("h",)),
+                     scope=Scope(max_tier="recon", matcher=HostScope(hosts=("h",))),
                      budget=Budget(50), ledger=Ledger(), reached=Phase.ENRICH)
     cp = Checkpoint.from_json(checkpoint(state).to_json())
     # restoring into the mock scenario would decode payloads against the wrong registry, so the

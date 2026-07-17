@@ -132,5 +132,5 @@ def reproduce_rule(world: World) -> list[Task]:
         if world.has_fact(node.id, "reproduction"):
             continue
         host = urlparse(request.url).hostname or ""
-        tasks.append(Task(capability="reproduce_finding", node=node.id, scope_host=host))
+        tasks.append(Task(capability="reproduce_finding", node=node.id, scope_target=host))
     return tasks

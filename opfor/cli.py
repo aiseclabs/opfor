@@ -63,6 +63,7 @@ def _run(args) -> int:
     from opfor.core import Budget, Scope
     from opfor.core.engine import run as engine_run
     from opfor.scenarios.attacksurface import seed as attacksurface_seed
+    from opfor.scenarios.attacksurface.hostnames import HostScope
     from opfor.scenarios.registry import get_scenario
 
     seed_builders = {"attacksurface": attacksurface_seed}
@@ -72,7 +73,8 @@ def _run(args) -> int:
 
     name, roots, hosts, scope_hosts = _resolve_seed(args)
     world = seed_builders[args.scenario](name, domains=roots, hosts=hosts)
-    scope = Scope(max_tier=args.tier, hosts=scope_hosts, authorized=args.authorize)
+    scope = Scope(max_tier=args.tier, matcher=HostScope(hosts=scope_hosts),
+                  authorized=args.authorize)
     if getattr(args, "confirm", False) or getattr(args, "reproduce", False):
         # The reproduce and confirm phases are opt-in and intrusive, so they need both a
         # raised terminal and the recorded intrusive authorization, a fresh build carries the

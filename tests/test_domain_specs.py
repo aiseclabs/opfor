@@ -141,7 +141,7 @@ def test_spec_fetch_failure_still_closes_and_is_loud():
 
     scenario = _make(fetch_doc_fn=boom)
     world = _seed()
-    report = run(scenario, world, scope=Scope(max_tier="recon", hosts=(ROOT,)), budget=Budget(2000))
+    report = run(scenario, world, scope=Scope(max_tier="recon", matcher=HostScope(hosts=(ROOT,))), budget=Budget(2000))
     assert report.closed
     assert any("failed" in n and "endpoint_expand_spec" in n for n in report.notes)
 

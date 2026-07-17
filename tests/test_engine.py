@@ -9,6 +9,7 @@ import pytest
 from opfor.core import (Budget, Capability, Fact, Later, Node, Phase, RuleSet, Scenario, Scope,
                         Task, Triage, World, resume, run)
 from opfor.core.result import CLOSED, SUSPENDED
+from opfor.scenarios.attacksurface.hostnames import HostScope
 from opfor.scenarios.mock import MOCK
 
 
@@ -71,10 +72,10 @@ def test_phase_upto_is_ordered_and_inclusive():
 
 
 def test_scope_denies_out_of_scope_host():
-    scope = Scope(max_tier="recon", hosts=("example.com",))
-    d = scope.authorize("recon", osint=False, host="evil.test")
+    scope = Scope(max_tier="recon", matcher=HostScope(hosts=("example.com",)))
+    d = scope.authorize("recon", osint=False, target="evil.test")
     assert not d.allowed
-    d2 = scope.authorize("recon", osint=False, host="api.example.com")
+    d2 = scope.authorize("recon", osint=False, target="api.example.com")
     assert d2.allowed
 
 
@@ -85,8 +86,8 @@ def test_scope_waves_through_passive_osint():
 
 
 def test_scope_intrusive_needs_authorization():
-    scope = Scope(max_tier="intrusive", hosts=("example.com",), authorized=False)
-    d = scope.authorize("intrusive", osint=False, host="example.com")
+    scope = Scope(max_tier="intrusive", matcher=HostScope(hosts=("example.com",)), authorized=False)
+    d = scope.authorize("intrusive", osint=False, target="example.com")
     assert not d.allowed
 
 

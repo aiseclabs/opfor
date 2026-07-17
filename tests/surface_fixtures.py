@@ -15,6 +15,7 @@ import json
 
 from opfor.core import Budget, MockProvider, Node, Scope, World, run
 from opfor.scenarios.attacksurface import build
+from opfor.scenarios.attacksurface.hostnames import HostScope
 from opfor.scenarios.attacksurface.types import Org
 
 
@@ -248,7 +249,7 @@ def _seed(*, domains=(ROOT,), hosts=(), classes=()):
 
 def _run(world, scope=None, budget=500):
     return run(_scenario(), world,
-               scope=scope or Scope(max_tier="recon", hosts=(ROOT,)), budget=Budget(budget))
+               scope=scope or Scope(max_tier="recon", matcher=HostScope(hosts=(ROOT,))), budget=Budget(budget))
 
 
 def _run_capturing(world=None, *, scope=None, budget=2000, **over):
@@ -257,7 +258,7 @@ def _run_capturing(world=None, *, scope=None, budget=2000, **over):
     scenario = _make(**over)
     world = world if world is not None else _seed()
     report = run(scenario, world,
-                 scope=scope or Scope(max_tier="recon", hosts=(ROOT,)), budget=Budget(budget))
+                 scope=scope or Scope(max_tier="recon", matcher=HostScope(hosts=(ROOT,))), budget=Budget(budget))
     return report, scenario, world
 
 
@@ -307,6 +308,7 @@ def _read_only(url):
 
 __all__ = [
     'ROOT',
+    'HostScope',
     'CRT',
     'DNS',
     'HTTP',

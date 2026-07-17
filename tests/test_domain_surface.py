@@ -119,7 +119,7 @@ def test_total_resolution_failure_reports_incomplete_not_dangling():
 
     scenario = _make(resolve_fn=none_resolve)
     world = _seed(classes=("domain",))
-    report = run(scenario, world, scope=Scope(max_tier="recon", hosts=(ROOT,)), budget=Budget(500))
+    report = run(scenario, world, scope=Scope(max_tier="recon", matcher=HostScope(hosts=(ROOT,))), budget=Budget(500))
     kinds = {f.data.get("kind") for f in report.findings}
     assert "incomplete" in kinds
     assert "dangling" not in kinds
@@ -130,7 +130,7 @@ def test_github_search_failure_still_closes():
 
     scenario = _make(search_fn=boom)
     world = _seed()
-    report = run(scenario, world, scope=Scope(max_tier="recon", hosts=(ROOT,)), budget=Budget(500))
+    report = run(scenario, world, scope=Scope(max_tier="recon", matcher=HostScope(hosts=(ROOT,))), budget=Budget(500))
     assert report.closed
     # the failure is loud in the report, not only in the ledger
     assert any("failed" in n and "discover_github" in n for n in report.notes)
@@ -181,6 +181,6 @@ def test_budget_cap_is_not_overshot_by_a_batch():
     from opfor.core import Budget, Scope, run
     world = _seed()
     budget = Budget(2)
-    run(_make(), world, scope=Scope(max_tier="recon", hosts=(ROOT,)), budget=budget)
+    run(_make(), world, scope=Scope(max_tier="recon", matcher=HostScope(hosts=(ROOT,))), budget=budget)
     # a batch is capped to the remaining budget, so the runaway ceiling is not blown past
     assert budget.steps <= 2

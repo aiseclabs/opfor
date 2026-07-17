@@ -39,7 +39,7 @@ Registry = Mapping[str, type]
 # The checkpoint schema version. A restore refuses a checkpoint written by another version
 # rather than rebuilding a run from a shape it may misread, so an incompatible or pre-versioning
 # format fails loud instead of resuming wrong. Bump this whenever the serialized shape changes.
-CHECKPOINT_VERSION = 1
+CHECKPOINT_VERSION = 2
 
 
 def _encode(value: Any) -> Any:
@@ -106,7 +106,7 @@ def _finding_from_dict(data: dict) -> Finding:
 
 def _task_to_dict(task) -> dict:
     return {"capability": task.capability, "node": task.node, "params": dict(task.params),
-            "scope_host": task.scope_host, "scope_resource": task.scope_resource}
+            "scope_target": task.scope_target}
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -175,8 +175,8 @@ def checkpoint(state) -> Checkpoint:
         done=tuple(sorted(state.done)),
         pending={handle: _task_to_dict(task) for handle, task in state.pending.items()},
         budget={"max_steps": state.budget.max_steps, "steps": state.budget.steps},
-        scope={"max_tier": state.scope.max_tier, "hosts": list(state.scope.hosts),
-               "resources": list(state.scope.resources), "authorized": state.scope.authorized},
+        scope={"max_tier": state.scope.max_tier, "matcher": state.scope.matcher.to_dict(),
+               "authorized": state.scope.authorized},
         notes=tuple(state.notes),
         ledger=[{"kind": e.kind, "fields": e.fields} for e in state.ledger.events()],
         findings=[_finding_to_dict(f) for f in state.findings],
@@ -216,11 +216,13 @@ def restore(cp: Checkpoint, scenario: Scenario):
     budget = Budget(cp.budget["max_steps"])
     budget.steps = cp.budget["steps"]
 
-    scope = Scope(max_tier=cp.scope["max_tier"], hosts=tuple(cp.scope["hosts"]),
-                  resources=tuple(cp.scope["resources"]), authorized=cp.scope["authorized"])
+    # The matcher rule lives in the scenario, so the scenario rebuilds it from the stored data.
+    scope = Scope(max_tier=cp.scope["max_tier"],
+                  matcher=scenario.scope_matcher(cp.scope["matcher"]),
+                  authorized=cp.scope["authorized"])
 
     pending = {handle: Task(capability=t["capability"], node=t["node"], params=t["params"],
-                            scope_host=t["scope_host"], scope_resource=t["scope_resource"])
+                            scope_target=t["scope_target"])
                for handle, t in cp.pending.items()}
 
     return RunState(

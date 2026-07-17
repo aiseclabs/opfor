@@ -12,13 +12,14 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Mapping
+from typing import Callable, Mapping
 
 from opfor.core.capability import Capability
 from opfor.core.confirm import Confirm
 from opfor.core.phase import Phase
 from opfor.core.post_triage import PostTriage
 from opfor.core.rules import Planner
+from opfor.core.scope import ExactScope, ScopeMatcher
 from opfor.core.triage import Triage
 
 
@@ -45,6 +46,12 @@ class Scenario:
     # scenario that never checkpoints may leave it empty, then only a payload-free world
     # round-trips. Adding a payload type is listing it here, not touching the codec.
     payloads: Mapping[str, type] = field(default_factory=dict)
+    # Rebuilds this scenario's scope matcher from the dict a checkpoint stored, so a resumed run
+    # re-authorizes by the same in-scope rule. The default rebuilds exact-string membership,
+    # which the kernel owns, so a scenario whose targets are opaque ids wires nothing. A
+    # scenario with a richer rule, a host suffix say, passes its own factory, and the kernel
+    # stays free of naming a host.
+    scope_matcher: Callable[[Mapping], ScopeMatcher] = ExactScope.from_dict
 
     @property
     def knowledge_dir(self) -> Path:

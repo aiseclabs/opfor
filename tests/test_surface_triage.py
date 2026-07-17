@@ -352,7 +352,7 @@ def test_large_surface_is_split_across_calls():
     # rather than one giant prompt that could overflow and truncate
     sc = _make()
     sc.triage._max_chunk = 40
-    run(sc, _seed(), scope=Scope(max_tier="recon", hosts=(ROOT,)), budget=Budget(2000))
+    run(sc, _seed(), scope=Scope(max_tier="recon", matcher=HostScope(hosts=(ROOT,))), budget=Budget(2000))
     assert len(sc.triage._provider.calls) > 1
 
 
@@ -369,7 +369,7 @@ def test_chunk_failure_is_a_degraded_finding_not_a_crash():
             raise RuntimeError("model down")
 
     sc = _make(provider=Broken())
-    report = run(sc, _seed(), scope=Scope(max_tier="recon", hosts=(ROOT,)), budget=Budget(2000))
+    report = run(sc, _seed(), scope=Scope(max_tier="recon", matcher=HostScope(hosts=(ROOT,))), budget=Budget(2000))
     # the run still closes, and the failure is a loud finding rather than an uncaught crash
     assert report.closed
     assert any(f.data.get("kind") == "degraded" for f in report.findings)
@@ -491,11 +491,11 @@ def test_port_scan_is_gated_behind_the_probe_tier():
 
     # recon tier: the scan is a probe-tier act, so scope retires it unauthorized and no host
     # carries a ports fact, a default run never port-scans
-    _, _, recon = _run_capturing(scope=Scope(max_tier="recon", hosts=(ROOT,)))
+    _, _, recon = _run_capturing(scope=Scope(max_tier="recon", matcher=HostScope(hosts=(ROOT,))))
     assert all(recon.latest("ports", n.id) is None for n in recon.nodes("domain"))
 
     # probe tier: the operator opted in, so each resolvable host is scanned and carries the fact
-    _, _, probe = _run_capturing(scope=Scope(max_tier="probe", hosts=(ROOT,)))
+    _, _, probe = _run_capturing(scope=Scope(max_tier="probe", matcher=HostScope(hosts=(ROOT,))))
     resolvable = [n for n in probe.nodes("domain")
                   if (r := probe.latest("resolved", n.id)) is not None and r.payload.resolvable]
     assert resolvable and any(probe.latest("ports", n.id) is not None for n in resolvable)
@@ -508,7 +508,7 @@ def test_exposed_service_ports_are_surfaced_and_the_class_is_selected():
         return {"reachable": True, "scanned": 24,
                 "open": [{"port": 6379, "service": "redis", "banner": ""}]}
 
-    _, sc, _ = _run_capturing(scope=Scope(max_tier="probe", hosts=(ROOT,)), ports_fn=ports)
+    _, sc, _ = _run_capturing(scope=Scope(max_tier="probe", matcher=HostScope(hosts=(ROOT,))), ports_fn=ports)
     prompt = _prompt(sc)
     assert "exposed service ports: 6379 redis" in prompt
     assert "Exposed Backend Or Management Service" in _knowledge(sc)

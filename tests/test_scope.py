@@ -1,98 +1,77 @@
-"""Scope gate tests: deny-by-default authorization and host normalization.
+"""Scope gate tests: the generic kernel authorization boundary.
 
-Scope is the security boundary, so its matching must not depend on a caller lowercasing or
-stripping a host first. These cover the normalization the gate now owns, and the tier and
-osint rules it has always enforced.
+Scope judges the tier, the intrusive envelope, and the osint carve-out, all generic. Whether a
+target is in scope is delegated to a matcher, so the kernel names no host. These cover the
+kernel's own rules and its default exact-membership matcher. The DNS suffix rule lives in the
+attacksurface HostScope, tested alongside the other hostname primitives.
 """
 
 from __future__ import annotations
 
-from opfor.core.scope import Scope
-
-
-def _recon(scope: Scope, host: str):
-    """Authorize a non-osint recon task against a host, the common case under test."""
-    return scope.authorize("recon", osint=False, host=host)
-
-
-def test_mixed_case_candidate_matches_a_lowercase_scope_host():
-    scope = Scope(hosts=("example.com",))
-    assert _recon(scope, "Example.COM").allowed
-
-
-def test_mixed_case_scope_host_matches_a_lowercase_candidate():
-    scope = Scope(hosts=("Example.COM",))
-    assert _recon(scope, "example.com").allowed
-
-
-def test_trailing_root_dot_matches_on_either_side():
-    scope = Scope(hosts=("example.com.",))
-    assert _recon(scope, "example.com").allowed
-    assert _recon(scope, "example.com.").allowed
-
-
-def test_surrounding_whitespace_is_ignored_on_either_side():
-    scope = Scope(hosts=("  example.com  ",))
-    assert _recon(scope, " example.com ").allowed
-
-
-def test_a_subdomain_of_an_in_scope_host_is_in_scope():
-    scope = Scope(hosts=("example.com",))
-    assert _recon(scope, "API.Example.com.").allowed
-
-
-def test_a_sibling_that_only_shares_a_suffix_string_is_out_of_scope():
-    """The suffix rule matches on a label boundary, so a host that merely ends with the
-    scope string but is not a subdomain is denied, and normalization does not change that."""
-    scope = Scope(hosts=("example.com",))
-    assert not _recon(scope, "evil-example.com").allowed
-    assert not _recon(scope, "example.com.evil.com").allowed
-
-
-def test_a_blank_scope_host_is_dropped_and_matches_nothing():
-    """A host that normalizes to empty must not sit in scope, or the suffix rule would let
-    it match arbitrary candidates. It is filtered at construction."""
-    scope = Scope(hosts=("", "   ", "."))
-    assert scope.hosts == ()
-    assert not _recon(scope, "example.com").allowed
-
-
-def test_a_blank_candidate_is_out_of_scope_not_a_missing_target():
-    scope = Scope(hosts=("example.com",))
-    assert not _recon(scope, "   ").allowed
+from opfor.core.scope import ExactScope, Scope
 
 
 def test_passive_osint_recon_is_waved_through_without_a_target():
-    assert Scope(hosts=()).authorize("recon", osint=True).allowed
+    assert Scope().authorize("recon", osint=True).allowed
 
 
-def test_a_task_that_names_no_host_or_resource_is_denied():
-    assert not Scope(hosts=("example.com",)).authorize("recon", osint=False).allowed
+def test_a_non_osint_task_that_names_no_target_is_denied():
+    d = Scope(matcher=ExactScope(("example.com",))).authorize("recon", osint=False)
+    assert not d.allowed
+    assert "no target" in d.reason
+
+
+def test_the_default_scope_denies_every_non_osint_target():
+    """With no matcher the kernel defaults to exact membership over an empty set, so nothing is
+    in scope and deny-by-default holds without a scenario wiring anything."""
+    assert not Scope().authorize("recon", osint=False, target="anything").allowed
+
+
+def test_exact_matcher_admits_only_a_listed_target():
+    scope = Scope(matcher=ExactScope(("repo:owner/name",)))
+    assert scope.authorize("recon", osint=False, target="repo:owner/name").allowed
+    assert not scope.authorize("recon", osint=False, target="repo:other/name").allowed
+
+
+def test_exact_matcher_normalizes_case_and_whitespace_on_both_sides():
+    scope = Scope(matcher=ExactScope(("  Repo:Owner/Name  ",)))
+    assert scope.authorize("recon", osint=False, target="repo:owner/name").allowed
+
+
+def test_the_matcher_decides_scope_the_kernel_only_delegates():
+    """The kernel asks the matcher and never inspects the target itself, so a scenario's rule,
+    here one that admits everything, is what governs membership."""
+    class _All:
+        def in_scope(self, target: str) -> bool:
+            return True
+
+        def to_dict(self) -> dict:
+            return {}
+
+    assert Scope(matcher=_All()).authorize("recon", osint=False, target="anything").allowed
 
 
 def test_a_tier_above_the_ceiling_is_denied():
-    scope = Scope(max_tier="recon", hosts=("example.com",))
-    assert not scope.authorize("probe", osint=False, host="example.com").allowed
+    scope = Scope(max_tier="recon", matcher=ExactScope(("example.com",)))
+    assert not scope.authorize("probe", osint=False, target="example.com").allowed
 
 
 def test_intrusive_tier_requires_explicit_authorization():
-    hosts = ("example.com",)
-    assert not Scope(max_tier="intrusive", hosts=hosts).authorize(
-        "intrusive", osint=False, host="example.com").allowed
-    assert Scope(max_tier="intrusive", hosts=hosts, authorized=True).authorize(
-        "intrusive", osint=False, host="example.com").allowed
+    matcher = ExactScope(("example.com",))
+    assert not Scope(max_tier="intrusive", matcher=matcher).authorize(
+        "intrusive", osint=False, target="example.com").allowed
+    assert Scope(max_tier="intrusive", matcher=matcher, authorized=True).authorize(
+        "intrusive", osint=False, target="example.com").allowed
 
 
-def test_resource_scope_matches_case_and_whitespace_insensitively():
-    scope = Scope(hosts=(), resources=("  Repo:Owner/Name  ",))
-    assert scope.authorize("recon", osint=False, resource="repo:owner/name").allowed
-    assert not scope.authorize("recon", osint=False, resource="repo:other/name").allowed
+def test_an_unknown_tier_fails_loud_rather_than_widening_scope():
+    import pytest
+
+    with pytest.raises(ValueError):
+        Scope(max_tier="wildcard")
 
 
-def test_a_task_naming_both_a_host_and_a_resource_is_denied():
-    """A task names one locator, never both. Both set is ambiguous, so the gate denies it
-    loud rather than checking the resource and leaving the host silently unvalidated."""
-    scope = Scope(hosts=("example.com",), resources=("repo:owner/name",))
-    d = scope.authorize("recon", osint=False, host="evil.test", resource="repo:owner/name")
-    assert not d.allowed
-    assert "both" in d.reason
+def test_the_exact_matcher_round_trips_through_its_dict():
+    matcher = ExactScope(("A", "b "))
+    revived = ExactScope.from_dict(matcher.to_dict())
+    assert revived.in_scope("a") and revived.in_scope("b")

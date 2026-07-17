@@ -23,6 +23,7 @@ from opfor.core import Node, Phase, Provider, RuleSet, Scenario, World, make_pro
 from opfor.core.providers.factory import default_model, role_model, triage_mode
 from opfor.scenarios.attacksurface import config
 from opfor.scenarios.attacksurface.assets import domain, github
+from opfor.scenarios.attacksurface.hostnames import HostScope
 from opfor.scenarios.attacksurface.assets.domain import identify
 from opfor.scenarios.attacksurface.assets.domain import sources as domain_src
 from opfor.scenarios.attacksurface.assets.github import sources as github_src
@@ -182,6 +183,7 @@ def build(
         post_triage=FindingGrounder(),
         confirm=ConfirmTriage(provider=provider, model=model) if confirm else None,
         payloads=_payloads(),
+        scope_matcher=HostScope.from_dict,
         terminal=terminal,
     )
 

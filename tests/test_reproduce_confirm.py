@@ -61,7 +61,7 @@ def test_engine_reproduces_a_grounded_finding_in_exploit_when_authorized():
         request=PoCRequest(method="GET", url="https://www.example.com/openapi.json",
                            expect="HTTP 200 application/json", source="endpoint:seed"))))
     scenario = _make(reproduce=True, reproduce_fetch_fn=fetch)
-    scope = Scope(max_tier="intrusive", hosts=(ROOT,), authorized=True)
+    scope = Scope(max_tier="intrusive", matcher=HostScope(hosts=(ROOT,)), authorized=True)
     report = run(scenario, world, scope=scope, budget=Budget(2000))
 
     assert report.closed and report.reached == Phase.EXPLOIT
@@ -82,7 +82,7 @@ def test_engine_denies_reproduce_without_authorization_and_stays_loud():
         where="https://www.example.com/openapi.json",
         request=PoCRequest(method="GET", url="https://www.example.com/openapi.json"))))
     scenario = _make(reproduce=True, reproduce_fetch_fn=lambda url: fetched.append(url))
-    scope = Scope(max_tier="intrusive", hosts=(ROOT,), authorized=False)
+    scope = Scope(max_tier="intrusive", matcher=HostScope(hosts=(ROOT,)), authorized=False)
     run(scenario, world, scope=scope, budget=Budget(2000))
     assert fetched == []
     assert world.facts("reproduction") == ()
@@ -160,7 +160,7 @@ def test_reproduce_rule_only_targets_grounded_finding_nodes_not_yet_reproduced()
     tasks = reproduce_rule(world)
     ids = {t.node for t in tasks}
     assert ids == {"finding:a"}  # b already reproduced, so it is not re-proposed
-    assert tasks[0].scope_host == "h"
+    assert tasks[0].scope_target == "h"
 
 
 def test_reproduce_is_intrusive_and_denied_without_authorization():
@@ -171,11 +171,11 @@ def test_reproduce_is_intrusive_and_denied_without_authorization():
 
     cap = ReproduceFinding(lambda url: {})
     assert cap.tier == "intrusive" and cap.osint is False
-    denied = Scope(max_tier="intrusive", hosts=("example.com",), authorized=False).authorize(
-        cap.tier, osint=cap.osint, host="api.example.com")
+    denied = Scope(max_tier="intrusive", matcher=HostScope(hosts=("example.com",)), authorized=False).authorize(
+        cap.tier, osint=cap.osint, target="api.example.com")
     assert not denied.allowed
-    allowed = Scope(max_tier="intrusive", hosts=("example.com",), authorized=True).authorize(
-        cap.tier, osint=cap.osint, host="api.example.com")
+    allowed = Scope(max_tier="intrusive", matcher=HostScope(hosts=("example.com",)), authorized=True).authorize(
+        cap.tier, osint=cap.osint, target="api.example.com")
     assert allowed.allowed
 
 
@@ -318,7 +318,7 @@ def test_engine_reaches_the_confirm_phase_when_opted_in_and_authorized():
     """End to end through the real engine: with confirm opted in and the intrusive tier
     authorized, the run advances through EXPLOIT and closes at CONFIRM."""
     scenario = _make(confirm=True)
-    scope = Scope(max_tier="intrusive", hosts=(ROOT,), authorized=True)
+    scope = Scope(max_tier="intrusive", matcher=HostScope(hosts=(ROOT,)), authorized=True)
     report = run(scenario, _seed(), scope=scope, budget=Budget(2000))
     assert report.closed and report.reached == Phase.CONFIRM
 
@@ -330,7 +330,7 @@ def test_regression_surface_closes_at_confirm_with_code_minted_findings():
     provider returns no findings, so only the code-minted structural findings remain."""
     world = _seed()
     scenario = _make(confirm=True, reproduce_fetch_fn=_read_only)
-    scope = Scope(max_tier="intrusive", hosts=(ROOT,), authorized=True)
+    scope = Scope(max_tier="intrusive", matcher=HostScope(hosts=(ROOT,)), authorized=True)
     report = run(scenario, world, scope=scope, budget=Budget(3000))
 
     assert report.closed and report.reached == Phase.CONFIRM
@@ -361,7 +361,7 @@ def test_regression_a_grounded_finding_replays_exactly_its_observed_get_read_onl
     world = _seed()
     scenario = _make(reproduce=True, provider=MockProvider(default=finding),
                      reproduce_fetch_fn=repro_fetch)
-    scope = Scope(max_tier="intrusive", hosts=(ROOT,), authorized=True)
+    scope = Scope(max_tier="intrusive", matcher=HostScope(hosts=(ROOT,)), authorized=True)
     report = run(scenario, world, scope=scope, budget=Budget(3000))
 
     assert report.reached == Phase.EXPLOIT
@@ -395,7 +395,7 @@ def test_regression_grounding_never_replays_an_unobserved_url():
     world = _seed()
     scenario = _make(reproduce=True, provider=MockProvider(default=finding),
                      reproduce_fetch_fn=repro_fetch)
-    scope = Scope(max_tier="intrusive", hosts=(ROOT,), authorized=True)
+    scope = Scope(max_tier="intrusive", matcher=HostScope(hosts=(ROOT,)), authorized=True)
     report = run(scenario, world, scope=scope, budget=Budget(3000))
 
     invented = next((f for f in report.findings if f.title == "Invented path"), None)

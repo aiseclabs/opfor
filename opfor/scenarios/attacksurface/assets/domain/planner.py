@@ -104,7 +104,7 @@ def _port_rule(world: World) -> list[Task]:
             continue
         if world.has_fact(node.id, "ports"):
             continue
-        tasks.append(Task(capability="port_scan", node=node.id, scope_host=node.payload.name))
+        tasks.append(Task(capability="port_scan", node=node.id, scope_target=node.payload.name))
     return tasks
 
 
@@ -116,7 +116,7 @@ def _tls_rule(world: World) -> list[Task]:
     for node in _live_domains(world):
         if world.has_fact(node.id, "tls"):
             continue
-        tasks.append(Task(capability="tls", node=node.id, scope_host=node.payload.name))
+        tasks.append(Task(capability="tls", node=node.id, scope_target=node.payload.name))
     return tasks
 
 
@@ -134,7 +134,7 @@ def _http_rule(world: World) -> list[Task]:
             continue
         if world.has_fact(node.id, "http"):
             continue
-        tasks.append(Task(capability="domain_http", node=node.id, scope_host=node.payload.name))
+        tasks.append(Task(capability="domain_http", node=node.id, scope_target=node.payload.name))
     return tasks
 
 
@@ -148,7 +148,7 @@ def _harvest_rule(world: World) -> list[Task]:
     for node in _live_domains(world):
         if world.has_fact(node.id, "harvested"):
             continue
-        tasks.append(Task(capability="domain_harvest", node=node.id, scope_host=node.payload.name))
+        tasks.append(Task(capability="domain_harvest", node=node.id, scope_target=node.payload.name))
     return tasks
 
 
@@ -188,7 +188,7 @@ def _endpoints_rule(world: World, config: DomainPlanConfig) -> list[Task]:
                           params={"paths": list(config.probe_paths),
                                   "static_suffixes": list(config.static_suffixes),
                                   "static_prefixes": list(config.static_prefixes)},
-                          scope_host=node.payload.name))
+                          scope_target=node.payload.name))
     return tasks
 
 
@@ -209,7 +209,7 @@ def _spec_rule(world: World) -> list[Task]:
         if not _is_spec_endpoint(endpoint):
             continue
         host = urlparse(endpoint.url).hostname or ""
-        tasks.append(Task(capability="endpoint_expand_spec", node=node.id, scope_host=host))
+        tasks.append(Task(capability="endpoint_expand_spec", node=node.id, scope_target=host))
     return tasks
 
 
@@ -227,7 +227,7 @@ def _spec_probe_rule(world: World) -> list[Task]:
         if world.has_fact(node.id, "spec_audit"):
             continue
         host = urlparse(node.payload.url).hostname or ""
-        tasks.append(Task(capability="endpoint_probe_spec", node=node.id, scope_host=host))
+        tasks.append(Task(capability="endpoint_probe_spec", node=node.id, scope_target=host))
     return tasks
 
 
@@ -241,7 +241,7 @@ def _graphql_rule(world: World) -> list[Task]:
         if not endpoint.path.lower().rstrip("/").endswith("/graphql"):
             continue
         host = urlparse(endpoint.url).hostname or ""
-        tasks.append(Task(capability="endpoint_graphql", node=node.id, scope_host=host))
+        tasks.append(Task(capability="endpoint_graphql", node=node.id, scope_target=host))
     return tasks
 
 
@@ -256,7 +256,7 @@ def _source_map_rule(world: World) -> list[Task]:
         if world.has_fact(node.id, "source_maps"):
             continue
         tasks.append(Task(capability="source_map_scan", node=node.id,
-                          scope_host=node.payload.name))
+                          scope_target=node.payload.name))
     return tasks
 
 
@@ -269,7 +269,7 @@ def _secret_scan_rule(world: World, config: DomainPlanConfig) -> list[Task]:
             continue
         tasks.append(Task(capability="secret_scan", node=node.id,
                           params={"patterns": list(config.secret_patterns)},
-                          scope_host=node.payload.name))
+                          scope_target=node.payload.name))
     return tasks
 
 
@@ -288,7 +288,7 @@ def _backup_rule(world: World, config: DomainPlanConfig) -> list[Task]:
                           params={"append": list(config.backup_append),
                                   "rename": list(config.backup_rename),
                                   "swap": list(config.backup_swap)},
-                          scope_host=node.payload.name))
+                          scope_target=node.payload.name))
     return tasks
 
 

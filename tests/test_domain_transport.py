@@ -212,7 +212,7 @@ def test_http_probe_tries_every_public_ip_retries_timeouts_and_raises_the_unexpe
 
 def test_http_probe_denied_when_domain_out_of_scope():
     world = _seed()
-    report = _run(world, scope=Scope(max_tier="recon", hosts=("other.test",)))
+    report = _run(world, scope=Scope(max_tier="recon", matcher=HostScope(hosts=("other.test",))))
     assert report.closed
     assert not world.has_fact("domain:example.com", "http")
     assert any("denied" in n and "domain_http" in n for n in report.notes)
@@ -494,7 +494,7 @@ def test_tls_capability_reports_posture_and_fails_loud_on_error():
     world = World()
     world.add(Node(id="domain:h.example.com", type="domain",
                    payload=DomainData(name="h.example.com", root="example.com", source="hint")))
-    task = Task(capability="tls", node="domain:h.example.com", scope_host="h.example.com")
+    task = Task(capability="tls", node="domain:h.example.com", scope_target="h.example.com")
 
     ok = TLSSecurity(lambda n, a: {"reachable": True, "valid": False,
                                    "validity_error": "certificate has expired"})
@@ -542,7 +542,7 @@ def test_port_scan_capability_is_probe_tier_and_packs_facts_and_fails_loud():
     world = World()
     world.add(Node(id="domain:h.example.com", type="domain",
                    payload=DomainData(name="h.example.com", root="example.com", source="hint")))
-    task = Task(capability="port_scan", node="domain:h.example.com", scope_host="h.example.com")
+    task = Task(capability="port_scan", node="domain:h.example.com", scope_target="h.example.com")
 
     ok = PortServices(lambda n, a: {"reachable": True, "scanned": 24,
                                     "open": [{"port": 6379, "service": "redis", "banner": ""}]})
@@ -604,3 +604,32 @@ def test_looks_like_host_rejects_a_slash_label_and_keeps_a_wildcard():
     assert looks_like_host("evil.com/x.example.com") is False
     assert looks_like_host("a b.example.com") is False
     assert looks_like_host("user@example.com") is False
+
+
+def test_host_scope_admits_a_host_and_its_subdomains_but_pins_the_dot_boundary():
+    scope = HostScope(hosts=("example.com",))
+    assert scope.in_scope("example.com")
+    assert scope.in_scope("api.example.com")
+    # a subdomain matches through the dot boundary, but a look-alike sibling never does
+    assert not scope.in_scope("evilexample.com")
+    assert not scope.in_scope("other.test")
+
+
+def test_host_scope_normalizes_case_and_a_trailing_root_dot():
+    scope = HostScope(hosts=("Example.COM.",))
+    assert scope.in_scope("API.example.com")
+    assert scope.in_scope("example.com.")
+
+
+def test_host_scope_admits_an_exact_resource_and_drops_a_blank_host():
+    scope = HostScope(hosts=("", "   ", "."), resources=("repo:owner/name",))
+    # a blank or bare-dot host normalizes away, so nothing rides the suffix rule
+    assert not scope.in_scope("anything.com")
+    assert scope.in_scope("repo:owner/name")
+    assert not scope.in_scope("repo:other/name")
+
+
+def test_host_scope_round_trips_through_its_dict():
+    scope = HostScope(hosts=("example.com",), resources=("repo:o/n",))
+    revived = HostScope.from_dict(scope.to_dict())
+    assert revived.in_scope("api.example.com") and revived.in_scope("repo:o/n")

@@ -11,6 +11,7 @@ from __future__ import annotations
 from opfor.core import Budget, Scope
 from opfor.core.engine import run as engine_run
 from opfor.scenarios.attacksurface import build
+from opfor.scenarios.attacksurface.hostnames import HostScope
 
 from evals.results import Result, SuiteResult
 from evals.schema import reports_from_findings
@@ -31,7 +32,7 @@ def run_once(case, *, provider=None, model=None, budget: int = 3000) -> Result:
         seams["model"] = model
     scenario = build(**seams)
     world = case.world()
-    scope = Scope(max_tier="recon", hosts=case.SCOPE_HOSTS, authorized=False)
+    scope = Scope(max_tier="recon", matcher=HostScope(hosts=case.SCOPE_HOSTS), authorized=False)
     report = engine_run(scenario, world, scope=scope, budget=Budget(budget))
     reports = reports_from_findings(_report_json(report, world))
     result = score(case.answer_key(), reports)

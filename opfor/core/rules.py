@@ -50,16 +50,15 @@ def each(
     run: str,
     unless_fact: str | None = None,
     where: Callable[[object], bool] | None = None,
-    scope_host: Callable[[object], str | None] | None = None,
-    scope_resource: Callable[[object], str | None] | None = None,
+    scope_target: Callable[[object], str | None] | None = None,
 ) -> Rule:
     """A rule that runs a capability once per node of a type.
 
     `unless_fact` skips a node that already carries a fact of that kind, which is how
     a stage waits for its predecessor without a task dependency. `where` filters on the
     node's payload, so a rule can target only some nodes such as the seed roots.
-    `scope_host` and `scope_resource` read a locator off the payload, so a non-osint
-    capability is authorized against the right target.
+    `scope_target` reads a locator off the payload, so a non-osint capability is authorized
+    against the right target.
     """
 
     def rule(world: World) -> list[Task]:
@@ -72,8 +71,7 @@ def each(
             tasks.append(Task(
                 capability=run,
                 node=node.id,
-                scope_host=scope_host(node.payload) if scope_host else None,
-                scope_resource=scope_resource(node.payload) if scope_resource else None,
+                scope_target=scope_target(node.payload) if scope_target else None,
             ))
         return tasks
 

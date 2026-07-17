@@ -76,3 +76,40 @@ def looks_like_host(name: str) -> bool:
         if any(char not in _HOST_LABEL_CHARS for char in part):
             return False
     return True
+
+
+def _normalize_host(name: str) -> str:
+    """A host reduced to its canonical comparison form, lowercased with surrounding whitespace
+    and a trailing root dot removed. A hostname is case-insensitive and `example.com.` names the
+    same host as `example.com`, so scope must match them the same."""
+    return str(name).strip().lower().rstrip(".")
+
+
+class HostScope:
+    """The attack-surface scope matcher: the DNS suffix rule that used to sit in the kernel gate.
+
+    A candidate is in scope if it exactly matches an in-scope resource id, such as a GitHub
+    `repo:owner/name`, or it is one of the in-scope hosts or a subdomain under one. Holding this
+    here, not in the engine, is what lets the kernel name no host. The endswith test pins a dot
+    boundary, so `evilexample.com` is not in scope of `example.com`.
+    """
+
+    def __init__(self, *, hosts: tuple[str, ...] = (), resources: tuple[str, ...] = ()) -> None:
+        # Normalize and drop any host that normalizes to empty, so a blank or bare-dot entry
+        # cannot sit in scope and match through the suffix rule.
+        self.hosts = tuple(h for h in (_normalize_host(x) for x in hosts) if h)
+        self.resources = tuple(str(r).strip().lower() for r in resources)
+
+    def in_scope(self, target: str) -> bool:
+        candidate = str(target).strip().lower()
+        if candidate in self.resources:
+            return True
+        host = _normalize_host(target)
+        return bool(host) and any(host == h or host.endswith("." + h) for h in self.hosts)
+
+    def to_dict(self) -> dict:
+        return {"hosts": list(self.hosts), "resources": list(self.resources)}
+
+    @classmethod
+    def from_dict(cls, data) -> "HostScope":
+        return cls(hosts=tuple(data.get("hosts", ())), resources=tuple(data.get("resources", ())))

@@ -22,7 +22,7 @@ from opfor.core.providers import CompletionResult, Message, MockProvider, Provid
 from opfor.core.result import Finding, Report
 from opfor.core.rules import Planner, Rule, RuleSet, each
 from opfor.core.scenario import Scenario
-from opfor.core.scope import Decision, Scope
+from opfor.core.scope import Decision, ExactScope, Scope, ScopeMatcher
 from opfor.core.severity import SEVERITIES
 from opfor.core.triage import Triage
 from opfor.core.world import Fact, Node, World
@@ -56,6 +56,8 @@ __all__ = [
     "SEVERITIES",
     "Scenario",
     "Scope",
+    "ScopeMatcher",
+    "ExactScope",
     "Task",
     "Triage",
     "World",

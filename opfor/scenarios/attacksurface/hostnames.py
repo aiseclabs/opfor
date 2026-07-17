@@ -95,17 +95,22 @@ class HostScope:
     """
 
     def __init__(self, *, hosts: tuple[str, ...] = (), resources: tuple[str, ...] = ()) -> None:
-        # Normalize and drop any host that normalizes to empty, so a blank or bare-dot entry
-        # cannot sit in scope and match through the suffix rule.
+        # Normalize and drop any host or resource that reduces to empty, so a blank or bare-dot
+        # entry cannot sit in scope and admit a blank target through either branch.
         self.hosts = tuple(h for h in (_normalize_host(x) for x in hosts) if h)
-        self.resources = tuple(str(r).strip().lower() for r in resources)
+        self.resources = tuple(r for r in (str(x).strip().lower() for x in resources) if r)
 
     def in_scope(self, target: str) -> bool:
         candidate = str(target).strip().lower()
         if candidate in self.resources:
             return True
+        # Normalize first, then admit only a host-shaped target to the suffix rule, so a trailing
+        # root dot still matches while a resource id ending in `.<a-host>`, such as
+        # `repo:owner/x.example.com`, cannot slip in against a host.
         host = _normalize_host(target)
-        return bool(host) and any(host == h or host.endswith("." + h) for h in self.hosts)
+        if not host or not looks_like_host(host):
+            return False
+        return any(host == h or host.endswith("." + h) for h in self.hosts)
 
     def to_dict(self) -> dict:
         return {"hosts": list(self.hosts), "resources": list(self.resources)}

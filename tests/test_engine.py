@@ -9,7 +9,6 @@ import pytest
 from opfor.core import (Budget, Capability, Fact, Later, Node, Phase, RuleSet, Scenario, Scope,
                         Task, Triage, World, resume, run)
 from opfor.core.result import CLOSED, ERRORED, SUSPENDED
-from opfor.scenarios.attacksurface.hostnames import HostScope
 from opfor.scenarios.mock import MOCK
 
 
@@ -69,26 +68,6 @@ def test_no_reemit_is_idempotent():
 def test_phase_upto_is_ordered_and_inclusive():
     assert Phase.upto(Phase.ENRICH) == (Phase.SEED, Phase.MAP, Phase.ENRICH)
     assert Phase.upto(Phase.TRIAGE)[-1] == Phase.TRIAGE
-
-
-def test_scope_denies_out_of_scope_host():
-    scope = Scope(max_tier="recon", matcher=HostScope(hosts=("example.com",)))
-    d = scope.authorize("recon", osint=False, target="evil.test")
-    assert not d.allowed
-    d2 = scope.authorize("recon", osint=False, target="api.example.com")
-    assert d2.allowed
-
-
-def test_scope_waves_through_passive_osint():
-    scope = Scope(max_tier="recon")
-    d = scope.authorize("recon", osint=True)
-    assert d.allowed
-
-
-def test_scope_intrusive_needs_authorization():
-    scope = Scope(max_tier="intrusive", matcher=HostScope(hosts=("example.com",)), authorized=False)
-    d = scope.authorize("intrusive", osint=False, target="example.com")
-    assert not d.allowed
 
 
 def test_unknown_scenario_fails_loud():

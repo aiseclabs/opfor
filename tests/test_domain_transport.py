@@ -633,3 +633,26 @@ def test_host_scope_round_trips_through_its_dict():
     scope = HostScope(hosts=("example.com",), resources=("repo:o/n",))
     revived = HostScope.from_dict(scope.to_dict())
     assert revived.in_scope("api.example.com") and revived.in_scope("repo:o/n")
+
+
+def test_host_scope_drops_a_blank_resource_so_a_blank_target_is_never_in_scope():
+    scope = HostScope(hosts=("example.com",), resources=("", "   ", "repo:o/n"))
+    assert not scope.in_scope("")
+    assert not scope.in_scope("   ")
+    assert scope.in_scope("repo:o/n")
+
+
+def test_host_scope_does_not_let_a_resource_shaped_target_ride_the_suffix_rule():
+    scope = HostScope(hosts=("example.com",))
+    # a resource id ending in .<in-scope-host> must not match through the host suffix rule
+    assert not scope.in_scope("repo:owner/deploy.example.com")
+    # a genuine subdomain still matches
+    assert scope.in_scope("deploy.example.com")
+
+
+def test_host_scope_gates_end_to_end_through_scope_authorize():
+    # the scenario matcher wired into the kernel Scope: an out-of-scope host is denied and a
+    # subdomain of an in-scope host is allowed, all the way through authorize
+    scope = Scope(max_tier="recon", matcher=HostScope(hosts=("example.com",)))
+    assert not scope.authorize("recon", osint=False, target="evil.test").allowed
+    assert scope.authorize("recon", osint=False, target="api.example.com").allowed

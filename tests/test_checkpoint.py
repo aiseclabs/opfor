@@ -55,12 +55,16 @@ def test_checkpoint_preserves_scope_and_budget():
     budget = Budget(50)
     budget.steps = 7
     state = RunState(scenario=scenario, world=World(),
-                     scope=Scope(max_tier="intrusive", matcher=HostScope(hosts=("example.com",)), authorized=True),
+                     scope=Scope(max_tier="intrusive",
+                                 matcher=HostScope(hosts=("example.com",), resources=("repo:o/n",)),
+                                 authorized=True),
                      budget=budget, ledger=Ledger(), reached=Phase.ENRICH)
     revived = restore(Checkpoint.from_json(checkpoint(state).to_json()), scenario)
     # an intrusive authorization must survive, so a resumed run keeps its recorded envelope
     assert revived.scope.max_tier == "intrusive" and revived.scope.authorized is True
+    # both matcher halves round-trip, so a resumed run re-authorizes hosts and resources alike
     assert revived.scope.matcher.hosts == ("example.com",)
+    assert revived.scope.matcher.resources == ("repo:o/n",)
     assert revived.budget.max_steps == 50 and revived.budget.steps == 7
 
 

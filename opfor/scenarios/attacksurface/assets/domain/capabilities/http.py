@@ -12,7 +12,7 @@ from opfor.scenarios.attacksurface.assets.domain.capabilities.common import (
     _is_static_asset,
     _safe,
 )
-from opfor.scenarios.attacksurface.assets.domain.parsers import path_permutations
+from opfor.scenarios.attacksurface.assets.domain.sources.parsers import path_permutations
 from opfor.scenarios.attacksurface.assets.domain.sources import (
     cloud_refs_in_text,
     paths_in_javascript,

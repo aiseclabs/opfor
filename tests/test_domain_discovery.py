@@ -136,7 +136,7 @@ def test_resolve_host_keeps_cname_and_asks_both_address_families(monkeypatch):
 
 
 def test_http_probe_tries_every_public_ip_retries_timeouts_and_raises_the_unexpected(monkeypatch):
-    from opfor.scenarios.attacksurface.assets.domain import http as domains
+    from opfor.scenarios.attacksurface.assets.domain.sources import http as domains
 
     # the first public address refuses on both schemes, the second answers, so a multi-ip
     # name is alive rather than judged dead on the first unlucky address
@@ -213,7 +213,7 @@ def test_http_probe_tries_every_public_ip_retries_timeouts_and_raises_the_unexpe
 
 
 def test_signal_headers_keeps_identity_drops_noise_and_masks_cookie_value():
-    from opfor.scenarios.attacksurface.assets.domain import http as domains
+    from opfor.scenarios.attacksurface.assets.domain.sources import http as domains
 
     class _Resp:
         def getheaders(self):
@@ -729,7 +729,7 @@ def test_certspotter_does_not_flag_truncation_when_the_cursor_runs_dry(monkeypat
 def test_fetch_url_tries_every_public_address_not_only_the_first(monkeypatch):
     # a host whose first address is dead but second is live must still be enriched, so the
     # fetch seam iterates all public addresses the way the alive probe does
-    from opfor.scenarios.attacksurface.assets.domain import http as domains
+    from opfor.scenarios.attacksurface.assets.domain.sources import http as domains
     seen = []
 
     def connect(name, ip, scheme, path, **kw):
@@ -744,7 +744,7 @@ def test_fetch_url_tries_every_public_address_not_only_the_first(monkeypatch):
 
 
 def test_fetch_seams_are_loud_on_the_unexpected_and_name_why_no_address_answered(monkeypatch):
-    from opfor.scenarios.attacksurface.assets.domain import http as domains
+    from opfor.scenarios.attacksurface.assets.domain.sources import http as domains
 
     # every fetch seam shares the alive probe's contract: only a transport error is caught and
     # continued past, an unexpected error is raised loud rather than swallowed as a null status.
@@ -778,7 +778,7 @@ def test_fetch_seams_are_loud_on_the_unexpected_and_name_why_no_address_answered
 
 
 def test_fetch_public_url_is_loud_on_the_unexpected_and_names_unreachable(monkeypatch):
-    from opfor.scenarios.attacksurface.assets.domain import http as domains
+    from opfor.scenarios.attacksurface.assets.domain.sources import http as domains
 
     class BugOpener:
         def open(self, *a, **k):
@@ -797,7 +797,7 @@ def test_fetch_public_url_is_loud_on_the_unexpected_and_names_unreachable(monkey
 
 
 def test_signal_headers_capture_security_headers_complete_past_the_identification_cap():
-    from opfor.scenarios.attacksurface.assets.domain import http as domains
+    from opfor.scenarios.attacksurface.assets.domain.sources import http as domains
 
     # a wall of non-security headers beyond the identification cap, with the security family
     # arriving last, so a naive cap would drop them and triage could not tell absent from cut
@@ -874,7 +874,7 @@ def test_permute_subdomains_confirms_only_resolving_candidates_and_skips_a_wildc
 
 
 def test_path_permutations_derive_parents_and_version_twins_from_observed_only():
-    from opfor.scenarios.attacksurface.assets.domain.parsers import path_permutations
+    from opfor.scenarios.attacksurface.assets.domain.sources.parsers import path_permutations
 
     got = path_permutations(["/api/v1/users", "/static/app.js"])
     # parent directories of an observed path, where a listing above a known file would show
@@ -923,7 +923,7 @@ def test_permute_rule_waits_for_passive_enumeration_then_runs_once():
 
 
 def test_port_scan_reports_open_service_ports_with_banners(monkeypatch):
-    from opfor.scenarios.attacksurface.assets.domain import http as domains
+    from opfor.scenarios.attacksurface.assets.domain.sources import http as domains
 
     opened = {22: "SSH-2.0-OpenSSH_8.9", 6379: ""}  # ssh answers a banner, redis is open silently
 
@@ -941,7 +941,7 @@ def test_port_scan_reports_open_service_ports_with_banners(monkeypatch):
 
 
 def test_port_scan_is_not_reachable_without_a_public_address():
-    from opfor.scenarios.attacksurface.assets.domain import http as domains
+    from opfor.scenarios.attacksurface.assets.domain.sources import http as domains
 
     out = domains.port_scan("h.example.com", ("10.0.0.1",))
     assert out["reachable"] is False and out["reason"] == "no-public-address"
@@ -973,7 +973,7 @@ def test_port_scan_capability_is_probe_tier_and_packs_facts_and_fails_loud():
 
 
 def test_tls_probe_reports_a_valid_certificate_with_its_expiry(monkeypatch):
-    from opfor.scenarios.attacksurface.assets.domain import http as domains
+    from opfor.scenarios.attacksurface.assets.domain.sources import http as domains
 
     def connect(name, ip, context):
         return ({"notAfter": "Jun  1 12:00:00 2099 GMT"}, "TLSv1.3",
@@ -988,7 +988,7 @@ def test_tls_probe_reports_a_valid_certificate_with_its_expiry(monkeypatch):
 
 def test_tls_probe_reports_an_untrusted_certificate_as_reachable_but_invalid(monkeypatch):
     import ssl
-    from opfor.scenarios.attacksurface.assets.domain import http as domains
+    from opfor.scenarios.attacksurface.assets.domain.sources import http as domains
 
     def connect(name, ip, context):
         # the verifying context raises on a bad cert, the unverified reconnect still reads the
@@ -1007,7 +1007,7 @@ def test_tls_probe_reports_an_untrusted_certificate_as_reachable_but_invalid(mon
 
 
 def test_tls_probe_is_a_clean_not_reachable_when_the_port_does_not_answer(monkeypatch):
-    from opfor.scenarios.attacksurface.assets.domain import http as domains
+    from opfor.scenarios.attacksurface.assets.domain.sources import http as domains
 
     assert domains.tls_probe("h.example.com", ("10.0.0.1",))["reason"] == "no-public-address"
 
@@ -1043,7 +1043,7 @@ def test_tls_capability_reports_posture_and_fails_loud_on_error():
 
 
 def test_signal_headers_keep_cookie_flags_but_drop_the_secret_value():
-    from opfor.scenarios.attacksurface.assets.domain import http as domains
+    from opfor.scenarios.attacksurface.assets.domain.sources import http as domains
 
     class Resp:
         def getheaders(self):
@@ -1058,7 +1058,7 @@ def test_signal_headers_keep_cookie_flags_but_drop_the_secret_value():
 
 
 def test_dns_email_posture_reads_spf_dmarc_caa_and_dnssec(monkeypatch):
-    from opfor.scenarios.attacksurface.assets.domain import http as domains
+    from opfor.scenarios.attacksurface.assets.domain.sources import http as domains
 
     def lookup(name, rtype):
         if name == "example.com" and rtype == "TXT":
@@ -1080,7 +1080,7 @@ def test_dns_email_posture_reads_spf_dmarc_caa_and_dnssec(monkeypatch):
 
 
 def test_doh_lookup_fails_over_resolvers_and_raises_when_all_error(monkeypatch):
-    from opfor.scenarios.attacksurface.assets.domain import http as domains
+    from opfor.scenarios.attacksurface.assets.domain.sources import http as domains
 
     tried = []
 
@@ -1119,7 +1119,7 @@ def test_dns_email_capability_reports_records_and_fails_loud_on_error():
 
 
 def test_graphql_introspection_raises_on_a_server_error(monkeypatch):
-    from opfor.scenarios.attacksurface.assets.domain import http as domains
+    from opfor.scenarios.attacksurface.assets.domain.sources import http as domains
     monkeypatch.setattr(domains, "resolve_host", lambda n: {"addresses": ("2.2.2.2",)})
     monkeypatch.setattr(domains, "_connect", lambda *a, **k: (500, "", "", "", "", ()))
     # a 5xx introspection is errored and unknown, never reported as safely disabled
@@ -1128,7 +1128,7 @@ def test_graphql_introspection_raises_on_a_server_error(monkeypatch):
 
 
 def test_graphql_introspection_is_off_on_a_client_refusal(monkeypatch):
-    from opfor.scenarios.attacksurface.assets.domain import http as domains
+    from opfor.scenarios.attacksurface.assets.domain.sources import http as domains
     monkeypatch.setattr(domains, "resolve_host", lambda n: {"addresses": ("2.2.2.2",)})
     monkeypatch.setattr(domains, "_connect",
                         lambda *a, **k: (403, "", "", "introspection disabled", "", ()))
@@ -1139,7 +1139,7 @@ def test_graphql_introspection_is_off_on_a_client_refusal(monkeypatch):
 def test_subdomain_enumeration_partial_failure_surfaces_a_coverage_gap():
     from opfor.core import Done, Task
     from opfor.scenarios.attacksurface.assets.domain.capabilities.discovery import Subdomains
-    from opfor.scenarios.attacksurface.assets.domain.passive import Enumeration
+    from opfor.scenarios.attacksurface.assets.domain.sources.passive import Enumeration
     from opfor.scenarios.attacksurface.assets.domain.types import DomainData
 
     world = World()
@@ -1176,7 +1176,7 @@ def test_registrable_root_recognizes_country_second_levels_generally():
 def test_resolve_host_treats_a_servfail_as_a_resolver_error_not_a_no_address(monkeypatch):
     import urllib.request
 
-    from opfor.scenarios.attacksurface.assets.domain import http as domains
+    from opfor.scenarios.attacksurface.assets.domain.sources import http as domains
 
     class _Resp:
         def __init__(self, payload):
@@ -1215,7 +1215,7 @@ def test_registrable_root_leaves_an_ip_literal_unchanged():
 
 
 def test_same_host_path_matches_a_mixed_case_host():
-    from opfor.scenarios.attacksurface.assets.domain.parsers import same_host_path
+    from opfor.scenarios.attacksurface.assets.domain.sources.parsers import same_host_path
     # a mixed-case host name must still match its own absolute urls, else script and sitemap
     # extraction drop every same-host link
     assert same_host_path("https://Example.com/app.js", "Example.com") == "/app.js"
@@ -1256,7 +1256,7 @@ def test_connect_closes_the_raw_socket_when_the_tls_handshake_fails(monkeypatch)
     import socket
     import ssl
 
-    from opfor.scenarios.attacksurface.assets.domain import http as domains
+    from opfor.scenarios.attacksurface.assets.domain.sources import http as domains
 
     closed = {"n": 0}
 
@@ -1278,7 +1278,7 @@ def test_connect_closes_the_raw_socket_when_the_tls_handshake_fails(monkeypatch)
 
 
 def test_readonly_fetch_refuses_a_host_that_resolves_only_to_a_private_address(monkeypatch):
-    from opfor.scenarios.attacksurface.assets.domain import http as domains
+    from opfor.scenarios.attacksurface.assets.domain.sources import http as domains
     monkeypatch.setattr(domains, "resolve_host",
                         lambda h: {"addresses": ("127.0.0.1",), "resolvable": True, "cnames": ()})
     # a name repointed at loopback between observation and replay must not be fetched
@@ -1286,7 +1286,7 @@ def test_readonly_fetch_refuses_a_host_that_resolves_only_to_a_private_address(m
 
 
 def test_readonly_fetch_pins_a_public_address_and_verifies_the_certificate(monkeypatch):
-    from opfor.scenarios.attacksurface.assets.domain import http as domains
+    from opfor.scenarios.attacksurface.assets.domain.sources import http as domains
     monkeypatch.setattr(domains, "resolve_host",
                         lambda h: {"addresses": ("93.184.216.34",), "resolvable": True, "cnames": ()})
     seen = {}
@@ -1303,7 +1303,7 @@ def test_readonly_fetch_pins_a_public_address_and_verifies_the_certificate(monke
 
 
 def test_fetch_public_url_uses_the_no_redirect_opener(monkeypatch):
-    from opfor.scenarios.attacksurface.assets.domain import http as domains
+    from opfor.scenarios.attacksurface.assets.domain.sources import http as domains
 
     used = {}
 
@@ -1333,7 +1333,7 @@ def test_fetch_public_url_uses_the_no_redirect_opener(monkeypatch):
 def test_certspotter_non_list_response_fails_loud(monkeypatch):
     import urllib.request
 
-    from opfor.scenarios.attacksurface.assets.domain import passive
+    from opfor.scenarios.attacksurface.assets.domain.sources import passive
 
     class _Resp:
         def read(self, *_a):
@@ -1353,7 +1353,7 @@ def test_certspotter_non_list_response_fails_loud(monkeypatch):
 
 
 def test_read_capped_stops_at_the_wall_clock_deadline(monkeypatch):
-    from opfor.scenarios.attacksurface.assets.domain import http as domains
+    from opfor.scenarios.attacksurface.assets.domain.sources import http as domains
     clock = {"t": 0.0}
     monkeypatch.setattr(domains.time, "monotonic", lambda: clock["t"])
 

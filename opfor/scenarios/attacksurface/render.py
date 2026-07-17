@@ -11,7 +11,7 @@ from __future__ import annotations
 from urllib.parse import urlparse
 
 from opfor.core import World
-from opfor.scenarios.attacksurface.assets.domain.http import SECURITY_HEADERS
+from opfor.scenarios.attacksurface.assets.domain.sources.http import SECURITY_HEADERS
 
 _MAX_BODY = 600
 _MAX_LIST = 40

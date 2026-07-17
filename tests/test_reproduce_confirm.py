@@ -435,7 +435,7 @@ def test_reproduce_records_a_redirect_raw_with_location_and_expect():
 
 
 def test_readonly_fetch_uses_a_non_following_redirect_handler():
-    from opfor.scenarios.attacksurface.assets.domain.http import _NoRedirect
+    from opfor.scenarios.attacksurface.assets.domain.sources.http import _NoRedirect
     # returning None from redirect_request means a 3xx is returned raw rather than chased, so
     # the reproduce replay never follows a server-controlled redirect off-scope or into a GET
     # side effect

@@ -56,7 +56,7 @@ def test_nvd_cves_returns_nothing_for_an_unidentified_product():
 def test_nvd_keyword_search_uses_the_product_alone_not_the_version(monkeypatch):
     """NVD keyword search matches the description text, where a version rarely appears, so
     the query is the product alone, or a version-bearing product would return nothing."""
-    from opfor.scenarios.attacksurface.assets.domain import passive as domains
+    from opfor.scenarios.attacksurface.assets.domain.sources import passive as domains
 
     queries = []
     monkeypatch.setattr(domains, "_nvd_fetch", lambda q: queries.append(q) or [])
@@ -67,7 +67,7 @@ def test_nvd_keyword_search_uses_the_product_alone_not_the_version(monkeypatch):
 def test_nvd_falls_back_to_a_product_keyword_when_the_cpe_match_is_empty(monkeypatch):
     """A wrong vendor guess or a cve not tagged with the cpe yields an empty cpe match, so
     the query falls back to a product keyword rather than missing a real advisory."""
-    from opfor.scenarios.attacksurface.assets.domain import passive as domains
+    from opfor.scenarios.attacksurface.assets.domain.sources import passive as domains
 
     queries = []
 
@@ -86,7 +86,7 @@ def test_nvd_falls_back_to_a_product_keyword_when_the_cpe_match_is_empty(monkeyp
 
 
 def test_nvd_cpe_match_with_results_does_not_fall_back(monkeypatch):
-    from opfor.scenarios.attacksurface.assets.domain import passive as domains
+    from opfor.scenarios.attacksurface.assets.domain.sources import passive as domains
 
     queries = []
     monkeypatch.setattr(domains, "_nvd_fetch",
@@ -98,7 +98,7 @@ def test_nvd_cpe_match_with_results_does_not_fall_back(monkeypatch):
 
 
 def test_nvd_throttle_serializes_calls_to_stay_under_the_rate_limit(monkeypatch):
-    from opfor.scenarios.attacksurface.assets.domain import passive as domains
+    from opfor.scenarios.attacksurface.assets.domain.sources import passive as domains
 
     clock = {"t": 100.0}
     slept = []
@@ -770,7 +770,7 @@ def test_expand_spec_fails_loud_on_transport_failure_and_on_a_malformed_body():
 
 
 def test_secret_scan_reports_multiple_distinct_matches_not_only_the_first():
-    from opfor.scenarios.attacksurface.assets.domain.javascript import secrets_in_text
+    from opfor.scenarios.attacksurface.assets.domain.sources.javascript import secrets_in_text
     body = "a=sk-aaaaaaaaaaaaaaaaaaaa b=sk-bbbbbbbbbbbbbbbbbbbb"
     patterns = [{"id": "token", "regex": r"sk-[a-z]{20}", "note": "token"}]
     found = secrets_in_text(body, patterns)
@@ -820,7 +820,7 @@ def test_distinct_treats_a_differing_redirect_location_as_a_real_endpoint():
 
 
 def test_openapi_paths_apply_the_declared_base_path():
-    from opfor.scenarios.attacksurface.assets.domain.parsers import paths_from_openapi
+    from opfor.scenarios.attacksurface.assets.domain.sources.parsers import paths_from_openapi
     # Swagger 2 basePath and OpenAPI 3 servers url both move an operation off the host root,
     # so the real unauthenticated surface is probed rather than a 404 at /users
     swagger = {"basePath": "/api/v2", "paths": {"/users": {"get": {}}}}
@@ -830,7 +830,7 @@ def test_openapi_paths_apply_the_declared_base_path():
 
 
 def test_openapi_path_item_without_verbs_is_a_get_candidate_not_a_write():
-    from opfor.scenarios.attacksurface.assets.domain.parsers import (
+    from opfor.scenarios.attacksurface.assets.domain.sources.parsers import (
         paths_from_openapi, split_operation)
     ops = paths_from_openapi({"paths": {"/ref-path": {"$ref": "#/components/x"}}})
     assert ops == ["GET /ref-path"]
@@ -883,7 +883,7 @@ def test_norm_url_keeps_the_query_so_a_query_bearing_poc_does_not_false_match():
 
 
 def test_urls_in_javascript_extracts_an_explicit_port():
-    from opfor.scenarios.attacksurface.assets.domain.javascript import urls_in_javascript
+    from opfor.scenarios.attacksurface.assets.domain.sources.javascript import urls_in_javascript
     body = 'const api = "https://api.host.com:8443/v1/users";'
     assert "https://api.host.com:8443/v1/users" in urls_in_javascript(body)
 
@@ -901,7 +901,7 @@ def test_sql_dump_clue_covers_every_probed_sql_path():
 def test_javascript_extraction_dedups_and_caps_a_hostile_bundle():
     # a bundle packing far more distinct quoted paths than the cap must be read out in bounded
     # time and bounded length, not grow an unbounded list on a quadratic membership scan
-    from opfor.scenarios.attacksurface.assets.domain.javascript import (
+    from opfor.scenarios.attacksurface.assets.domain.sources.javascript import (
         _MAX_JS_STRINGS,
         paths_in_javascript,
         urls_in_javascript,
@@ -931,7 +931,7 @@ def test_secrets_in_text_keeps_two_keys_sharing_a_prefix_and_length():
 def test_paths_from_openapi_caps_and_expand_spec_reports_the_drop():
     from opfor.core import Done, Task
     from opfor.scenarios.attacksurface.assets.domain.capabilities.specs import ExpandSpec
-    from opfor.scenarios.attacksurface.assets.domain.parsers import _MAX_SPEC_PATHS
+    from opfor.scenarios.attacksurface.assets.domain.sources.parsers import _MAX_SPEC_PATHS
     from opfor.scenarios.attacksurface.assets.domain.sources import paths_from_openapi
     from opfor.scenarios.attacksurface.assets.domain.types import Endpoint
 
@@ -952,7 +952,7 @@ def test_paths_from_openapi_caps_and_expand_spec_reports_the_drop():
 
 
 def test_openapi_base_drops_a_protocol_relative_authority():
-    from opfor.scenarios.attacksurface.assets.domain.parsers import _openapi_base
+    from opfor.scenarios.attacksurface.assets.domain.sources.parsers import _openapi_base
 
     # //evil.com/api must keep only its path, never turn the authority into the base path
     assert _openapi_base({"servers": [{"url": "//evil.com/api"}]}) == "/api"

@@ -171,3 +171,65 @@ def test_resume_with_an_unknown_handle_is_loud_not_silent():
     assert again.status == SUSPENDED
     assert any("ghost" in n for n in again.notes)
     assert again.pending == ("h1",)
+
+
+# --- budget suspension resumes, and error suspension says why --------------------------
+
+
+def test_a_budget_suspension_carries_resumable_state_and_continues_when_topped_up():
+    """A run stopped purely by budget is resumable: it carries its state and the phase it
+    stopped in, so raising the ceiling and resuming continues from there rather than losing
+    the run or restarting at SEED."""
+    world = _world_with_root()
+    report = run(MOCK, world, scope=Scope(max_tier="recon"), budget=Budget(1))
+    assert report.status == SUSPENDED
+    assert report.state is not None
+    assert report.state.resume_from == Phase.MAP
+    # the operator raises the ceiling and resumes, the run picks up and closes
+    report.state.budget.max_steps = 100
+    closed = resume(report.state, {})
+    assert closed.closed
+    assert closed.reached == Phase.TRIAGE
+    assert len(world.nodes("widget")) == 3
+
+
+def test_budget_running_out_on_parked_async_keeps_the_resume_point_and_names_the_wait():
+    """The budget cut-off must not mask parked async work. A run that spends its last step
+    parking an async task suspends naming both the budget and the pending handle, records the
+    phase to resume from, and still closes once the ceiling is raised and the result arrives."""
+    world = World()
+    world.add(Node(id="root:1", type="root"))
+    report = run(_async_scenario(), world, scope=Scope(max_tier="recon"), budget=Budget(1))
+    assert report.status == SUSPENDED
+    assert report.pending == ("h1",)
+    assert any("budget" in n for n in report.notes)
+    assert any("async" in n for n in report.notes)
+    assert report.state.resume_from == Phase.MAP
+    # top up and deliver the async result, the run resumes in MAP and closes
+    report.state.budget.max_steps = 100
+    closed = resume(report.state, {"h1": (Fact(kind="callback", about="root:1"),)})
+    assert closed.closed
+    assert world.has_fact("root:1", "callback")
+
+
+class _BoomTriage(Triage):
+    def judge(self, world):
+        raise RuntimeError("judge blew up")
+
+
+def test_an_orchestration_error_suspends_the_run_with_its_reason_not_a_bare_raise():
+    """A triage, planner, or confirm that raises must still leave the run answering with a
+    Report, suspended with the failure named, never an exception escaping the engine."""
+    world = _world_with_root()
+    scenario = Scenario(
+        name="boom-triage",
+        content_root=Path(__file__).resolve().parent,
+        capabilities=(),
+        planner=RuleSet({}),
+        triage=_BoomTriage(),
+        terminal=Phase.TRIAGE,
+    )
+    report = run(scenario, world, scope=Scope(max_tier="recon"), budget=Budget(100))
+    assert report.status == SUSPENDED
+    assert not report.closed
+    assert any("RuntimeError" in n and "TRIAGE" in n for n in report.notes)

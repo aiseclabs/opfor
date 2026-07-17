@@ -74,6 +74,10 @@ def run(
     """Run one scenario to closure or suspension against the world, and report."""
     ledger = ledger or Ledger()
     ledger.append("run_start", scenario=scenario.name, terminal=scenario.terminal.name)
+    # Author the run's authorization envelope, the tier ceiling and whether intrusive acts
+    # were signed off, so the ledger alone proves what the run was allowed to do, not only
+    # what it later denied.
+    ledger.append("authorization", max_tier=scope.max_tier, authorized=scope.authorized)
     state = RunState(scenario=scenario, world=world, scope=scope, budget=budget,
                      ledger=ledger, max_workers=max_workers)
     return _drive(state)
@@ -107,62 +111,89 @@ def _drive(state: RunState) -> Report:
         if s.resume_from is not None and phase < s.resume_from:
             continue
         s.ledger.append("phase_enter", phase=phase.name)
-
-        if phase == Phase.TRIAGE:
-            s.findings = tuple(s.scenario.triage.judge(s.world))
-            s.ledger.append("triage", findings=len(s.findings))
-            if s.scenario.post_triage is not None:
-                # A deterministic step, not a judgment. It grounds findings in observed
-                # requests and materializes the nodes the intrusive phases act on, so world
-                # mutation stays out of triage. It returns one finding per input finding, so
-                # the count the run reports is unchanged.
-                s.findings = tuple(s.scenario.post_triage.run(s.world, s.findings))
-                s.ledger.append("post_triage", findings=len(s.findings))
-            s.reached = phase
-            continue
-
-        if phase == Phase.CONFIRM and s.scenario.confirm is not None:
-            # A second judgment, not an action, so it runs the confirm judge rather than
-            # capabilities, mirroring TRIAGE. It regrades the findings against the receipts
-            # the EXPLOIT phase recorded and never mints a new one, so the surface a run
-            # reports is unchanged in count and only regraded.
-            s.findings = tuple(s.scenario.confirm.reconfirm(s.world, s.findings))
-            s.ledger.append("confirm", findings=len(s.findings))
-            s.reached = phase
-            continue
-
-        while True:
-            if not s.budget.ok():
-                s.notes.append(f"budget exhausted in {phase.name}")
-                s.ledger.append("suspend", reason="budget", phase=phase.name)
-                return _report(s, SUSPENDED)
-
-            ready = _authorize(s.scenario, s.scope, s.world, phase, s.done, s.pending,
-                               s.ledger, s.notes)
-            if not ready:
-                break
-
-            # Cap the batch to the budget still remaining, so the runaway ceiling is not
-            # overshot by a whole batch of concurrent tasks. When the cap bites, the batch
-            # runs up to the ceiling, the next loop sees the budget spent, and the run
-            # suspends, deterministically by task id so which tasks ran is reproducible.
-            remaining = s.budget.max_steps - s.budget.steps
-            if len(ready) > remaining:
-                ready = sorted(ready, key=lambda t: t.id)[:remaining]
-
-            _run_batch(s.scenario, s.world, ready, s.budget, s.done, s.pending, s.ledger,
-                       s.notes, s.max_workers)
-
-        if s.pending:
-            s.notes.append(f"awaiting async results: {len(s.pending)}")
-            s.ledger.append("suspend", reason="async", phase=phase.name, pending=len(s.pending))
+        try:
+            suspended = _run_phase(s, phase)
+        except Exception as exc:
+            # An orchestration step raised, the planner, a triage judge, a post-triage step,
+            # or a confirm. A run must always answer with a Report, so the failure suspends
+            # the run loudly with its reason rather than escaping the engine, invariant 3 and 5.
+            s.notes.append(f"error in {phase.name}: {type(exc).__name__}: {exc}")
+            s.ledger.append("suspend", reason="error", phase=phase.name, error=type(exc).__name__)
             s.resume_from = phase
             return _report(s, SUSPENDED)
-
+        if suspended is not None:
+            return suspended
         s.reached = phase
 
     s.ledger.append("run_end", status=CLOSED, reached=s.reached.name, findings=len(s.findings))
     return _report(s, CLOSED)
+
+
+def _run_phase(state: RunState, phase: Phase) -> Report | None:
+    """Run one phase to its end, or return a suspended report when it stops short.
+
+    Returns None when the phase completed and the loop should advance, or a suspended
+    Report when the budget is spent or async work is parked. A budget suspension records
+    the phase to resume from and names any parked handles, so a run that runs out of budget
+    on top of pending async work still resumes in place rather than restarting at SEED.
+    """
+    s = state
+    if phase == Phase.TRIAGE:
+        # The judge is a model call, real work, so the runaway cap counts it rather than
+        # leaving the run's most expensive step off the budget.
+        s.budget.charge()
+        s.findings = tuple(s.scenario.triage.judge(s.world))
+        s.ledger.append("triage", findings=len(s.findings))
+        if s.scenario.post_triage is not None:
+            # A deterministic step, not a judgment. It grounds findings in observed requests
+            # and materializes the nodes the intrusive phases act on, so world mutation stays
+            # out of triage. It returns one finding per input finding, so the count the run
+            # reports is unchanged.
+            s.findings = tuple(s.scenario.post_triage.run(s.world, s.findings))
+            s.ledger.append("post_triage", findings=len(s.findings))
+        return None
+
+    if phase == Phase.CONFIRM and s.scenario.confirm is not None:
+        # A second judgment, not an action, so it runs the confirm judge rather than
+        # capabilities, mirroring TRIAGE. It regrades the findings against the receipts the
+        # EXPLOIT phase recorded and never mints a new one, so the surface a run reports is
+        # unchanged in count and only regraded.
+        s.budget.charge()
+        s.findings = tuple(s.scenario.confirm.reconfirm(s.world, s.findings))
+        s.ledger.append("confirm", findings=len(s.findings))
+        return None
+
+    while True:
+        if not s.budget.ok():
+            s.notes.append(f"budget exhausted in {phase.name}")
+            if s.pending:
+                s.notes.append(f"awaiting async results: {len(s.pending)}")
+            s.ledger.append("suspend", reason="budget", phase=phase.name, pending=len(s.pending))
+            s.resume_from = phase
+            return _report(s, SUSPENDED)
+
+        ready = _authorize(s.scenario, s.scope, s.world, phase, s.done, s.pending,
+                           s.ledger, s.notes)
+        if not ready:
+            break
+
+        # Cap the batch to the budget still remaining, so the runaway ceiling is not
+        # overshot by a whole batch of concurrent tasks. When the cap bites, the batch
+        # runs up to the ceiling, the next loop sees the budget spent, and the run
+        # suspends, deterministically by task id so which tasks ran is reproducible.
+        remaining = s.budget.max_steps - s.budget.steps
+        if len(ready) > remaining:
+            ready = sorted(ready, key=lambda t: t.id)[:remaining]
+
+        _run_batch(s.scenario, s.world, ready, s.budget, s.done, s.pending, s.ledger,
+                   s.notes, s.max_workers)
+
+    if s.pending:
+        s.notes.append(f"awaiting async results: {len(s.pending)}")
+        s.ledger.append("suspend", reason="async", phase=phase.name, pending=len(s.pending))
+        s.resume_from = phase
+        return _report(s, SUSPENDED)
+    return None
 
 
 def _authorize(scenario, scope, world, phase, done, pending, ledger, notes) -> list[Task]:
@@ -234,10 +265,11 @@ def _run_batch(scenario, world, ready, budget, done, pending, ledger, notes, max
 
 
 def _report(state: RunState, status: str) -> Report:
-    """The report for the state's current status. A run suspended with parked work names the
-    handles and carries the state, so an async result can be fed back and the run resumed. A
-    closed run or one suspended for another reason carries neither."""
-    resumable = status == SUSPENDED and bool(state.pending)
+    """The report for the state's current status. A suspended run carries the state it stopped
+    in and names any parked handles, so an async result can be fed back or a topped-up budget
+    can continue the run from the phase it stopped in rather than restarting. A closed run
+    carries neither, its work is done."""
+    resumable = status == SUSPENDED
     return Report(
         scenario=state.scenario.name,
         status=status,

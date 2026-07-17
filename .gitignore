@@ -16,7 +16,15 @@ dist/
 .mypy_cache/
 .ruff_cache/
 .coverage
+.coverage.*
+coverage.xml
 htmlcov/
+
+# OS and editor files
+.DS_Store
+.idea/
+.vscode/
+*.swp
 
 # Campaign run output, not part of the project
 runs/

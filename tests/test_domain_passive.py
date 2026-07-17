@@ -4,11 +4,7 @@ import json
 
 import pytest
 
-from opfor.core import Budget, MockProvider, Node, Phase, Scope, World, run
-from opfor.core.result import CLOSED
-from opfor.scenarios.attacksurface import build
-from opfor.scenarios.attacksurface.lifecycle.triage import TriageError, _finding_from_dict
-from opfor.scenarios.attacksurface.types import Org
+from opfor.core import Budget, Scope, run
 
 from tests.surface_fixtures import *
 
@@ -445,7 +441,7 @@ def test_permutation_candidates_cross_pollinate_observed_labels_only():
 def test_permute_subdomains_confirms_only_resolving_candidates_and_skips_a_wildcard_zone():
     from opfor.core import Done, Node, Task, World
     from opfor.scenarios.attacksurface.assets.domain.capabilities.discovery import (
-        PermuteSubdomains, _WILDCARD_PROBE)
+        PermuteSubdomains)
     from opfor.scenarios.attacksurface.assets.domain.types import DomainData
 
     def seed():

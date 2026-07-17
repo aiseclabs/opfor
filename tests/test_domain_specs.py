@@ -1,14 +1,6 @@
 from __future__ import annotations
 
-import json
-
-import pytest
-
-from opfor.core import Budget, MockProvider, Node, Phase, Scope, World, run
-from opfor.core.result import CLOSED
-from opfor.scenarios.attacksurface import build
-from opfor.scenarios.attacksurface.lifecycle.triage import TriageError, _finding_from_dict
-from opfor.scenarios.attacksurface.types import Org
+from opfor.core import Budget, Node, Scope, World, run
 
 from tests.surface_fixtures import *
 

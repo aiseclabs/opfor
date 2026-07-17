@@ -12,12 +12,9 @@ from __future__ import annotations
 
 import json
 
-import pytest
 
-from opfor.core import Budget, MockProvider, Node, Phase, Scope, World, run
-from opfor.core.result import CLOSED
+from opfor.core import Budget, MockProvider, Node, Scope, World, run
 from opfor.scenarios.attacksurface import build
-from opfor.scenarios.attacksurface.lifecycle.triage import TriageError, _finding_from_dict
 from opfor.scenarios.attacksurface.types import Org
 
 

@@ -14,7 +14,6 @@ from __future__ import annotations
 
 from opfor.scenarios.attacksurface.assets.domain.sources.dns import (
     dns_email_posture,
-    public_addresses,
     resolve_host,
 )
 from opfor.scenarios.attacksurface.assets.domain.sources.http import (

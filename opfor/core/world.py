@@ -15,7 +15,7 @@ payload as opaque, it only ever reads the tag, the id, and the `about` link.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any, Iterable
 
 

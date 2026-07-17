@@ -4,11 +4,7 @@ import json
 
 import pytest
 
-from opfor.core import Budget, MockProvider, Node, Phase, Scope, World, run
-from opfor.core.result import CLOSED
-from opfor.scenarios.attacksurface import build
-from opfor.scenarios.attacksurface.lifecycle.triage import TriageError, _finding_from_dict
-from opfor.scenarios.attacksurface.types import Org
+from opfor.core import Node, World
 
 from tests.surface_fixtures import *
 
@@ -161,7 +157,6 @@ def test_secrets_in_text_keeps_two_keys_sharing_a_prefix_and_length():
 def test_secret_scan_flags_a_key_in_a_bundle_and_redacts_it():
     home = '<script src="/static/main.js"></script>'
     bundle = "var cfg={awsKey:'AKIAIOSFODNN7EXAMPLE'};"
-    patterns = [{"id": "aws-access-key-id", "regex": "AKIA[0-9A-Z]{16}", "note": "an AWS access key id"}]
 
     def fetch_doc(name, path):
         if path == "/":

@@ -809,7 +809,7 @@ def test_endpoint_probe_reports_truncation_when_the_candidate_cap_is_hit():
 
 
 def test_distinct_treats_a_differing_redirect_location_as_a_real_endpoint():
-    from opfor.scenarios.attacksurface.assets.domain.capabilities.common import _distinct
+    from opfor.scenarios.attacksurface.assets.domain.capabilities.helpers import _distinct
     # a host that answers a blanket 302 to /login for unknown paths still hides a real /admin
     # that redirects to its own dashboard, so a differing location is distinct
     baseline = {"status": 302, "location": "https://h/login", "content_type": "", "body": ""}
@@ -839,7 +839,7 @@ def test_openapi_path_item_without_verbs_is_a_get_candidate_not_a_write():
 
 
 def test_distinct_ignores_a_path_echoing_login_redirect_query():
-    from opfor.scenarios.attacksurface.assets.domain.capabilities.common import _distinct
+    from opfor.scenarios.attacksurface.assets.domain.capabilities.helpers import _distinct
     # a login wall that echoes the requested path in ?next= gives every path a different raw
     # location, but it is one catch-all, so not distinct
     baseline = {"status": 302, "location": "https://h/login?next=/x", "content_type": "", "body": ""}

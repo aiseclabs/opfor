@@ -5,7 +5,7 @@ from __future__ import annotations
 from urllib.parse import urlparse
 
 from opfor.core import Capability, Done, Fact, Failed, Node, Outcome, Phase, Task, World
-from opfor.scenarios.attacksurface.assets.domain.capabilities.common import (
+from opfor.scenarios.attacksurface.assets.domain.capabilities.helpers import (
     _coverage_gap,
     _distinct,
     _home_paths,

@@ -6,7 +6,7 @@ import json
 from urllib.parse import urlparse
 
 from opfor.core import Capability, Done, Fact, Failed, Outcome, Phase, Task, World
-from opfor.scenarios.attacksurface.assets.domain.capabilities.common import _coverage_gap, _distinct
+from opfor.scenarios.attacksurface.assets.domain.capabilities.helpers import _coverage_gap, _distinct
 from opfor.scenarios.attacksurface.assets.domain.capabilities.http import Endpoints
 from opfor.scenarios.attacksurface.assets.domain.sources import (
     info_from_openapi,

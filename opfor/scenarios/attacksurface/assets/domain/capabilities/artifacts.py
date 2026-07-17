@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from opfor.core import Capability, Done, Fact, Failed, Outcome, Phase, Task, World
-from opfor.scenarios.attacksurface.assets.domain.capabilities.common import (
+from opfor.scenarios.attacksurface.assets.domain.capabilities.helpers import (
     _MAX_SOURCE_MAPS,
     _coverage_gap,
     _distinct,

@@ -923,7 +923,7 @@ def test_permute_rule_waits_for_passive_enumeration_then_runs_once():
 
 
 def test_port_scan_reports_open_service_ports_with_banners(monkeypatch):
-    from opfor.scenarios.attacksurface.assets.domain.sources import http as domains
+    from opfor.scenarios.attacksurface.assets.domain.sources import ports as domains
 
     opened = {22: "SSH-2.0-OpenSSH_8.9", 6379: ""}  # ssh answers a banner, redis is open silently
 
@@ -941,7 +941,7 @@ def test_port_scan_reports_open_service_ports_with_banners(monkeypatch):
 
 
 def test_port_scan_is_not_reachable_without_a_public_address():
-    from opfor.scenarios.attacksurface.assets.domain.sources import http as domains
+    from opfor.scenarios.attacksurface.assets.domain.sources import ports as domains
 
     out = domains.port_scan("h.example.com", ("10.0.0.1",))
     assert out["reachable"] is False and out["reason"] == "no-public-address"
@@ -973,7 +973,7 @@ def test_port_scan_capability_is_probe_tier_and_packs_facts_and_fails_loud():
 
 
 def test_tls_probe_reports_a_valid_certificate_with_its_expiry(monkeypatch):
-    from opfor.scenarios.attacksurface.assets.domain.sources import http as domains
+    from opfor.scenarios.attacksurface.assets.domain.sources import tls as domains
 
     def connect(name, ip, context):
         return ({"notAfter": "Jun  1 12:00:00 2099 GMT"}, "TLSv1.3",
@@ -988,7 +988,7 @@ def test_tls_probe_reports_a_valid_certificate_with_its_expiry(monkeypatch):
 
 def test_tls_probe_reports_an_untrusted_certificate_as_reachable_but_invalid(monkeypatch):
     import ssl
-    from opfor.scenarios.attacksurface.assets.domain.sources import http as domains
+    from opfor.scenarios.attacksurface.assets.domain.sources import tls as domains
 
     def connect(name, ip, context):
         # the verifying context raises on a bad cert, the unverified reconnect still reads the
@@ -1007,7 +1007,7 @@ def test_tls_probe_reports_an_untrusted_certificate_as_reachable_but_invalid(mon
 
 
 def test_tls_probe_is_a_clean_not_reachable_when_the_port_does_not_answer(monkeypatch):
-    from opfor.scenarios.attacksurface.assets.domain.sources import http as domains
+    from opfor.scenarios.attacksurface.assets.domain.sources import tls as domains
 
     assert domains.tls_probe("h.example.com", ("10.0.0.1",))["reason"] == "no-public-address"
 
@@ -1058,7 +1058,7 @@ def test_signal_headers_keep_cookie_flags_but_drop_the_secret_value():
 
 
 def test_dns_email_posture_reads_spf_dmarc_caa_and_dnssec(monkeypatch):
-    from opfor.scenarios.attacksurface.assets.domain.sources import http as domains
+    from opfor.scenarios.attacksurface.assets.domain.sources import dns as domains
 
     def lookup(name, rtype):
         if name == "example.com" and rtype == "TXT":
@@ -1080,7 +1080,7 @@ def test_dns_email_posture_reads_spf_dmarc_caa_and_dnssec(monkeypatch):
 
 
 def test_doh_lookup_fails_over_resolvers_and_raises_when_all_error(monkeypatch):
-    from opfor.scenarios.attacksurface.assets.domain.sources import http as domains
+    from opfor.scenarios.attacksurface.assets.domain.sources import dns as domains
 
     tried = []
 

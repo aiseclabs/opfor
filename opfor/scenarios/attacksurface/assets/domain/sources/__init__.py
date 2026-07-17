@@ -1,27 +1,32 @@
-"""Domain-class sources facade, re-exporting http, passive, parsers, javascript, storage.
+"""Domain-class sources facade, re-exporting the dns, http, tls, ports, passive, parsers,
+javascript, and storage modules.
 
-Transport lives in `http`, passive OSINT source clients in `passive`, body and document
-parsers in `parsers`, JavaScript extraction in `javascript`, and cloud object-storage URL
-parsing in `storage`. This module gathers the public names in one place so a caller keeps a
-single import. It re-exports public names only, a caller that needs a module's private detail
-imports it from the owning module, so the facade does not turn implementation into public API.
+Resolution, the shared network constants, and address filtering live in `dns`, HTTP transport
+in `http`, the TLS posture in `tls`, the port scan in `ports`, passive OSINT source clients in
+`passive`, body and document parsers in `parsers`, JavaScript extraction in `javascript`, and
+cloud object-storage URL parsing in `storage`. This module gathers the public names in one
+place so a caller keeps a single import. It re-exports public names only, a caller that needs
+a module's private detail imports it from the owning module, so the facade does not turn
+implementation into public API.
 """
 
 from __future__ import annotations
 
-from opfor.scenarios.attacksurface.assets.domain.sources.http import (
+from opfor.scenarios.attacksurface.assets.domain.sources.dns import (
     dns_email_posture,
+    public_addresses,
+    resolve_host,
+)
+from opfor.scenarios.attacksurface.assets.domain.sources.http import (
     fetch_document,
     fetch_public_url,
     fetch_readonly,
     fetch_url,
     graphql_introspect,
     http_probe,
-    port_scan,
-    public_addresses,
-    resolve_host,
-    tls_probe,
 )
+from opfor.scenarios.attacksurface.assets.domain.sources.ports import port_scan
+from opfor.scenarios.attacksurface.assets.domain.sources.tls import tls_probe
 from opfor.scenarios.attacksurface.assets.domain.sources.passive import (
     Enumeration,
     cert_sibling_roots,

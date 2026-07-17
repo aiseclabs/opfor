@@ -29,7 +29,7 @@ import yaml
 
 from opfor.core import Finding, Message, Provider, SEVERITIES, Triage, World, iter_md_docs
 from opfor.core.json_parse import require_json_object
-from opfor.scenarios.attacksurface import structural
+from opfor.scenarios.attacksurface.lifecycle import structural
 from opfor.scenarios.attacksurface.render import SurfaceRenderer
 
 SYSTEM = (

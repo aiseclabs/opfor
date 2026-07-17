@@ -17,7 +17,7 @@ import pytest
 from opfor.core import Budget, MockProvider, Node, Phase, Scope, World, run
 from opfor.core.result import CLOSED
 from opfor.scenarios.attacksurface import build
-from opfor.scenarios.attacksurface.triage import TriageError, _finding_from_dict
+from opfor.scenarios.attacksurface.lifecycle.triage import TriageError, _finding_from_dict
 from opfor.scenarios.attacksurface.types import Org
 
 
@@ -287,7 +287,7 @@ def _claim(fid, *, severity="MEDIUM", where="https://h/x", title="t"):
                    data={"poc_request": {"method": "GET", "url": where}})
 
 def _receipt(**over):
-    from opfor.scenarios.attacksurface.reproduce import Reproduction
+    from opfor.scenarios.attacksurface.lifecycle.reproduce import Reproduction
     fields = dict(method="GET", url="https://h/x", status=200,
                   content_type="application/json", size=12, excerpt='{"ok": true}', error="")
     fields.update(over)

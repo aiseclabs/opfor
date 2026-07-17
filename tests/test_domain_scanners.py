@@ -7,7 +7,7 @@ import pytest
 from opfor.core import Budget, MockProvider, Node, Phase, Scope, World, run
 from opfor.core.result import CLOSED
 from opfor.scenarios.attacksurface import build
-from opfor.scenarios.attacksurface.triage import TriageError, _finding_from_dict
+from opfor.scenarios.attacksurface.lifecycle.triage import TriageError, _finding_from_dict
 from opfor.scenarios.attacksurface.types import Org
 
 from tests.surface_fixtures import *
@@ -404,7 +404,7 @@ def test_probe_list_includes_product_identity_and_version_paths():
 def test_batch_one_exposure_coverage_is_loaded():
     from opfor.scenarios.attacksurface.assets import domain as domain_class
     from opfor.scenarios.attacksurface.assets.domain import planner
-    from opfor.scenarios.attacksurface.triage import _load_classes, _load_clues
+    from opfor.scenarios.attacksurface.lifecycle.triage import _load_classes, _load_clues
 
     # new fixed-path leaks are probed, pure data in paths.yaml, no code
     probe_paths = planner.load_plan_config(domain_class.KNOWLEDGE).probe_paths
@@ -874,7 +874,7 @@ def test_endpoint_probe_flags_when_the_baseline_cannot_be_established():
 
 
 def test_norm_url_keeps_the_query_so_a_query_bearing_poc_does_not_false_match():
-    from opfor.scenarios.attacksurface.grounding import _norm_url
+    from opfor.scenarios.attacksurface.lifecycle.grounding import _norm_url
     # a PoC that names a query parameter must not normalize onto the query-less observed GET,
     # which would ground the finding in a materially different request
     assert _norm_url("https://h/api/data?debug=1") != _norm_url("https://h/api/data")

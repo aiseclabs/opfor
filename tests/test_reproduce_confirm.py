@@ -7,7 +7,7 @@ import pytest
 from opfor.core import Budget, MockProvider, Node, Phase, Scope, World, run
 from opfor.core.result import CLOSED
 from opfor.scenarios.attacksurface import build
-from opfor.scenarios.attacksurface.triage import TriageError, _finding_from_dict
+from opfor.scenarios.attacksurface.lifecycle.triage import TriageError, _finding_from_dict
 from opfor.scenarios.attacksurface.types import Org
 
 from tests.surface_fixtures import *
@@ -52,7 +52,7 @@ def test_reproduce_build_raises_terminal_to_exploit_and_registers_the_capability
 def test_engine_reproduces_a_grounded_finding_in_exploit_when_authorized():
     """End to end through the real engine: with reproduce opted in and the intrusive tier
     authorized, the EXPLOIT phase replays a grounded finding's GET and records the receipt."""
-    from opfor.scenarios.attacksurface.reproduce import FindingClaim, PoCRequest
+    from opfor.scenarios.attacksurface.lifecycle.reproduce import FindingClaim, PoCRequest
 
     fetched = []
 
@@ -79,7 +79,7 @@ def test_engine_reproduces_a_grounded_finding_in_exploit_when_authorized():
 def test_engine_denies_reproduce_without_authorization_and_stays_loud():
     """Same run without the recorded authorization: the reproduce task is scope-denied and
     the fetch is never sent, deny-by-default holds even with the phase enabled."""
-    from opfor.scenarios.attacksurface.reproduce import FindingClaim, PoCRequest
+    from opfor.scenarios.attacksurface.lifecycle.reproduce import FindingClaim, PoCRequest
 
     fetched = []
     world = _seed()
@@ -96,7 +96,7 @@ def test_engine_denies_reproduce_without_authorization_and_stays_loud():
 
 def test_reproduce_replays_a_grounded_get_and_records_the_receipt():
     from opfor.core import Node, Task, World
-    from opfor.scenarios.attacksurface.reproduce import (
+    from opfor.scenarios.attacksurface.lifecycle.reproduce import (
         FindingClaim, PoCRequest, ReproduceFinding)
 
     calls = []
@@ -123,7 +123,7 @@ def test_reproduce_replays_a_grounded_get_and_records_the_receipt():
 
 def test_reproduce_refuses_a_non_read_method_loud():
     from opfor.core import Node, Task, World
-    from opfor.scenarios.attacksurface.reproduce import (
+    from opfor.scenarios.attacksurface.lifecycle.reproduce import (
         FindingClaim, PoCRequest, ReproduceFinding)
     from opfor.core.capability import Failed
 
@@ -141,7 +141,7 @@ def test_reproduce_refuses_a_non_read_method_loud():
 
 
 def test_reproduce_scrubs_secrets_from_the_receipt_body():
-    from opfor.scenarios.attacksurface.reproduce import scrub
+    from opfor.scenarios.attacksurface.lifecycle.reproduce import scrub
 
     assert "[REDACTED]" in scrub('{"api_key": "sk-live-abcdef123456"}')
     assert "sk-live-abcdef123456" not in scrub('{"api_key": "sk-live-abcdef123456"}')
@@ -150,7 +150,7 @@ def test_reproduce_scrubs_secrets_from_the_receipt_body():
 
 def test_reproduce_rule_only_targets_grounded_finding_nodes_not_yet_reproduced():
     from opfor.core import Fact, Node, World
-    from opfor.scenarios.attacksurface.reproduce import (
+    from opfor.scenarios.attacksurface.lifecycle.reproduce import (
         FindingClaim, PoCRequest, Reproduction, reproduce_rule)
 
     world = World()
@@ -172,7 +172,7 @@ def test_reproduce_rule_only_targets_grounded_finding_nodes_not_yet_reproduced()
 def test_reproduce_is_intrusive_and_denied_without_authorization():
     """The reproduce capability is intrusive tier, so scope denies it loud unless the run
     carries the recorded authorization, the deny-by-default envelope the design requires."""
-    from opfor.scenarios.attacksurface.reproduce import ReproduceFinding
+    from opfor.scenarios.attacksurface.lifecycle.reproduce import ReproduceFinding
     from opfor.core.scope import Scope
 
     cap = ReproduceFinding(lambda url: {})
@@ -198,7 +198,7 @@ def test_confirm_regrades_a_finding_against_its_receipt():
     """A finding with a live receipt is regraded on what the request returned, the verdict,
     the reason, and the receipt ride the finding for the report."""
     from opfor.core import Fact, World
-    from opfor.scenarios.attacksurface.confirm import ConfirmTriage
+    from opfor.scenarios.attacksurface.lifecycle.confirm import ConfirmTriage
 
     world = World()
     world.absorb([Fact(kind="reproduction", about="finding:a",
@@ -219,7 +219,7 @@ def test_confirm_passes_through_a_finding_with_no_receipt_unchanged():
     """A finding the reproduce phase never replayed carries no receipt, so confirm returns it
     untouched and never invents a verdict for it."""
     from opfor.core import World
-    from opfor.scenarios.attacksurface.confirm import ConfirmTriage
+    from opfor.scenarios.attacksurface.lifecycle.confirm import ConfirmTriage
 
     provider = MockProvider(default='{"verdict": "confirmed", "severity": "HIGH"}')
     confirm = ConfirmTriage(provider=provider, model="m")
@@ -234,7 +234,7 @@ def test_confirm_binds_a_receipt_by_url_not_by_a_shared_id():
     claim node and a receipt. Confirm must regrade only the finding whose grounded request the
     receipt actually replayed, never the co-id finding against a request it never made."""
     from opfor.core import Fact, World
-    from opfor.scenarios.attacksurface.confirm import ConfirmTriage
+    from opfor.scenarios.attacksurface.lifecycle.confirm import ConfirmTriage
 
     world = World()
     # the single receipt replayed /a, the request the first finding was grounded on
@@ -258,7 +258,7 @@ def test_confirm_is_loud_when_the_model_reply_cannot_be_parsed():
     """A confirm call that returns no verdict is a failed confirmation, not a silent pass. The
     finding is kept at its judged severity and marked confirm-failed, invariant 5."""
     from opfor.core import Fact, World
-    from opfor.scenarios.attacksurface.confirm import ConfirmTriage
+    from opfor.scenarios.attacksurface.lifecycle.confirm import ConfirmTriage
 
     world = World()
     world.absorb([Fact(kind="reproduction", about="finding:a", payload=_receipt())])
@@ -274,10 +274,10 @@ def test_confirm_regrades_end_to_end_across_triage_reproduce_and_confirm():
     node, reproduce records the live receipt, confirm regrades the finding on that receipt."""
     from opfor.core import Fact, Node, Task, World
     from opfor.scenarios.attacksurface.assets.domain.types import DomainData, Endpoint, Resolved
-    from opfor.scenarios.attacksurface.confirm import ConfirmTriage
-    from opfor.scenarios.attacksurface.grounding import FindingGrounder
-    from opfor.scenarios.attacksurface.reproduce import ReproduceFinding
-    from opfor.scenarios.attacksurface.triage import SurfaceTriage
+    from opfor.scenarios.attacksurface.lifecycle.confirm import ConfirmTriage
+    from opfor.scenarios.attacksurface.lifecycle.grounding import FindingGrounder
+    from opfor.scenarios.attacksurface.lifecycle.reproduce import ReproduceFinding
+    from opfor.scenarios.attacksurface.lifecycle.triage import SurfaceTriage
 
     world = World()
     world.add(Node(id="domain:api.example.com", type="domain",
@@ -412,7 +412,7 @@ def test_regression_grounding_never_replays_an_unobserved_url():
 
 def test_reproduce_records_a_redirect_raw_with_location_and_expect():
     from opfor.core import Node, Task, World
-    from opfor.scenarios.attacksurface.reproduce import FindingClaim, PoCRequest, ReproduceFinding
+    from opfor.scenarios.attacksurface.lifecycle.reproduce import FindingClaim, PoCRequest, ReproduceFinding
 
     world = World()
     world.add(Node(id="finding:x", type="finding", payload=FindingClaim(

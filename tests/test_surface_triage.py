@@ -7,7 +7,7 @@ import pytest
 from opfor.core import Budget, MockProvider, Node, Phase, Scope, World, run
 from opfor.core.result import CLOSED
 from opfor.scenarios.attacksurface import build
-from opfor.scenarios.attacksurface.triage import TriageError, _finding_from_dict
+from opfor.scenarios.attacksurface.lifecycle.triage import TriageError, _finding_from_dict
 from opfor.scenarios.attacksurface.types import Org
 
 from tests.surface_fixtures import *
@@ -34,7 +34,7 @@ def test_takeover_catalogue_is_expanded_and_a_new_signature_raises_its_clue():
     from opfor.scenarios.attacksurface.assets.domain import KNOWLEDGE
     from opfor.scenarios.attacksurface.assets.domain.types import DomainData, HTTP as HTTPData
     from opfor.scenarios.attacksurface.render import SurfaceRenderer
-    from opfor.scenarios.attacksurface.triage import _load_takeover
+    from opfor.scenarios.attacksurface.lifecycle.triage import _load_takeover
 
     takeover = _load_takeover(KNOWLEDGE / "takeover.yaml")
     services = {service for service, _ in takeover}
@@ -182,7 +182,7 @@ def test_grounding_attaches_a_poc_request_only_for_an_observed_safe_read():
     from opfor.scenarios.attacksurface.assets.domain.types import (
         DomainData, Endpoint, SpecAudit, SpecOperation)
     from opfor.core.result import Finding
-    from opfor.scenarios.attacksurface.grounding import FindingGrounder
+    from opfor.scenarios.attacksurface.lifecycle.grounding import FindingGrounder
 
     world = World()
     world.add(Node(id="domain:api.example.com", type="domain",
@@ -240,8 +240,8 @@ def test_triage_judge_mints_findings_and_mutates_no_world_node():
     post-triage step."""
     from opfor.core import Fact, MockProvider, Node
     from opfor.scenarios.attacksurface.assets.domain.types import DomainData, Endpoint, Resolved
-    from opfor.scenarios.attacksurface.grounding import FindingGrounder
-    from opfor.scenarios.attacksurface.triage import SurfaceTriage
+    from opfor.scenarios.attacksurface.lifecycle.grounding import FindingGrounder
+    from opfor.scenarios.attacksurface.lifecycle.triage import SurfaceTriage
 
     world = World()
     world.add(Node(id="domain:api.example.com", type="domain",
@@ -468,7 +468,7 @@ def test_directory_listing_body_raises_the_exposure_clue():
     from opfor.scenarios.attacksurface.assets.domain import KNOWLEDGE
     from opfor.scenarios.attacksurface.assets.domain.types import Endpoint
     from opfor.scenarios.attacksurface.render import SurfaceRenderer
-    from opfor.scenarios.attacksurface.triage import _load_clues
+    from opfor.scenarios.attacksurface.lifecycle.triage import _load_clues
 
     clues = _load_clues(KNOWLEDGE / "exposures.yaml")
     renderer = SurfaceRenderer(clues, [])
@@ -612,8 +612,8 @@ def test_render_shows_a_configured_root_email_and_dns_posture_even_without_a_web
 
 
 def test_system_prompts_frame_target_text_as_untrusted():
-    from opfor.scenarios.attacksurface import confirm as confirm_mod
-    from opfor.scenarios.attacksurface import triage as triage_mod
+    from opfor.scenarios.attacksurface.lifecycle import confirm as confirm_mod
+    from opfor.scenarios.attacksurface.lifecycle import triage as triage_mod
     # target-controlled surface text is embedded in every model prompt, so each prompt must
     # frame it as untrusted data whose embedded instructions are the attack, not guidance
     assert "untrusted" in triage_mod.SYSTEM.lower()
@@ -626,7 +626,7 @@ def test_malformed_findings_are_dropped_loudly_with_a_degraded_marker():
     import json
 
     from opfor.core import MockProvider
-    from opfor.scenarios.attacksurface.triage import SurfaceTriage
+    from opfor.scenarios.attacksurface.lifecycle.triage import SurfaceTriage
 
     reply = json.dumps({"findings": [
         {"category": "sensitive-file-exposure", "title": "ok", "severity": "HIGH",
@@ -645,7 +645,7 @@ def test_malformed_findings_are_dropped_loudly_with_a_degraded_marker():
 
 
 def test_confidence_is_coerced_to_a_float_or_none():
-    from opfor.scenarios.attacksurface.triage import _confidence
+    from opfor.scenarios.attacksurface.lifecycle.triage import _confidence
     # a string, a null, or an out-of-range value never lands raw in the structured axes
     assert _confidence("high") is None
     assert _confidence(None) is None
@@ -655,7 +655,7 @@ def test_confidence_is_coerced_to_a_float_or_none():
 
 def test_dedup_keeps_two_distinct_titles_at_one_location():
     from opfor.core.result import Finding
-    from opfor.scenarios.attacksurface.triage import SurfaceTriage
+    from opfor.scenarios.attacksurface.lifecycle.triage import SurfaceTriage
     a = Finding(id="finding:known-vulnerability:h", title="CVE-1", severity="HIGH", where="h")
     b = Finding(id="finding:known-vulnerability:h", title="CVE-2", severity="HIGH", where="h")
     dup = Finding(id="finding:known-vulnerability:h", title="CVE-1", severity="HIGH", where="h")

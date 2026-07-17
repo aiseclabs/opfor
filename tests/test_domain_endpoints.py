@@ -256,3 +256,24 @@ def test_harvest_crash_still_records_harvested_and_a_gap(monkeypatch):
     assert isinstance(out, Done)
     kinds = {f.kind for f in out.facts}
     assert "harvested" in kinds and "coverage_gap" in kinds
+
+
+def test_harvest_records_a_gap_when_the_home_document_is_unreachable():
+    from opfor.core import Done, Fact, Task
+    from opfor.scenarios.attacksurface.assets.domain.capabilities.http import HarvestPaths
+    from opfor.scenarios.attacksurface.assets.domain.types import DomainData, Resolved
+
+    world = World()
+    world.add(Node(id="domain:h", type="domain", payload=DomainData(name="h", root="h", source="s")))
+    world.absorb([Fact(kind="resolved", about="domain:h",
+                       payload=Resolved(resolvable=True, addresses=("1.2.3.4",)))])
+
+    # fetch_document reports an unreachable host as a None status rather than raising. Harvest
+    # must surface that as a coverage gap, not launder a transport failure into an empty
+    # harvest that reads downstream as a host revealing no paths.
+    unreachable = lambda *a: {"status": None, "reason": "unreachable", "text": ""}
+    out = HarvestPaths(unreachable, unreachable, lambda *a: set()).run(
+        Task(capability="domain_harvest", node="domain:h"), world)
+    assert isinstance(out, Done)
+    kinds = {f.kind for f in out.facts}
+    assert "harvested" in kinds and "coverage_gap" in kinds

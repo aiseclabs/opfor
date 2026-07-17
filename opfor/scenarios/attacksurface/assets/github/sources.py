@@ -45,11 +45,15 @@ def search_orgs(name: str, token: str = "", *, limit: int = 10) -> list[dict]:
         if not login:
             continue
         profile: dict = {}
+        profile_error = ""
         try:
             fetched = _get(f"/orgs/{urllib.parse.quote(login)}", token)
             profile = fetched if isinstance(fetched, dict) else {}
-        except Exception:
-            profile = {}
+        except Exception as exc:
+            # The candidate is still returned so one bad profile does not drop it, but the
+            # error is carried out rather than swallowed, so attribution silently degrading to
+            # a name-only match is visible to the caller, invariant 5.
+            profile_error = f"{type(exc).__name__}: {exc}"
         out.append({
             "login": login,
             "url": str(item.get("html_url", "")),
@@ -58,6 +62,7 @@ def search_orgs(name: str, token: str = "", *, limit: int = 10) -> list[dict]:
             "blog": str(profile.get("blog") or ""),
             "email": str(profile.get("email") or ""),
             "verified": bool(profile.get("is_verified")),
+            "profile_error": profile_error,
         })
     return out
 

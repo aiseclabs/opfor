@@ -38,6 +38,7 @@ class DiscoverGitHub(Capability):
 
     name = "discover_github"
     phase = Phase.MAP
+    osint = True  # the public GitHub search and profile API, a passive read
 
     def __init__(self, search_fn) -> None:
         self._search = search_fn
@@ -60,8 +61,14 @@ class DiscoverGitHub(Capability):
             if site_root and targets and site_root not in targets:
                 continue
             attributed = bool(site_root and site_root in targets)
-            evidence = (f"profile links to {site_root}" if attributed
-                        else "account name matches, ownership not established")
+            if attributed:
+                evidence = f"profile links to {site_root}"
+            elif o.get("profile_error"):
+                # The profile could not be read, so attribution could not be attempted rather
+                # than failing. Name the degradation so it is not read as proven non-ownership.
+                evidence = f"account name matches, profile unreadable, {o['profile_error']}, ownership not established"
+            else:
+                evidence = "account name matches, ownership not established"
             found.append(Node(id=f"github_org:{o['login']}", type="github_org",
                               payload=GitHubOrg(login=o["login"], url=o.get("url", ""),
                                                 org_id=o.get("org_id"), name=o.get("name", ""),
@@ -75,6 +82,7 @@ class GitHubRepos(Capability):
 
     name = "github_repos"
     phase = Phase.ENRICH
+    osint = True
 
     def __init__(self, repos_fn) -> None:
         self._repos = repos_fn

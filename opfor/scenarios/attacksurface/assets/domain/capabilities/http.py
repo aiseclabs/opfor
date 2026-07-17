@@ -108,7 +108,8 @@ class HarvestPaths(Capability):
                 by_host.setdefault(host, set()).add(path.split("#")[0].split("?")[0])
 
         try:
-            home = _safe(lambda: self._fetch_doc(name, "/").get("text", "")) or ""
+            home_doc = _safe(lambda: self._fetch_doc(name, "/")) or {}
+            home = home_doc.get("text", "") or ""
             cloud_refs.update(cloud_refs_in_text(home))
             for path in _home_paths(home):
                 add(name, path)
@@ -140,6 +141,16 @@ class HarvestPaths(Capability):
             return Done(facts=tuple(facts))
 
         facts = [Fact(kind="harvested", about=task.node)]
+        if home_doc.get("reason") in ("unreachable", "no-public-address"):
+            # The home document is the primary source of candidate paths. A transport failure
+            # reading it, which fetch_document reports as a null status with an unreachable
+            # reason rather than raising, is a coverage gap, not an empty harvest. Without it a
+            # timed-out home page reads downstream as a host that revealed no paths, the
+            # laundering invariant 5 forbids. A reachable but empty home carries no such reason.
+            gap = _coverage_gap("domain_harvest", name, 1, [
+                f"{name}: home document {home_doc['reason']}, candidate paths were not gathered"])
+            if gap is not None:
+                facts.append(Fact(kind="coverage_gap", about=task.node, payload=gap))
         if cloud_refs:
             facts.append(Fact(kind="cloud_refs", about=task.node,
                               payload=CloudRefs(urls=tuple(sorted(cloud_refs)))))

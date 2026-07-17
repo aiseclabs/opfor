@@ -269,6 +269,10 @@ def test_fetch_seams_are_loud_on_the_unexpected_and_name_why_no_address_answered
 def test_fetch_public_url_is_loud_on_the_unexpected_and_names_unreachable(monkeypatch):
     from opfor.scenarios.attacksurface.assets.domain.sources import http as domains
 
+    # the host resolves to a public address, so it clears the no-private-address guard and the
+    # opener behavior below is what is under test
+    monkeypatch.setattr(domains, "resolve_host", lambda n: {"addresses": ("1.1.1.1",)})
+
     class BugOpener:
         def open(self, *a, **k):
             raise ValueError("bug")

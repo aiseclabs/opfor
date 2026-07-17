@@ -125,7 +125,15 @@ def fetch_public_url(url: str) -> dict:
     skipped by the caller rather than failing the whole scan. Only transport errors are
     caught, so an unexpected error is raised loud rather than swallowed as a null status. It
     never sends a credential, so it reads only what is public.
+
+    It first refuses a host with no public address, the same guard the probe and the document
+    fetch use, so even a url off the pinned cloud-provider hosts cannot be steered at a private
+    or internal address. The no-redirect opener already blocks a server-controlled Location.
     """
+    host = urllib.parse.urlparse(url).hostname or ""
+    if not host or not public_addresses(resolve_host(host).get("addresses", ())):
+        return {"status": None, "url": url, "content_type": "", "body": "",
+                "reason": "no-public-address"}
     request = urllib.request.Request(url, headers={"User-Agent": _UA})
     try:
         # do not follow a redirect, a server-controlled Location could steer this at another

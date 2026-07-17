@@ -65,7 +65,7 @@ def cloud_bucket_from_url(reference: str) -> dict | None:
     if _GCS_HOST.match(host) and _valid_bucket(first):
         return _bucket("gcs", first, f"https://storage.googleapis.com/{first}/")
     match = _AZURE_HOST.match(host)
-    if match and first:
+    if match and _valid_bucket(first):
         account = match.group("acct")
         url = f"https://{account}.blob.core.windows.net/{first}?restype=container&comp=list"
         return _bucket("azure", f"{account}/{first}", url)

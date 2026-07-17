@@ -102,4 +102,8 @@ class Capability(ABC):
     @abstractmethod
     def run(self, task: Task, world: "World") -> Outcome:
         """Carry out one task and return one outcome. Never decide success or failure
-        as a finding, only report what happened."""
+        as a finding, only report what happened.
+
+        Treat `world` as read-only here. A batch of tasks runs concurrently and the engine
+        merges each outcome's facts on the main thread once the batch joins, so `run` must not
+        mutate the world itself, it grows the world only through the facts it returns."""

@@ -90,6 +90,10 @@ def resume(state: RunState, results: dict[str, Iterable[Fact]]) -> Report:
     the "hours later" delivery. Each keyed task is absorbed and retired, then the loop
     continues the same state. A result for a handle with no parked task is recorded loud and
     ignored, never silently dropped, invariant 5.
+
+    A run suspended on an exhausted budget carries no pending handles, so resuming it with an
+    empty `results` only makes progress once the caller has raised `state.budget.max_steps`.
+    Resuming a still-exhausted budget re-suspends at once rather than looping work.
     """
     for handle, raw in results.items():
         task = state.pending.pop(handle, None)

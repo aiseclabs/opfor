@@ -46,6 +46,20 @@ def test_no_object_yields_none():
     assert extract_json_object("no json here at all") is None
 
 
+def test_a_preamble_object_does_not_mask_the_object_carrying_the_key():
+    # a chatty model emits a note object before the real one, the required key still wins
+    text = '{"note": "analyzing"}\n{"findings": [1, 2]}'
+    assert extract_json_object(text, required_key="findings") == {"findings": [1, 2]}
+    # with no key required, the first object is still returned
+    assert extract_json_object(text) == {"note": "analyzing"}
+
+
+def test_a_non_object_top_level_does_not_short_circuit_recovery():
+    # a top-level array used to make recovery give up, the trailing keyed object is now found
+    text = '[1, 2, 3]\n{"findings": []}'
+    assert extract_json_object(text, required_key="findings") == {"findings": []}
+
+
 def test_require_raises_without_the_key():
     class Boom(RuntimeError):
         pass

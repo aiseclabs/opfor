@@ -20,13 +20,27 @@ _FENCE = re.compile(r"```(?:json)?\s*(\{.*?\})\s*```", re.DOTALL)
 _MAX_SCAN = 1_000_000
 
 
-def extract_json_object(text: str) -> dict | None:
-    """Return the first JSON object found in `text`, or None when there is none."""
+def extract_json_object(text: str, *, required_key: str | None = None) -> dict | None:
+    """Return a JSON object from `text`, or None when there is none.
+
+    When `required_key` is given, prefer an object that carries it, so a preamble object such
+    as `{"note": "analyzing"}` that precedes the real `{"findings": [...]}` does not mask it,
+    and a non-object top level such as a JSON array does not short-circuit the recovery. The
+    first parsed object is still returned as a fallback when none carries the key, so a
+    key-checking caller raises on the missing key rather than on a bare None."""
     text = text.strip()[:_MAX_SCAN]
+
+    def usable(obj: object) -> bool:
+        return isinstance(obj, dict) and (required_key is None or required_key in obj)
+
+    first_dict: dict | None = None
 
     try:
         obj = json.loads(text)
-        return obj if isinstance(obj, dict) else None
+        if usable(obj):
+            return obj
+        if isinstance(obj, dict):
+            first_dict = obj
     except json.JSONDecodeError:
         pass
 
@@ -34,16 +48,26 @@ def extract_json_object(text: str) -> dict | None:
     if fenced:
         try:
             obj = json.loads(fenced.group(1))
-            if isinstance(obj, dict):
+            if usable(obj):
                 return obj
+            if isinstance(obj, dict) and first_dict is None:
+                first_dict = obj
         except json.JSONDecodeError:
             pass
 
-    balanced = _first_balanced_object(text)
-    if balanced is not None:
+    balanced = _first_balanced_object(text, required_key=required_key)
+    if usable(balanced):
         return balanced
+    if isinstance(balanced, dict) and first_dict is None:
+        first_dict = balanced
 
-    return _repair(text)
+    repaired = _repair(text)
+    if usable(repaired):
+        return repaired
+    if isinstance(repaired, dict) and first_dict is None:
+        first_dict = repaired
+
+    return first_dict
 
 
 def require_json_object(text: str, *, required_key: str, error: type[Exception], message: str) -> dict:
@@ -52,20 +76,23 @@ def require_json_object(text: str, *, required_key: str, error: type[Exception],
     For the fail-loud callers, a reply with no JSON object, or one missing the key, is a
     failed model call, not an empty result, so it raises rather than returning nothing.
     The caller owns the exception type and the message, this owns only the mechanics."""
-    obj = extract_json_object(text)
+    obj = extract_json_object(text, required_key=required_key)
     if obj is None or required_key not in obj:
         raise error(message)
     return obj
 
 
-def _first_balanced_object(text: str) -> dict | None:
+def _first_balanced_object(text: str, *, required_key: str | None = None) -> dict | None:
     """The first complete top-level {...} span, counting braces only outside a string
     literal so a brace inside a value, for example code in a description, does not corrupt
-    the depth count."""
+    the depth count. When `required_key` is given, the first span that carries it wins, and a
+    key-less span is remembered only as a fallback, so a preamble object does not mask the one
+    the caller wants."""
     depth = 0
     start = -1
     in_str = False
     escaped = False
+    first_dict: dict | None = None
     for i, ch in enumerate(text):
         if in_str:
             if escaped:
@@ -91,8 +118,12 @@ def _first_balanced_object(text: str) -> dict | None:
                     start = -1
                     continue
                 if isinstance(obj, dict):
-                    return obj
-    return None
+                    if required_key is None or required_key in obj:
+                        return obj
+                    if first_dict is None:
+                        first_dict = obj
+                start = -1
+    return first_dict
 
 
 def _repair(text: str) -> dict | None:

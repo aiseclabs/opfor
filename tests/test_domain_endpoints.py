@@ -269,3 +269,25 @@ def test_harvest_records_a_gap_when_the_home_document_is_unreachable():
     assert isinstance(out, Done)
     kinds = {f.kind for f in out.facts}
     assert "harvested" in kinds and "coverage_gap" in kinds
+
+
+def test_harvest_records_a_gap_when_the_home_read_raises_an_unexpected_error():
+    from opfor.core import Done, Fact, Task
+    from opfor.scenarios.attacksurface.assets.domain.capabilities.http import HarvestPaths
+    from opfor.scenarios.attacksurface.assets.domain.types import DomainData, Resolved
+
+    world = World()
+    world.add(Node(id="domain:h", type="domain", payload=DomainData(name="h", root="h", source="s")))
+    world.absorb([Fact(kind="resolved", about="domain:h",
+                       payload=Resolved(resolvable=True, addresses=("1.2.3.4",)))])
+
+    # the home fetch raises an unexpected error that the best-effort guard swallows. The harvest
+    # must still record a coverage gap, not launder the read failure into an empty harvest.
+    def boom(*a):
+        raise RuntimeError("home read blew up")
+
+    out = HarvestPaths(boom, boom, lambda *a: set()).run(
+        Task(capability="domain_harvest", node="domain:h"), world)
+    assert isinstance(out, Done)
+    kinds = {f.kind for f in out.facts}
+    assert "harvested" in kinds and "coverage_gap" in kinds

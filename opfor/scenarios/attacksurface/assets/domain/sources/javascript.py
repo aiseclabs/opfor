@@ -32,7 +32,8 @@ def script_sources(body: str, host: str) -> list[str]:
     """
     out: list[str] = []
     seen: set[str] = set()
-    for src in _SCRIPT_SRC.findall(body or ""):
+    for m in _SCRIPT_SRC.finditer(body or ""):
+        src = m.group(1)
         path = same_host_path(src, host)
         if path and path.split("?")[0].lower().endswith(".js") and path not in seen:
             seen.add(path)
@@ -52,8 +53,10 @@ def paths_in_javascript(text: str) -> list[str]:
     """
     out: list[str] = []
     seen: set[str] = set()
-    for match in _JS_PATH.findall(text or ""):
-        path = match.split("?")[0]
+    # finditer with an early break, not findall, so the cap bounds the work and peak memory, not
+    # only the stored output, on a hostile bundle packed with quoted paths.
+    for m in _JS_PATH.finditer(text or ""):
+        path = m.group(1).split("?")[0]
         if path.startswith("//") or len(path) < 2 or path in seen:
             continue
         # A path with no letter is a version or an index fragment such as /1 or /0/0, not a
@@ -76,7 +79,8 @@ def urls_in_javascript(text: str) -> list[str]:
     """
     out: list[str] = []
     seen: set[str] = set()
-    for match in _JS_URL.findall(text or ""):
+    for m in _JS_URL.finditer(text or ""):
+        match = m.group(1)
         if match in seen:
             continue
         seen.add(match)
@@ -99,7 +103,9 @@ def source_map_from_text(text: str) -> dict | None:
         return None
     try:
         data = json.loads(text)
-    except (ValueError, TypeError):
+    except (ValueError, TypeError, RecursionError):
+        # A hostile deeply-nested map raises RecursionError, not a decode error, so it is caught
+        # too and degrades to the substring check rather than escaping the parser.
         data = None
     if isinstance(data, dict) and "version" in data and "sources" in data:
         sources = [str(s) for s in (data.get("sources") or [])]

@@ -131,7 +131,11 @@ def robots_entries(text: str) -> tuple[list[str], list[str]]:
         low = line.lower()
         if low.startswith(("disallow:", "allow:")):
             value = line.split(":", 1)[1].strip().split("#")[0].strip()
-            if value.startswith("/") and value not in paths:
+            # A single-host absolute path only. Reject a protocol-relative `//host` authority or
+            # a value smuggling a `:` scheme, so a hostile robots line cannot pollute a node id
+            # with a foreign authority. The request stays pinned to the trusted host regardless.
+            if (value.startswith("/") and not value.startswith("//")
+                    and ":" not in value and value not in paths):
                 paths.append(value)
         elif low.startswith("sitemap:"):
             value = line.split(":", 1)[1].strip()

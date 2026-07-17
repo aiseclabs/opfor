@@ -9,7 +9,7 @@ imports it from the owning module, so the facade does not turn implementation in
 
 from __future__ import annotations
 
-from opfor.scenarios.attacksurface.classes.domain.http import (
+from opfor.scenarios.attacksurface.assets.domain.http import (
     dns_email_posture,
     fetch_document,
     fetch_public_url,
@@ -22,7 +22,7 @@ from opfor.scenarios.attacksurface.classes.domain.http import (
     resolve_host,
     tls_probe,
 )
-from opfor.scenarios.attacksurface.classes.domain.passive import (
+from opfor.scenarios.attacksurface.assets.domain.passive import (
     Enumeration,
     cert_sibling_roots,
     certspotter_subdomains,
@@ -42,7 +42,7 @@ from opfor.scenarios.attacksurface.classes.domain.passive import (
     virustotal_subdomains,
     wayback_paths,
 )
-from opfor.scenarios.attacksurface.classes.domain.parsers import (
+from opfor.scenarios.attacksurface.assets.domain.parsers import (
     backup_candidates,
     info_from_openapi,
     operations_from_introspection,
@@ -52,14 +52,14 @@ from opfor.scenarios.attacksurface.classes.domain.parsers import (
     sitemap_paths,
     split_operation,
 )
-from opfor.scenarios.attacksurface.classes.domain.javascript import (
+from opfor.scenarios.attacksurface.assets.domain.javascript import (
     paths_in_javascript,
     script_sources,
     secrets_in_text,
     source_map_from_text,
     urls_in_javascript,
 )
-from opfor.scenarios.attacksurface.classes.domain.storage import (
+from opfor.scenarios.attacksurface.assets.domain.storage import (
     bucket_listable,
     cloud_bucket_from_url,
     cloud_refs_in_text,

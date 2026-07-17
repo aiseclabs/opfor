@@ -5,15 +5,15 @@ from __future__ import annotations
 from urllib.parse import urlparse
 
 from opfor.core import Capability, Done, Fact, Failed, Node, Outcome, Phase, Task, World
-from opfor.scenarios.attacksurface.classes.domain.capabilities.common import (
+from opfor.scenarios.attacksurface.assets.domain.capabilities.common import (
     _coverage_gap,
     _distinct,
     _home_paths,
     _is_static_asset,
     _safe,
 )
-from opfor.scenarios.attacksurface.classes.domain.parsers import path_permutations
-from opfor.scenarios.attacksurface.classes.domain.sources import (
+from opfor.scenarios.attacksurface.assets.domain.parsers import path_permutations
+from opfor.scenarios.attacksurface.assets.domain.sources import (
     cloud_refs_in_text,
     paths_in_javascript,
     robots_entries,
@@ -22,7 +22,7 @@ from opfor.scenarios.attacksurface.classes.domain.sources import (
     sitemap_paths,
     urls_in_javascript,
 )
-from opfor.scenarios.attacksurface.classes.domain.types import (
+from opfor.scenarios.attacksurface.assets.domain.types import (
     Candidates,
     CloudRefs,
     Endpoint,

@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import re
 
-from opfor.scenarios.attacksurface.classes.domain.parsers import same_host_path
+from opfor.scenarios.attacksurface.assets.domain.parsers import same_host_path
 
 _SCRIPT_SRC = re.compile(r'<script[^>]+src\s*=\s*["\']([^"\']+)', re.IGNORECASE)
 _JS_PATH = re.compile(r"""["'`](/[A-Za-z0-9_.\-/]{1,160})["'`]""")

@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 from opfor.core import Capability, Done, Fact, Failed, Outcome, Phase, Task, World
-from opfor.scenarios.attacksurface.classes.domain.capabilities.common import _coverage_gap
-from opfor.scenarios.attacksurface.classes.domain.types import DnsEmailPosture, Resolved
+from opfor.scenarios.attacksurface.assets.domain.capabilities.common import _coverage_gap
+from opfor.scenarios.attacksurface.assets.domain.types import DnsEmailPosture, Resolved
 
 
 class ResolveDomain(Capability):

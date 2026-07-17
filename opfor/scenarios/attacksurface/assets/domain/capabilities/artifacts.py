@@ -3,18 +3,18 @@
 from __future__ import annotations
 
 from opfor.core import Capability, Done, Fact, Failed, Outcome, Phase, Task, World
-from opfor.scenarios.attacksurface.classes.domain.capabilities.common import (
+from opfor.scenarios.attacksurface.assets.domain.capabilities.common import (
     _MAX_SOURCE_MAPS,
     _coverage_gap,
     _distinct,
 )
-from opfor.scenarios.attacksurface.classes.domain.candidates import backup_targets
-from opfor.scenarios.attacksurface.classes.domain.sources import (
+from opfor.scenarios.attacksurface.assets.domain.candidates import backup_targets
+from opfor.scenarios.attacksurface.assets.domain.sources import (
     script_sources,
     secrets_in_text,
     source_map_from_text,
 )
-from opfor.scenarios.attacksurface.classes.domain.types import (
+from opfor.scenarios.attacksurface.assets.domain.types import (
     BackupHit,
     BackupReport,
     SecretMatch,

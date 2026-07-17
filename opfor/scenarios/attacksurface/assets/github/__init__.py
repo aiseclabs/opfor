@@ -6,9 +6,9 @@ a namesake, so it reads no triage knowledge and declares no knowledge directory.
 
 from __future__ import annotations
 
-from opfor.scenarios.attacksurface.classes import ClassBundle
-from opfor.scenarios.attacksurface.classes.github import planner
-from opfor.scenarios.attacksurface.classes.github.capabilities import DiscoverGitHub, GitHubRepos
+from opfor.scenarios.attacksurface.assets import ClassBundle
+from opfor.scenarios.attacksurface.assets.github import planner
+from opfor.scenarios.attacksurface.assets.github.capabilities import DiscoverGitHub, GitHubRepos
 
 
 def assemble(*, search_fn, repos_fn) -> ClassBundle:

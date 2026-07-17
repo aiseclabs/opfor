@@ -10,9 +10,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from opfor.scenarios.attacksurface.classes import ClassBundle
-from opfor.scenarios.attacksurface.classes.domain import planner
-from opfor.scenarios.attacksurface.classes.domain.capabilities import (
+from opfor.scenarios.attacksurface.assets import ClassBundle
+from opfor.scenarios.attacksurface.assets.domain import planner
+from opfor.scenarios.attacksurface.assets.domain.capabilities import (
     BackupScan,
     BucketScan,
     CveScan,

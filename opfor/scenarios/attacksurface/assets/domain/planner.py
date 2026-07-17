@@ -38,7 +38,7 @@ def _validate_secret_patterns(patterns) -> None:
                 f"invalid secret pattern regex for {pattern.get('id', '?')!r}: {exc}") from exc
 
 from opfor.core import Task, World, each
-from opfor.scenarios.attacksurface.classes import class_enabled
+from opfor.scenarios.attacksurface.assets import class_enabled
 
 
 @dataclass(frozen=True, kw_only=True)

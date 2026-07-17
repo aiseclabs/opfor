@@ -1,36 +1,36 @@
 """Domain-class capabilities, each fetches, none judges, re-exported by action family."""
 
-from opfor.scenarios.attacksurface.classes.domain.capabilities.artifacts import (
+from opfor.scenarios.attacksurface.assets.domain.capabilities.artifacts import (
     BackupScan,
     SecretScan,
     SourceMapScan,
 )
-from opfor.scenarios.attacksurface.classes.domain.capabilities.cves import CveScan
-from opfor.scenarios.attacksurface.classes.domain.capabilities.discovery import (
+from opfor.scenarios.attacksurface.assets.domain.capabilities.cves import CveScan
+from opfor.scenarios.attacksurface.assets.domain.capabilities.discovery import (
     DiscoverDomains,
     DomainPivot,
     DomainRegistrant,
     PermuteSubdomains,
     Subdomains,
 )
-from opfor.scenarios.attacksurface.classes.domain.capabilities.dns import (
+from opfor.scenarios.attacksurface.assets.domain.capabilities.dns import (
     DnsEmailSecurity,
     ResolveDomain,
 )
-from opfor.scenarios.attacksurface.classes.domain.capabilities.http import (
+from opfor.scenarios.attacksurface.assets.domain.capabilities.http import (
     Endpoints,
     HarvestPaths,
     HTTPDomain,
     PermutePaths,
 )
-from opfor.scenarios.attacksurface.classes.domain.capabilities.ports import PortServices
-from opfor.scenarios.attacksurface.classes.domain.capabilities.specs import (
+from opfor.scenarios.attacksurface.assets.domain.capabilities.ports import PortServices
+from opfor.scenarios.attacksurface.assets.domain.capabilities.specs import (
     ExpandSpec,
     GraphQLIntrospect,
     ProbeSpec,
 )
-from opfor.scenarios.attacksurface.classes.domain.capabilities.storage import BucketScan
-from opfor.scenarios.attacksurface.classes.domain.capabilities.tls import TlsSecurity
+from opfor.scenarios.attacksurface.assets.domain.capabilities.storage import BucketScan
+from opfor.scenarios.attacksurface.assets.domain.capabilities.tls import TlsSecurity
 
 __all__ = [
     "BackupScan",

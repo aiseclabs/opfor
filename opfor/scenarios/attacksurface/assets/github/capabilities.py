@@ -13,7 +13,7 @@ from urllib.parse import urlparse
 from opfor.core import Capability, Done, Fact, Failed, Node, Outcome, Phase, Task, World
 from opfor.scenarios.attacksurface import config
 from opfor.scenarios.attacksurface.net import registrable_root
-from opfor.scenarios.attacksurface.classes.github.types import GitHubOrg, GitHubRepo
+from opfor.scenarios.attacksurface.assets.github.types import GitHubOrg, GitHubRepo
 
 
 def _site_domain(value: str) -> str:

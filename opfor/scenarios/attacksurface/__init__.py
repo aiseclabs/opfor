@@ -4,7 +4,7 @@ The seed is an `Org`, an organization the operator names, such as a company. The
 discovers assets under it across classes and triages the whole into a ranked inventory.
 The operator restricts to a class with `Org.classes`, empty runs them all.
 
-An asset class is a self-contained plugin under `classes/`, and it owns its payloads,
+An asset class is a self-contained plugin under `assets/`, and it owns its payloads,
 capabilities, rules, and knowledge. This module names the classes the scenario is built
 from and concatenates their contributions, the one place that lists them, the way the
 registry is the one place that lists scenarios. Adding a class is a new package there plus
@@ -22,10 +22,10 @@ from pathlib import Path
 from opfor.core import Node, Phase, Provider, RuleSet, Scenario, World, make_provider
 from opfor.core.providers.factory import default_model, role_model, triage_mode
 from opfor.scenarios.attacksurface import config
-from opfor.scenarios.attacksurface.classes import domain, github
-from opfor.scenarios.attacksurface.classes.domain import identify
-from opfor.scenarios.attacksurface.classes.domain import sources as domain_src
-from opfor.scenarios.attacksurface.classes.github import sources as github_src
+from opfor.scenarios.attacksurface.assets import domain, github
+from opfor.scenarios.attacksurface.assets.domain import identify
+from opfor.scenarios.attacksurface.assets.domain import sources as domain_src
+from opfor.scenarios.attacksurface.assets.github import sources as github_src
 from opfor.scenarios.attacksurface.triage import SurfaceTriage
 from opfor.scenarios.attacksurface.confirm import ConfirmTriage
 from opfor.scenarios.attacksurface.grounding import FindingGrounder
@@ -42,8 +42,8 @@ def _payloads() -> dict[str, type]:
     not by editing this map."""
     from dataclasses import is_dataclass
     from opfor.scenarios.attacksurface import reproduce, types as surface_types
-    from opfor.scenarios.attacksurface.classes.domain import types as domain_types
-    from opfor.scenarios.attacksurface.classes.github import types as github_types
+    from opfor.scenarios.attacksurface.assets.domain import types as domain_types
+    from opfor.scenarios.attacksurface.assets.github import types as github_types
 
     registry: dict[str, type] = {}
     for module in (surface_types, domain_types, github_types, reproduce):

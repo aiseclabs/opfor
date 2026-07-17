@@ -6,8 +6,8 @@ import json
 from urllib.parse import urlparse
 
 from opfor.core import Capability, Done, Fact, Failed, Outcome, Phase, Task, World
-from opfor.scenarios.attacksurface.classes.domain.sources import info_from_openapi
-from opfor.scenarios.attacksurface.classes.domain.types import CVE, CVEScan
+from opfor.scenarios.attacksurface.assets.domain.sources import info_from_openapi
+from opfor.scenarios.attacksurface.assets.domain.types import CVE, CVEScan
 
 
 class CveScan(Capability):

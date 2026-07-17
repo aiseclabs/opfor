@@ -5,8 +5,8 @@ from __future__ import annotations
 from urllib.parse import urlparse
 
 from opfor.core import World
-from opfor.scenarios.attacksurface.classes.domain.parsers import backup_candidates
-from opfor.scenarios.attacksurface.classes.domain.storage import cloud_bucket_from_url
+from opfor.scenarios.attacksurface.assets.domain.parsers import backup_candidates
+from opfor.scenarios.attacksurface.assets.domain.storage import cloud_bucket_from_url
 
 _MAX_FILES = 20
 _MAX_CANDIDATES = 150

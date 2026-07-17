@@ -23,7 +23,7 @@ def test_endpoints_enumerated_and_auth_classified():
 
 
 def test_nvd_cves_parses_id_score_severity_and_summary():
-    from opfor.scenarios.attacksurface.classes.domain import sources as domains
+    from opfor.scenarios.attacksurface.assets.domain import sources as domains
 
     reply = {
         "vulnerabilities": [
@@ -47,7 +47,7 @@ def test_nvd_cves_parses_id_score_severity_and_summary():
 
 
 def test_nvd_cves_returns_nothing_for_an_unidentified_product():
-    from opfor.scenarios.attacksurface.classes.domain import sources as domains
+    from opfor.scenarios.attacksurface.assets.domain import sources as domains
 
     # no product means nothing to query, an empty list without a network call
     assert domains.nvd_cves("", "1.0") == []
@@ -56,7 +56,7 @@ def test_nvd_cves_returns_nothing_for_an_unidentified_product():
 def test_nvd_keyword_search_uses_the_product_alone_not_the_version(monkeypatch):
     """NVD keyword search matches the description text, where a version rarely appears, so
     the query is the product alone, or a version-bearing product would return nothing."""
-    from opfor.scenarios.attacksurface.classes.domain import passive as domains
+    from opfor.scenarios.attacksurface.assets.domain import passive as domains
 
     queries = []
     monkeypatch.setattr(domains, "_nvd_fetch", lambda q: queries.append(q) or [])
@@ -67,7 +67,7 @@ def test_nvd_keyword_search_uses_the_product_alone_not_the_version(monkeypatch):
 def test_nvd_falls_back_to_a_product_keyword_when_the_cpe_match_is_empty(monkeypatch):
     """A wrong vendor guess or a cve not tagged with the cpe yields an empty cpe match, so
     the query falls back to a product keyword rather than missing a real advisory."""
-    from opfor.scenarios.attacksurface.classes.domain import passive as domains
+    from opfor.scenarios.attacksurface.assets.domain import passive as domains
 
     queries = []
 
@@ -86,7 +86,7 @@ def test_nvd_falls_back_to_a_product_keyword_when_the_cpe_match_is_empty(monkeyp
 
 
 def test_nvd_cpe_match_with_results_does_not_fall_back(monkeypatch):
-    from opfor.scenarios.attacksurface.classes.domain import passive as domains
+    from opfor.scenarios.attacksurface.assets.domain import passive as domains
 
     queries = []
     monkeypatch.setattr(domains, "_nvd_fetch",
@@ -98,7 +98,7 @@ def test_nvd_cpe_match_with_results_does_not_fall_back(monkeypatch):
 
 
 def test_nvd_throttle_serializes_calls_to_stay_under_the_rate_limit(monkeypatch):
-    from opfor.scenarios.attacksurface.classes.domain import passive as domains
+    from opfor.scenarios.attacksurface.assets.domain import passive as domains
 
     clock = {"t": 100.0}
     slept = []
@@ -133,7 +133,7 @@ def test_cve_scan_records_the_identified_product_and_its_cves():
 
 
 def test_source_map_parser_detects_inlined_source_and_paths_only():
-    from opfor.scenarios.attacksurface.classes.domain import sources as domains
+    from opfor.scenarios.attacksurface.assets.domain import sources as domains
 
     inlined = json.dumps({"version": 3, "sources": ["../src/app.ts", "../src/api.ts"],
                           "sourcesContent": ["export const x = 1", ""]})
@@ -172,7 +172,7 @@ def test_source_map_scan_flags_an_inlined_map():
 
 
 def test_secrets_in_text_matches_patterns_and_redacts():
-    from opfor.scenarios.attacksurface.classes.domain import sources as domains
+    from opfor.scenarios.attacksurface.assets.domain import sources as domains
 
     patterns = [
         {"id": "aws-access-key-id", "regex": "AKIA[0-9A-Z]{16}", "note": "an AWS access key id"},
@@ -210,7 +210,7 @@ def test_secret_scan_flags_a_key_in_a_bundle_and_redacts_it():
 
 
 def test_backup_candidates_derives_twins_and_skips_directories():
-    from opfor.scenarios.attacksurface.classes.domain import sources as domains
+    from opfor.scenarios.attacksurface.assets.domain import sources as domains
 
     twins = domains.backup_candidates(
         "/app/config.php", append=(".bak", "~"), rename=(".zip",), swap=(".{file}.swp",))
@@ -254,7 +254,7 @@ def test_backup_scan_finds_a_twin_of_an_observed_file():
 
 
 def test_cloud_bucket_from_url_recognizes_provider_forms():
-    from opfor.scenarios.attacksurface.classes.domain import sources as domains
+    from opfor.scenarios.attacksurface.assets.domain import sources as domains
 
     s3v = domains.cloud_bucket_from_url("https://my-bucket.s3.amazonaws.com/key.txt")
     assert s3v["provider"] == "s3" and s3v["bucket"] == "my-bucket"
@@ -391,8 +391,8 @@ def test_cve_scan_fails_loud_when_identification_errors():
 
 
 def test_probe_list_includes_product_identity_and_version_paths():
-    from opfor.scenarios.attacksurface.classes import domain as domain_class
-    from opfor.scenarios.attacksurface.classes.domain import planner
+    from opfor.scenarios.attacksurface.assets import domain as domain_class
+    from opfor.scenarios.attacksurface.assets.domain import planner
 
     # the product identity and version endpoints are data in paths.yaml, probed by the
     # existing endpoint capability, so a later step can read the version for a cve match
@@ -402,8 +402,8 @@ def test_probe_list_includes_product_identity_and_version_paths():
 
 
 def test_batch_one_exposure_coverage_is_loaded():
-    from opfor.scenarios.attacksurface.classes import domain as domain_class
-    from opfor.scenarios.attacksurface.classes.domain import planner
+    from opfor.scenarios.attacksurface.assets import domain as domain_class
+    from opfor.scenarios.attacksurface.assets.domain import planner
     from opfor.scenarios.attacksurface.triage import _load_classes, _load_clues
 
     # new fixed-path leaks are probed, pure data in paths.yaml, no code
@@ -470,7 +470,7 @@ def test_spec_fetch_failure_still_closes_and_is_loud():
 
 
 def test_paths_from_openapi_names_methods():
-    from opfor.scenarios.attacksurface.classes.domain.sources import paths_from_openapi
+    from opfor.scenarios.attacksurface.assets.domain.sources import paths_from_openapi
 
     doc = {"paths": {"/a": {"get": {}, "post": {}}, "/b": {"get": {}}}}
     assert set(paths_from_openapi(doc)) == {"GET,POST /a", "GET /b"}
@@ -479,7 +479,7 @@ def test_paths_from_openapi_names_methods():
 
 
 def test_operations_from_introspection_reads_query_and_mutation():
-    from opfor.scenarios.attacksurface.classes.domain.sources import operations_from_introspection
+    from opfor.scenarios.attacksurface.assets.domain.sources import operations_from_introspection
 
     data = {"__schema": {"queryType": {"fields": [{"name": "me"}]},
                          "mutationType": {"fields": [{"name": "login"}]}}}
@@ -516,7 +516,7 @@ def test_robots_disallow_paths_become_candidates():
 
 
 def test_javascript_and_url_parsing():
-    from opfor.scenarios.attacksurface.classes.domain.sources import (
+    from opfor.scenarios.attacksurface.assets.domain.sources import (
         paths_in_javascript,
         same_host_path,
         script_sources,
@@ -535,7 +535,7 @@ def test_javascript_and_url_parsing():
 
 
 def test_robots_and_sitemap_parsing():
-    from opfor.scenarios.attacksurface.classes.domain.sources import robots_entries, sitemap_paths
+    from opfor.scenarios.attacksurface.assets.domain.sources import robots_entries, sitemap_paths
 
     paths, sitemaps = robots_entries("User-agent: *\nDisallow: /admin\nAllow: /public\nSitemap: https://h/sm.xml")
     assert paths == ["/admin", "/public"]
@@ -544,7 +544,7 @@ def test_robots_and_sitemap_parsing():
 
 
 def test_split_operation_separates_methods_from_path():
-    from opfor.scenarios.attacksurface.classes.domain.sources import split_operation
+    from opfor.scenarios.attacksurface.assets.domain.sources import split_operation
 
     assert split_operation("GET,POST /widgets") == (("GET", "POST"), "/widgets")
     assert split_operation("DELETE,GET /jobs/{job_id}") == (("DELETE", "GET"), "/jobs/{job_id}")
@@ -555,8 +555,8 @@ def test_probe_spec_verifies_reads_defers_writes_and_skips_templated():
     """A declared operation is not a reachable one, so ProbeSpec fetches each concrete GET
     and leaves write and templated operations for an authorized confirmation."""
     from opfor.core import Fact, Node, Task, World
-    from opfor.scenarios.attacksurface.classes.domain.capabilities import ProbeSpec
-    from opfor.scenarios.attacksurface.classes.domain.types import (
+    from opfor.scenarios.attacksurface.assets.domain.capabilities import ProbeSpec
+    from opfor.scenarios.attacksurface.assets.domain.types import (
         APISpec, DomainData, Endpoint, Resolved,
     )
 
@@ -604,7 +604,7 @@ def test_probe_spec_verifies_reads_defers_writes_and_skips_templated():
 
 
 def test_info_from_openapi_reads_title_and_version():
-    from opfor.scenarios.attacksurface.classes.domain.sources import info_from_openapi
+    from opfor.scenarios.attacksurface.assets.domain.sources import info_from_openapi
 
     doc = {"openapi": "3.1.0", "info": {"title": "litellm api", "version": "1.90.0"}, "paths": {}}
     assert info_from_openapi(doc) == ("litellm api", "1.90.0")
@@ -617,8 +617,8 @@ def test_cve_evidence_surfaces_the_spec_version_from_the_endpoint_body():
     """The CVE identification reads a specification's declared version from the endpoint's
     own body head, before any separate parse runs, so a version-bearing spec is not missed."""
     from opfor.core import Node, Task, World
-    from opfor.scenarios.attacksurface.classes.domain.capabilities import CveScan
-    from opfor.scenarios.attacksurface.classes.domain.types import DomainData, Endpoint
+    from opfor.scenarios.attacksurface.assets.domain.capabilities import CveScan
+    from opfor.scenarios.attacksurface.assets.domain.types import DomainData, Endpoint
 
     captured = {}
 
@@ -684,8 +684,8 @@ def test_http_domain_records_a_gap_when_unreachable_but_not_when_refused():
     # the run could not reach the host, while a refused connection is a real negative, so the
     # gap is recorded for the first and not the second, invariant 3 and 5.
     from opfor.core import Done, Fact, Task
-    from opfor.scenarios.attacksurface.classes.domain.capabilities.http import HTTPDomain
-    from opfor.scenarios.attacksurface.classes.domain.types import DomainData, Resolved
+    from opfor.scenarios.attacksurface.assets.domain.capabilities.http import HTTPDomain
+    from opfor.scenarios.attacksurface.assets.domain.types import DomainData, Resolved
 
     world = World()
     world.add(Node(id="domain:h", type="domain", payload=DomainData(name="h", root="h", source="s")))
@@ -707,8 +707,8 @@ def test_http_domain_records_a_gap_when_unreachable_but_not_when_refused():
 
 def test_graphql_capability_marks_an_errored_introspection_failed_not_disabled():
     from opfor.core import Failed, Task
-    from opfor.scenarios.attacksurface.classes.domain.capabilities.specs import GraphQLIntrospect
-    from opfor.scenarios.attacksurface.classes.domain.types import Endpoint
+    from opfor.scenarios.attacksurface.assets.domain.capabilities.specs import GraphQLIntrospect
+    from opfor.scenarios.attacksurface.assets.domain.types import Endpoint
 
     world = World()
     world.add(Node(id="endpoint:h/graphql", type="endpoint",
@@ -725,8 +725,8 @@ def test_graphql_capability_marks_an_errored_introspection_failed_not_disabled()
 
 def test_source_map_scan_tolerates_a_bundle_error_and_still_records_the_gap():
     from opfor.core import Done, Task
-    from opfor.scenarios.attacksurface.classes.domain.capabilities.artifacts import SourceMapScan
-    from opfor.scenarios.attacksurface.classes.domain.types import DomainData
+    from opfor.scenarios.attacksurface.assets.domain.capabilities.artifacts import SourceMapScan
+    from opfor.scenarios.attacksurface.assets.domain.types import DomainData
 
     world = World()
     world.add(Node(id="domain:h", type="domain", payload=DomainData(name="h", root="h", source="s")))
@@ -754,8 +754,8 @@ def test_source_map_scan_tolerates_a_bundle_error_and_still_records_the_gap():
 
 def test_expand_spec_fails_loud_on_transport_failure_and_on_a_malformed_body():
     from opfor.core import Failed, Task
-    from opfor.scenarios.attacksurface.classes.domain.capabilities.specs import ExpandSpec
-    from opfor.scenarios.attacksurface.classes.domain.types import Endpoint
+    from opfor.scenarios.attacksurface.assets.domain.capabilities.specs import ExpandSpec
+    from opfor.scenarios.attacksurface.assets.domain.types import Endpoint
 
     world = World()
     world.add(Node(id="endpoint:h/openapi.json", type="endpoint",
@@ -770,7 +770,7 @@ def test_expand_spec_fails_loud_on_transport_failure_and_on_a_malformed_body():
 
 
 def test_secret_scan_reports_multiple_distinct_matches_not_only_the_first():
-    from opfor.scenarios.attacksurface.classes.domain.javascript import secrets_in_text
+    from opfor.scenarios.attacksurface.assets.domain.javascript import secrets_in_text
     body = "a=sk-aaaaaaaaaaaaaaaaaaaa b=sk-bbbbbbbbbbbbbbbbbbbb"
     patterns = [{"id": "token", "regex": r"sk-[a-z]{20}", "note": "token"}]
     found = secrets_in_text(body, patterns)
@@ -779,7 +779,7 @@ def test_secret_scan_reports_multiple_distinct_matches_not_only_the_first():
 
 
 def test_a_malformed_secret_pattern_fails_loud_at_load(tmp_path):
-    from opfor.scenarios.attacksurface.classes.domain import planner
+    from opfor.scenarios.attacksurface.assets.domain import planner
     (tmp_path / "secret_patterns.yaml").write_text(
         "patterns:\n  - id: bad\n    regex: '([unclosed'\n    note: broken\n", encoding="utf-8")
     # a broken regex must fail the run at load, not silently disable the whole secret class
@@ -789,8 +789,8 @@ def test_a_malformed_secret_pattern_fails_loud_at_load(tmp_path):
 
 def test_endpoint_probe_reports_truncation_when_the_candidate_cap_is_hit():
     from opfor.core import Done, Task
-    from opfor.scenarios.attacksurface.classes.domain.capabilities.http import Endpoints
-    from opfor.scenarios.attacksurface.classes.domain.types import DomainData
+    from opfor.scenarios.attacksurface.assets.domain.capabilities.http import Endpoints
+    from opfor.scenarios.attacksurface.assets.domain.types import DomainData
 
     world = World()
     world.add(Node(id="domain:h", type="domain", payload=DomainData(name="h", root="h", source="s")))
@@ -809,7 +809,7 @@ def test_endpoint_probe_reports_truncation_when_the_candidate_cap_is_hit():
 
 
 def test_distinct_treats_a_differing_redirect_location_as_a_real_endpoint():
-    from opfor.scenarios.attacksurface.classes.domain.capabilities.common import _distinct
+    from opfor.scenarios.attacksurface.assets.domain.capabilities.common import _distinct
     # a host that answers a blanket 302 to /login for unknown paths still hides a real /admin
     # that redirects to its own dashboard, so a differing location is distinct
     baseline = {"status": 302, "location": "https://h/login", "content_type": "", "body": ""}
@@ -820,7 +820,7 @@ def test_distinct_treats_a_differing_redirect_location_as_a_real_endpoint():
 
 
 def test_openapi_paths_apply_the_declared_base_path():
-    from opfor.scenarios.attacksurface.classes.domain.parsers import paths_from_openapi
+    from opfor.scenarios.attacksurface.assets.domain.parsers import paths_from_openapi
     # Swagger 2 basePath and OpenAPI 3 servers url both move an operation off the host root,
     # so the real unauthenticated surface is probed rather than a 404 at /users
     swagger = {"basePath": "/api/v2", "paths": {"/users": {"get": {}}}}
@@ -830,7 +830,7 @@ def test_openapi_paths_apply_the_declared_base_path():
 
 
 def test_openapi_path_item_without_verbs_is_a_get_candidate_not_a_write():
-    from opfor.scenarios.attacksurface.classes.domain.parsers import (
+    from opfor.scenarios.attacksurface.assets.domain.parsers import (
         paths_from_openapi, split_operation)
     ops = paths_from_openapi({"paths": {"/ref-path": {"$ref": "#/components/x"}}})
     assert ops == ["GET /ref-path"]
@@ -839,7 +839,7 @@ def test_openapi_path_item_without_verbs_is_a_get_candidate_not_a_write():
 
 
 def test_distinct_ignores_a_path_echoing_login_redirect_query():
-    from opfor.scenarios.attacksurface.classes.domain.capabilities.common import _distinct
+    from opfor.scenarios.attacksurface.assets.domain.capabilities.common import _distinct
     # a login wall that echoes the requested path in ?next= gives every path a different raw
     # location, but it is one catch-all, so not distinct
     baseline = {"status": 302, "location": "https://h/login?next=/x", "content_type": "", "body": ""}
@@ -851,8 +851,8 @@ def test_distinct_ignores_a_path_echoing_login_redirect_query():
 
 def test_endpoint_probe_flags_when_the_baseline_cannot_be_established():
     from opfor.core import Done, Task
-    from opfor.scenarios.attacksurface.classes.domain.capabilities.http import Endpoints
-    from opfor.scenarios.attacksurface.classes.domain.types import DomainData
+    from opfor.scenarios.attacksurface.assets.domain.capabilities.http import Endpoints
+    from opfor.scenarios.attacksurface.assets.domain.types import DomainData
 
     world = World()
     world.add(Node(id="domain:h", type="domain", payload=DomainData(name="h", root="h", source="s")))
@@ -883,7 +883,7 @@ def test_norm_url_keeps_the_query_so_a_query_bearing_poc_does_not_false_match():
 
 
 def test_urls_in_javascript_extracts_an_explicit_port():
-    from opfor.scenarios.attacksurface.classes.domain.javascript import urls_in_javascript
+    from opfor.scenarios.attacksurface.assets.domain.javascript import urls_in_javascript
     body = 'const api = "https://api.host.com:8443/v1/users";'
     assert "https://api.host.com:8443/v1/users" in urls_in_javascript(body)
 
@@ -891,7 +891,7 @@ def test_urls_in_javascript_extracts_an_explicit_port():
 def test_sql_dump_clue_covers_every_probed_sql_path():
     import yaml
 
-    from opfor.scenarios.attacksurface.classes import domain as domain_class
+    from opfor.scenarios.attacksurface.assets import domain as domain_class
     data = yaml.safe_load((domain_class.KNOWLEDGE / "exposures.yaml").read_text(encoding="utf-8"))
     sql = [c for c in data["clues"] if c.get("id") == "exposed-sql-dump"]
     # a suffix path so /dump.sql, /db.sql, /database.sql all match, not only /backup.sql
@@ -901,7 +901,7 @@ def test_sql_dump_clue_covers_every_probed_sql_path():
 def test_javascript_extraction_dedups_and_caps_a_hostile_bundle():
     # a bundle packing far more distinct quoted paths than the cap must be read out in bounded
     # time and bounded length, not grow an unbounded list on a quadratic membership scan
-    from opfor.scenarios.attacksurface.classes.domain.javascript import (
+    from opfor.scenarios.attacksurface.assets.domain.javascript import (
         _MAX_JS_STRINGS,
         paths_in_javascript,
         urls_in_javascript,
@@ -920,7 +920,7 @@ def test_javascript_extraction_dedups_and_caps_a_hostile_bundle():
 def test_secrets_in_text_keeps_two_keys_sharing_a_prefix_and_length():
     # two distinct AWS keys with the same six-char prefix and identical length must both be
     # reported, not collapsed to one by a redaction-keyed dedup that loses a real secret
-    from opfor.scenarios.attacksurface.classes.domain import sources as domains
+    from opfor.scenarios.attacksurface.assets.domain import sources as domains
 
     patterns = [{"id": "aws-access-key-id", "regex": "AKIA[0-9A-Z]{16}", "note": "key"}]
     body = "a='AKIA000000000000AAAA'; b='AKIA000000000000BBBB';"
@@ -930,10 +930,10 @@ def test_secrets_in_text_keeps_two_keys_sharing_a_prefix_and_length():
 
 def test_paths_from_openapi_caps_and_expand_spec_reports_the_drop():
     from opfor.core import Done, Task
-    from opfor.scenarios.attacksurface.classes.domain.capabilities.specs import ExpandSpec
-    from opfor.scenarios.attacksurface.classes.domain.parsers import _MAX_SPEC_PATHS
-    from opfor.scenarios.attacksurface.classes.domain.sources import paths_from_openapi
-    from opfor.scenarios.attacksurface.classes.domain.types import Endpoint
+    from opfor.scenarios.attacksurface.assets.domain.capabilities.specs import ExpandSpec
+    from opfor.scenarios.attacksurface.assets.domain.parsers import _MAX_SPEC_PATHS
+    from opfor.scenarios.attacksurface.assets.domain.sources import paths_from_openapi
+    from opfor.scenarios.attacksurface.assets.domain.types import Endpoint
 
     doc = {"paths": {f"/p{i}": {"get": {}} for i in range(_MAX_SPEC_PATHS + 300)}}
     parsed = paths_from_openapi(doc)
@@ -952,7 +952,7 @@ def test_paths_from_openapi_caps_and_expand_spec_reports_the_drop():
 
 
 def test_openapi_base_drops_a_protocol_relative_authority():
-    from opfor.scenarios.attacksurface.classes.domain.parsers import _openapi_base
+    from opfor.scenarios.attacksurface.assets.domain.parsers import _openapi_base
 
     # //evil.com/api must keep only its path, never turn the authority into the base path
     assert _openapi_base({"servers": [{"url": "//evil.com/api"}]}) == "/api"
@@ -973,7 +973,7 @@ def test_looks_like_host_rejects_a_slash_label_and_keeps_a_wildcard():
 
 def test_cve_render_ranks_by_cvss_and_notes_truncation():
     from opfor.core import Fact
-    from opfor.scenarios.attacksurface.classes.domain.types import CVE, CVEScan, DomainData, HTTP, Resolved
+    from opfor.scenarios.attacksurface.assets.domain.types import CVE, CVEScan, DomainData, HTTP, Resolved
     from opfor.scenarios.attacksurface.render import SurfaceRenderer
 
     world = World()
@@ -996,8 +996,8 @@ def test_cve_render_ranks_by_cvss_and_notes_truncation():
 
 def test_resolve_error_records_an_errored_fact_and_a_gap_not_a_bare_failed():
     from opfor.core import Done, Task
-    from opfor.scenarios.attacksurface.classes.domain.capabilities.dns import ResolveDomain
-    from opfor.scenarios.attacksurface.classes.domain.types import DomainData
+    from opfor.scenarios.attacksurface.assets.domain.capabilities.dns import ResolveDomain
+    from opfor.scenarios.attacksurface.assets.domain.types import DomainData
 
     world = World()
     world.add(Node(id="domain:h", type="domain", payload=DomainData(name="h", root="h", source="s")))
@@ -1016,9 +1016,9 @@ def test_resolve_error_records_an_errored_fact_and_a_gap_not_a_bare_failed():
 
 def test_harvest_crash_still_records_harvested_and_a_gap(monkeypatch):
     from opfor.core import Done, Fact, Task
-    from opfor.scenarios.attacksurface.classes.domain.capabilities import http as cap_http
-    from opfor.scenarios.attacksurface.classes.domain.capabilities.http import HarvestPaths
-    from opfor.scenarios.attacksurface.classes.domain.types import DomainData, Resolved
+    from opfor.scenarios.attacksurface.assets.domain.capabilities import http as cap_http
+    from opfor.scenarios.attacksurface.assets.domain.capabilities.http import HarvestPaths
+    from opfor.scenarios.attacksurface.assets.domain.types import DomainData, Resolved
 
     world = World()
     world.add(Node(id="domain:h", type="domain", payload=DomainData(name="h", root="h", source="s")))

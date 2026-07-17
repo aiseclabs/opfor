@@ -8,7 +8,7 @@ the target's code surface, so its repos are not the run's to enumerate.
 from __future__ import annotations
 
 from opfor.core import each
-from opfor.scenarios.attacksurface.classes import class_enabled
+from opfor.scenarios.attacksurface.assets import class_enabled
 
 
 def map_rules():

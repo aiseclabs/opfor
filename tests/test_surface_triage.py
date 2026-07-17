@@ -31,8 +31,8 @@ def test_dangling_name_is_surfaced():
 
 def test_takeover_catalogue_is_expanded_and_a_new_signature_raises_its_clue():
     from opfor.core import Fact
-    from opfor.scenarios.attacksurface.classes.domain import KNOWLEDGE
-    from opfor.scenarios.attacksurface.classes.domain.types import DomainData, HTTP as HTTPData
+    from opfor.scenarios.attacksurface.assets.domain import KNOWLEDGE
+    from opfor.scenarios.attacksurface.assets.domain.types import DomainData, HTTP as HTTPData
     from opfor.scenarios.attacksurface.render import SurfaceRenderer
     from opfor.scenarios.attacksurface.triage import _load_takeover
 
@@ -143,7 +143,7 @@ def test_graphql_without_operations_is_not_surfaced():
 def test_empty_env_body_yields_no_exposure_clue():
     # a host that serves an empty 200 for /.env has no KEY=value body, so the deterministic
     # clue must not fire, the clue asserts on content, not the path
-    from opfor.scenarios.attacksurface.classes.domain.types import Endpoint
+    from opfor.scenarios.attacksurface.assets.domain.types import Endpoint
 
     sc = _make()
     empty = Endpoint(url="https://cf.example.com/.env", path="/.env", status=200, body="")
@@ -179,7 +179,7 @@ def test_grounding_attaches_a_poc_request_only_for_an_observed_safe_read():
     """Strict grounding: a finding is marked reproducible only when its safe-read proof of
     concept names a GET the surface actually recorded, never a request the model invented."""
     from opfor.core import Fact, Node
-    from opfor.scenarios.attacksurface.classes.domain.types import (
+    from opfor.scenarios.attacksurface.assets.domain.types import (
         DomainData, Endpoint, SpecAudit, SpecOperation)
     from opfor.core.result import Finding
     from opfor.scenarios.attacksurface.grounding import FindingGrounder
@@ -239,7 +239,7 @@ def test_triage_judge_mints_findings_and_mutates_no_world_node():
     triage, invariant 2. The grounder materializes it, and the scenario wires it as the
     post-triage step."""
     from opfor.core import Fact, MockProvider, Node
-    from opfor.scenarios.attacksurface.classes.domain.types import DomainData, Endpoint, Resolved
+    from opfor.scenarios.attacksurface.assets.domain.types import DomainData, Endpoint, Resolved
     from opfor.scenarios.attacksurface.grounding import FindingGrounder
     from opfor.scenarios.attacksurface.triage import SurfaceTriage
 
@@ -448,7 +448,7 @@ def test_missing_security_headers_are_surfaced_and_the_class_is_selected():
 
 def test_render_lists_present_security_headers_as_set_and_omits_them_from_missing():
     from opfor.core import Fact
-    from opfor.scenarios.attacksurface.classes.domain.types import DomainData, HTTP as HTTPData
+    from opfor.scenarios.attacksurface.assets.domain.types import DomainData, HTTP as HTTPData
     from opfor.scenarios.attacksurface.render import SurfaceRenderer
 
     world = World()
@@ -465,8 +465,8 @@ def test_render_lists_present_security_headers_as_set_and_omits_them_from_missin
 
 
 def test_directory_listing_body_raises_the_exposure_clue():
-    from opfor.scenarios.attacksurface.classes.domain import KNOWLEDGE
-    from opfor.scenarios.attacksurface.classes.domain.types import Endpoint
+    from opfor.scenarios.attacksurface.assets.domain import KNOWLEDGE
+    from opfor.scenarios.attacksurface.assets.domain.types import Endpoint
     from opfor.scenarios.attacksurface.render import SurfaceRenderer
     from opfor.scenarios.attacksurface.triage import _load_clues
 
@@ -519,7 +519,7 @@ def test_exposed_service_ports_are_surfaced_and_the_class_is_selected():
 
 def test_render_shows_exposed_ports_even_on_a_host_without_a_website():
     from opfor.core import Fact
-    from opfor.scenarios.attacksurface.classes.domain.types import DomainData, OpenPort, PortScan
+    from opfor.scenarios.attacksurface.assets.domain.types import DomainData, OpenPort, PortScan
     from opfor.scenarios.attacksurface.render import SurfaceRenderer
 
     # no http fact, so this backend host serves no website, yet its open ports must be judged
@@ -548,7 +548,7 @@ def test_tls_posture_is_probed_on_live_hosts_and_surfaced_for_the_judge():
 
 def test_render_shows_an_invalid_tls_certificate_with_its_reason():
     from opfor.core import Fact
-    from opfor.scenarios.attacksurface.classes.domain.types import DomainData, HTTP as HTTPData, TlsPosture
+    from opfor.scenarios.attacksurface.assets.domain.types import DomainData, HTTP as HTTPData, TlsPosture
     from opfor.scenarios.attacksurface.render import SurfaceRenderer
 
     world = World()
@@ -595,7 +595,7 @@ def test_dns_email_posture_is_read_on_roots_only_and_surfaced_for_the_judge():
 
 def test_render_shows_a_configured_root_email_and_dns_posture_even_without_a_website():
     from opfor.core import Fact
-    from opfor.scenarios.attacksurface.classes.domain.types import DnsEmailPosture, DomainData
+    from opfor.scenarios.attacksurface.assets.domain.types import DnsEmailPosture, DomainData
     from opfor.scenarios.attacksurface.render import SurfaceRenderer
 
     # no http fact, so the root serves no website, yet the email posture must still be judged

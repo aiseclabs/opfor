@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 import urllib.parse
 
-from opfor.scenarios.attacksurface.classes.domain.javascript import _JS_URL
+from opfor.scenarios.attacksurface.assets.domain.javascript import _JS_URL
 
 _BUCKET_NAME = re.compile(r"^[a-z0-9][a-z0-9.\-]{1,61}[a-z0-9]$")
 # XML listing roots each provider returns for a public, listable bucket, so a 200 that is an

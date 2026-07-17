@@ -33,7 +33,7 @@ def _resolve_seed(args) -> tuple[str, tuple[str, ...], tuple[str, ...], tuple[st
     """
     from opfor.scenarios.attacksurface import config
     from opfor.scenarios.attacksurface.net import registrable_root
-    from opfor.scenarios.attacksurface.classes.domain.sources import (
+    from opfor.scenarios.attacksurface.assets.domain.sources import (
         hosts_from_file,
         roots_from_file,
     )

@@ -273,7 +273,7 @@ def test_confirm_regrades_end_to_end_across_triage_reproduce_and_confirm():
     """The whole intrusive spine wired by hand: triage grounds a finding and materializes its
     node, reproduce records the live receipt, confirm regrades the finding on that receipt."""
     from opfor.core import Fact, Node, Task, World
-    from opfor.scenarios.attacksurface.classes.domain.types import DomainData, Endpoint, Resolved
+    from opfor.scenarios.attacksurface.assets.domain.types import DomainData, Endpoint, Resolved
     from opfor.scenarios.attacksurface.confirm import ConfirmTriage
     from opfor.scenarios.attacksurface.grounding import FindingGrounder
     from opfor.scenarios.attacksurface.reproduce import ReproduceFinding
@@ -435,7 +435,7 @@ def test_reproduce_records_a_redirect_raw_with_location_and_expect():
 
 
 def test_readonly_fetch_uses_a_non_following_redirect_handler():
-    from opfor.scenarios.attacksurface.classes.domain.http import _NoRedirect
+    from opfor.scenarios.attacksurface.assets.domain.http import _NoRedirect
     # returning None from redirect_request means a 3xx is returned raw rather than chased, so
     # the reproduce replay never follows a server-controlled redirect off-scope or into a GET
     # side effect

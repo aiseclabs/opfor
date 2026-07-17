@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from opfor.core import Capability, Done, Fact, Failed, Outcome, Phase, Task, World
-from opfor.scenarios.attacksurface.classes.domain.types import TlsPosture
+from opfor.scenarios.attacksurface.assets.domain.types import TlsPosture
 
 
 class TlsSecurity(Capability):

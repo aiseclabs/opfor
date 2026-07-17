@@ -548,7 +548,7 @@ def test_tls_posture_is_probed_on_live_hosts_and_surfaced_for_the_judge():
 
 def test_render_shows_an_invalid_tls_certificate_with_its_reason():
     from opfor.core import Fact
-    from opfor.scenarios.attacksurface.assets.domain.types import DomainData, HTTP as HTTPData, TlsPosture
+    from opfor.scenarios.attacksurface.assets.domain.types import DomainData, HTTP as HTTPData, TLSPosture
     from opfor.scenarios.attacksurface.render import SurfaceRenderer
 
     world = World()
@@ -558,7 +558,7 @@ def test_render_shows_an_invalid_tls_certificate_with_its_reason():
         Fact(kind="http", about="domain:h.example.com",
              payload=HTTPData(alive=True, status=200, url="https://h.example.com/")),
         Fact(kind="tls", about="domain:h.example.com",
-             payload=TlsPosture(host="h.example.com", reachable=True, valid=False,
+             payload=TLSPosture(host="h.example.com", reachable=True, valid=False,
                                 validity_error="certificate has expired", protocol="TLSv1.2")),
     ))
     text = "\n".join(SurfaceRenderer([], []).units(world))
@@ -595,7 +595,7 @@ def test_dns_email_posture_is_read_on_roots_only_and_surfaced_for_the_judge():
 
 def test_render_shows_a_configured_root_email_and_dns_posture_even_without_a_website():
     from opfor.core import Fact
-    from opfor.scenarios.attacksurface.assets.domain.types import DnsEmailPosture, DomainData
+    from opfor.scenarios.attacksurface.assets.domain.types import DNSEmailPosture, DomainData
     from opfor.scenarios.attacksurface.render import SurfaceRenderer
 
     # no http fact, so the root serves no website, yet the email posture must still be judged
@@ -603,7 +603,7 @@ def test_render_shows_a_configured_root_email_and_dns_posture_even_without_a_web
     world.add(Node(id="domain:example.com", type="domain",
                    payload=DomainData(name="example.com", root="example.com", source="hint")))
     world.absorb((Fact(kind="dns_email", about="domain:example.com",
-                       payload=DnsEmailPosture(domain="example.com", spf=("v=spf1 -all",),
+                       payload=DNSEmailPosture(domain="example.com", spf=("v=spf1 -all",),
                                                dmarc="v=DMARC1; p=reject",
                                                caa=('0 issue "letsencrypt.org"',), dnssec=True)),))
     text = "\n".join(SurfaceRenderer([], []).units(world))

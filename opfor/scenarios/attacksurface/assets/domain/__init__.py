@@ -15,9 +15,9 @@ from opfor.scenarios.attacksurface.assets.domain import planner
 from opfor.scenarios.attacksurface.assets.domain.capabilities import (
     BackupScan,
     BucketScan,
-    CveScan,
+    CVELookup,
     DiscoverDomains,
-    DnsEmailSecurity,
+    DNSEmailSecurity,
     DomainPivot,
     DomainRegistrant,
     Endpoints,
@@ -33,7 +33,7 @@ from opfor.scenarios.attacksurface.assets.domain.capabilities import (
     SecretScan,
     SourceMapScan,
     Subdomains,
-    TlsSecurity,
+    TLSSecurity,
 )
 
 KNOWLEDGE = Path(__file__).resolve().parent / "knowledge"
@@ -52,9 +52,9 @@ def assemble(*, enumerate_fn, pivot_fn, resolve_fn, probe_fn, fetch_fn, fetch_do
         Subdomains(enumerate_fn),
         PermuteSubdomains(resolve_fn),
         ResolveDomain(resolve_fn),
-        DnsEmailSecurity(dns_fn),
+        DNSEmailSecurity(dns_fn),
         HTTPDomain(probe_fn),
-        TlsSecurity(tls_fn),
+        TLSSecurity(tls_fn),
         PortServices(ports_fn),
         HarvestPaths(fetch_fn, fetch_doc_fn, wayback_fn),
         PermutePaths(),
@@ -70,7 +70,7 @@ def assemble(*, enumerate_fn, pivot_fn, resolve_fn, probe_fn, fetch_fn, fetch_do
     if reverse_whois_fn is not None:
         capabilities.append(DomainRegistrant(reverse_whois_fn))
     if identify_fn is not None and cve_fn is not None:
-        capabilities.append(CveScan(identify_fn, cve_fn))
+        capabilities.append(CVELookup(identify_fn, cve_fn))
     # The plan config is loaded here, at assemble time, not at planner import, so the content
     # root stays swappable and importing the class triggers no file IO.
     config = planner.load_plan_config(KNOWLEDGE)

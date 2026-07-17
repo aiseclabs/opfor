@@ -253,7 +253,7 @@ class CoverageGap:
 
 
 @dataclass(frozen=True, kw_only=True)
-class DnsEmailPosture:
+class DNSEmailPosture:
     """The email-authentication and DNS-integrity posture of a registrable domain, read from
     public DNS. Each field is a raw fact, whether a missing SPF or a `p=none` DMARC rises to a
     finding is triage's judgment. `spf` holds every `v=spf1` TXT found, so more than one, an
@@ -294,7 +294,7 @@ class PortScan:
 
 
 @dataclass(frozen=True, kw_only=True)
-class TlsPosture:
+class TLSPosture:
     """The TLS certificate and protocol posture of a host on 443. `reachable` is False when no
     address answered on 443 or the port speaks no TLS, a real negative, not a finding. `valid`
     is True when the certificate verified for the host, chain trusted, hostname matched, and

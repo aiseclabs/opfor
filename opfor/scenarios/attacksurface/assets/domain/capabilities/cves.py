@@ -10,7 +10,7 @@ from opfor.scenarios.attacksurface.assets.domain.sources import info_from_openap
 from opfor.scenarios.attacksurface.assets.domain.types import CVE, CVEScan
 
 
-class CveScan(Capability):
+class CVELookup(Capability):
     """ENRICH: identify a live host's product and look up its known vulnerabilities.
 
     The identify seam names the product, version, and CPE from the host's gathered

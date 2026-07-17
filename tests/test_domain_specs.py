@@ -316,7 +316,7 @@ def test_cve_evidence_surfaces_the_spec_version_from_the_endpoint_body():
     """The CVE identification reads a specification's declared version from the endpoint's
     own body head, before any separate parse runs, so a version-bearing spec is not missed."""
     from opfor.core import Node, Task, World
-    from opfor.scenarios.attacksurface.assets.domain.capabilities import CveScan
+    from opfor.scenarios.attacksurface.assets.domain.capabilities import CVELookup
     from opfor.scenarios.attacksurface.assets.domain.types import DomainData, Endpoint
 
     captured = {}
@@ -338,7 +338,7 @@ def test_cve_evidence_surfaces_the_spec_version_from_the_endpoint_body():
                                     status=200, auth_required=False,
                                     content_type="application/json", body=body)))
 
-    out = CveScan(identify, cves).run(Task(capability="cve_scan", node="domain:api.example.com"), world)
+    out = CVELookup(identify, cves).run(Task(capability="cve_scan", node="domain:api.example.com"), world)
     assert out.facts
     assert "1.90.0" in captured["evidence"]
     assert "litellm api" in captured["evidence"]

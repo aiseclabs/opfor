@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 from opfor.core import Capability, Done, Fact, Failed, Outcome, Phase, Task, World
-from opfor.scenarios.attacksurface.assets.domain.types import TlsPosture
+from opfor.scenarios.attacksurface.assets.domain.types import TLSPosture
 
 
-class TlsSecurity(Capability):
+class TLSSecurity(Capability):
     """ENRICH: read a live host's TLS certificate and protocol posture on 443.
 
     It connects to the host over TLS and records whether the certificate verifies, why not
@@ -33,7 +33,7 @@ class TlsSecurity(Capability):
             result = self._tls(name, addresses)
         except Exception as exc:
             return Failed(reason=f"tls probe {type(exc).__name__}: {exc}")
-        payload = TlsPosture(
+        payload = TLSPosture(
             host=name,
             reachable=bool(result.get("reachable")),
             reason=str(result.get("reason", "")),

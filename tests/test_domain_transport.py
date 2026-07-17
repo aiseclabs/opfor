@@ -118,7 +118,7 @@ def test_dns_email_posture_reads_spf_dmarc_caa_and_dnssec(monkeypatch):
 
 def test_dns_email_capability_reports_records_and_fails_loud_on_error():
     from opfor.core import Done, Failed, Node, Task, World
-    from opfor.scenarios.attacksurface.assets.domain.capabilities.dns import DnsEmailSecurity
+    from opfor.scenarios.attacksurface.assets.domain.capabilities.dns import DNSEmailSecurity
     from opfor.scenarios.attacksurface.assets.domain.types import DomainData
 
     world = World()
@@ -126,7 +126,7 @@ def test_dns_email_capability_reports_records_and_fails_loud_on_error():
                    payload=DomainData(name="example.com", root="example.com", source="hint")))
     task = Task(capability="dns_email", node="domain:example.com")
 
-    ok = DnsEmailSecurity(lambda d: {"spf": ("v=spf1 -all",), "dmarc": "", "caa": (), "dnssec": True})
+    ok = DNSEmailSecurity(lambda d: {"spf": ("v=spf1 -all",), "dmarc": "", "caa": (), "dnssec": True})
     out = ok.run(task, world)
     assert isinstance(out, Done)
     assert out.facts[0].payload.spf == ("v=spf1 -all",)
@@ -136,7 +136,7 @@ def test_dns_email_capability_reports_records_and_fails_loud_on_error():
         raise RuntimeError("dns down")
 
     # a lookup that fails is a loud Failed, never a silent clean absence of records
-    assert isinstance(DnsEmailSecurity(boom).run(task, world), Failed)
+    assert isinstance(DNSEmailSecurity(boom).run(task, world), Failed)
 
 def test_http_probe_tries_every_public_ip_retries_timeouts_and_raises_the_unexpected(monkeypatch):
     from opfor.scenarios.attacksurface.assets.domain.sources import http as domains
@@ -492,7 +492,7 @@ def test_tls_probe_is_a_clean_not_reachable_when_the_port_does_not_answer(monkey
 
 def test_tls_capability_reports_posture_and_fails_loud_on_error():
     from opfor.core import Done, Failed, Node, Task, World
-    from opfor.scenarios.attacksurface.assets.domain.capabilities.tls import TlsSecurity
+    from opfor.scenarios.attacksurface.assets.domain.capabilities.tls import TLSSecurity
     from opfor.scenarios.attacksurface.assets.domain.types import DomainData
 
     world = World()
@@ -500,7 +500,7 @@ def test_tls_capability_reports_posture_and_fails_loud_on_error():
                    payload=DomainData(name="h.example.com", root="example.com", source="hint")))
     task = Task(capability="tls", node="domain:h.example.com", scope_host="h.example.com")
 
-    ok = TlsSecurity(lambda n, a: {"reachable": True, "valid": False,
+    ok = TLSSecurity(lambda n, a: {"reachable": True, "valid": False,
                                    "validity_error": "certificate has expired"})
     out = ok.run(task, world)
     assert isinstance(out, Done)
@@ -510,7 +510,7 @@ def test_tls_capability_reports_posture_and_fails_loud_on_error():
     def boom(name, addresses):
         raise RuntimeError("tls down")
 
-    assert isinstance(TlsSecurity(boom).run(task, world), Failed)
+    assert isinstance(TLSSecurity(boom).run(task, world), Failed)
 
 def test_port_scan_reports_open_service_ports_with_banners(monkeypatch):
     from opfor.scenarios.attacksurface.assets.domain.sources import ports as domains

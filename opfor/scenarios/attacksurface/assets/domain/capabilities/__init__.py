@@ -5,7 +5,7 @@ from opfor.scenarios.attacksurface.assets.domain.capabilities.artifacts import (
     SecretScan,
     SourceMapScan,
 )
-from opfor.scenarios.attacksurface.assets.domain.capabilities.cves import CveScan
+from opfor.scenarios.attacksurface.assets.domain.capabilities.cves import CVELookup
 from opfor.scenarios.attacksurface.assets.domain.capabilities.discovery import (
     DiscoverDomains,
     DomainPivot,
@@ -14,7 +14,7 @@ from opfor.scenarios.attacksurface.assets.domain.capabilities.discovery import (
     Subdomains,
 )
 from opfor.scenarios.attacksurface.assets.domain.capabilities.dns import (
-    DnsEmailSecurity,
+    DNSEmailSecurity,
     ResolveDomain,
 )
 from opfor.scenarios.attacksurface.assets.domain.capabilities.http import (
@@ -30,14 +30,14 @@ from opfor.scenarios.attacksurface.assets.domain.capabilities.specs import (
     ProbeSpec,
 )
 from opfor.scenarios.attacksurface.assets.domain.capabilities.storage import BucketScan
-from opfor.scenarios.attacksurface.assets.domain.capabilities.tls import TlsSecurity
+from opfor.scenarios.attacksurface.assets.domain.capabilities.tls import TLSSecurity
 
 __all__ = [
     "BackupScan",
     "BucketScan",
-    "CveScan",
+    "CVELookup",
     "DiscoverDomains",
-    "DnsEmailSecurity",
+    "DNSEmailSecurity",
     "DomainPivot",
     "DomainRegistrant",
     "Endpoints",
@@ -53,5 +53,5 @@ __all__ = [
     "SecretScan",
     "SourceMapScan",
     "Subdomains",
-    "TlsSecurity",
+    "TLSSecurity",
 ]

@@ -73,6 +73,6 @@ paths:
   - "/database.sql"
   - "/db.sql"
   - "/www.zip"
-  # further api specification locations
+  # further API specification locations
   - "/v3/api-docs"
   - "/swagger/v1/swagger.json"

@@ -86,7 +86,7 @@ def _normalize_host(name: str) -> str:
 
 
 class HostScope:
-    """The attack-surface scope matcher: the DNS suffix rule that used to sit in the kernel gate.
+    """The attack-surface scope matcher: the scenario's DNS suffix rule for what is in scope.
 
     A candidate is in scope if it exactly matches an in-scope resource id, such as a GitHub
     `repo:owner/name`, or it is one of the in-scope hosts or a subdomain under one. Holding this

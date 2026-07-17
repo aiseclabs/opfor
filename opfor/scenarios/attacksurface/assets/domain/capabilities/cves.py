@@ -14,7 +14,7 @@ class CVELookup(Capability):
     """ENRICH: identify a live host's product and look up its known vulnerabilities.
 
     The identify seam names the product, version, and CPE from the host's gathered
-    evidence, and the cve seam looks that version up in a public database. Both are
+    evidence, and the CVE seam looks that version up in a public database. Both are
     injected, so this capability holds no model and no knowledge, it gathers raw evidence,
     calls the seams, and records the raw result. Identifying nothing is a clean negative,
     a seam error is a loud Failed, and which CVE matters and how severe is triage's

@@ -63,7 +63,7 @@ an app shell. Strong signals, by class:
   than the rendered page or a 404. High when the source or a config carries a secret, medium
   when it is only source without a credential.
 
-## Not A Finding
+## What Is Not A Finding
 
 A path that 404s, redirects to a login, or answers with the generic app HTML rather than
 the file's real content. The signal is the file's own content, present in the body.

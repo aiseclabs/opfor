@@ -32,7 +32,7 @@ or a novel tool name that means the same thing is the same class. Weigh the whol
 response, a live host with such a name and a real application behind it, not a parked page
 or a redirect to a public site.
 
-## Not A Finding
+## What Is Not A Finding
 
 A production host that merely contains one of these words incidentally, or a name that
 does not resolve or does not answer. The judgment is that a sensitive-by-nature surface is

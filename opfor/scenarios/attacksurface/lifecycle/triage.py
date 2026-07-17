@@ -396,7 +396,7 @@ def _slug(category: str) -> str:
 def _finding_from_dict(data: object, *, known_ids: frozenset[str] = frozenset(),
                        impacts: dict[str, str] | None = None,
                        report_text: str | None = None) -> Finding | None:
-    """Map one loosely-typed model finding onto a typed `Finding`, or None when it names no
+    """Map one loosely typed model finding onto a typed `Finding`, or None when it names no
     location or a location absent from the report. The category is normalized onto the known
     class ids, an unknown one becomes `other`, so the finding id is stable and dedup is
     reliable. The severity is the model's when valid, else the class's declared impact, else

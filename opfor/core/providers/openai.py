@@ -1,7 +1,7 @@
 """A provider backed by the OpenAI API, Chat Completions or Responses.
 
 The default wire is Chat Completions, where the system prompt is the first chat message.
-`wire_api="responses"` switches to the Responses API the gpt-5 reasoning models use, where
+`wire_api="responses"` switches to the Responses API the GPT-5 reasoning models use, where
 the system prompt is `instructions` and the turns are the `input`. A reasoning model
 rejects a fixed temperature, so the Responses path sets none. `cache` is accepted but not
 applied, OpenAI caches long prompts server-side with no request parameter to set. The
@@ -70,7 +70,7 @@ class OpenAIProvider(Provider):
     def _complete_responses(
         self, *, system: str, messages: list[Message], model: str, max_tokens: int
     ) -> CompletionResult:
-        """The Responses API path the gpt-5 reasoning models use. The budget covers reasoning
+        """The Responses API path the GPT-5 reasoning models use. The budget covers reasoning
         plus output, so it is generous. A budget too small yields empty output, which reads
         as an unusable reply upstream and keeps the finding, never a silent wrong verdict."""
         user_input = "\n\n".join(m.content for m in messages)

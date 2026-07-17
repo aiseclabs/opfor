@@ -1,4 +1,4 @@
-# Attack-Surface Judgment Classes
+# Attack Surface Judgment Classes
 
 Each file here is one class of finding the triage model may mint from the enriched
 surface. A file carries a YAML frontmatter and a prose body. The frontmatter is

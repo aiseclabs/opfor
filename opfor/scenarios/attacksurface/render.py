@@ -195,7 +195,7 @@ class SurfaceRenderer:
                 continue
             host = urlparse(spec.base).hostname or spec.base
             sample = ", ".join(list(spec.paths)[:_MAX_LIST])
-            line = f"api specification {spec.base}, {spec.count} operations\n  operations: {sample}"
+            line = f"API specification {spec.base}, {spec.count} operations\n  operations: {sample}"
             audit = world.latest("spec_audit", fact.about)
             if audit is not None:
                 line += self._spec_audit_detail(audit.payload)
@@ -209,7 +209,7 @@ class SurfaceRenderer:
             host = urlparse(url).hostname or url
             queries = [op for op in schema.operations if op.startswith("query:")]
             mutations = [op for op in schema.operations if op.startswith("mutation:")]
-            line = f"graphql introspection {url}, {schema.count} operations"
+            line = f"GraphQL introspection {url}, {schema.count} operations"
             if queries:
                 line += (f"\n  read queries reachable by the same unauthenticated introspection: "
                          f"{', '.join(queries[:_MAX_LIST])}")

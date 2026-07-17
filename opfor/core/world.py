@@ -9,7 +9,7 @@ way the surface grows.
 Both records tag themselves with a string, `Node.type` and `Fact.kind`, so the
 engine can index and query them generically without knowing any domain. The real
 data rides in `payload`, a frozen dataclass the scenario defines, so scenario code
-reads typed attributes and never a loosely-typed string map. The engine treats the
+reads typed attributes and never a loosely typed string map. The engine treats the
 payload as opaque, it only ever reads the tag, the id, and the `about` link.
 """
 

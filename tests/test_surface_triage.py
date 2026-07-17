@@ -124,7 +124,7 @@ def test_graphql_introspection_is_surfaced():
     _, sc, world = _run_capturing()
     schemas = [f.payload for f in world.facts("graphql")]
     assert any(s.enabled and s.count == 3 and "query:me" in s.operations for s in schemas)
-    assert "graphql introspection https://admin.example.com/graphql" in _prompt(sc)
+    assert "GraphQL introspection https://admin.example.com/graphql" in _prompt(sc)
 
 
 def test_graphql_without_operations_is_not_surfaced():
@@ -134,7 +134,7 @@ def test_graphql_without_operations_is_not_surfaced():
         return {"__schema": {"queryType": {"fields": []}}}
 
     _, sc, _ = _run_capturing(introspect_fn=empty)
-    assert "graphql introspection" not in _prompt(sc)
+    assert "GraphQL introspection" not in _prompt(sc)
 
 
 def test_empty_env_body_yields_no_exposure_clue():

@@ -1,4 +1,4 @@
-"""opfor: a universal offensive-security engine, generic engine with knowledge as data."""
+"""The universal offensive-security engine: one generic engine, knowledge held as data."""
 
 from __future__ import annotations
 

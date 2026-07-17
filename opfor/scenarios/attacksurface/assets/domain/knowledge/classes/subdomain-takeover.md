@@ -80,7 +80,7 @@ Three shapes reach you:
   at a released resource. This is the weakest signal, low, worth verifying for takeover
   rather than a confirmed one.
 
-## Not A Finding
+## What Is Not A Finding
 
 A live host serving the operator's own content, or a normal 404 from the operator's own
 application rather than a hosting provider's unclaimed-resource page.

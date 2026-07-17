@@ -961,7 +961,7 @@ def test_openapi_base_drops_a_protocol_relative_authority():
 
 
 def test_looks_like_host_rejects_a_slash_label_and_keeps_a_wildcard():
-    from opfor.scenarios.attacksurface.net import looks_like_host
+    from opfor.scenarios.attacksurface.hostnames import looks_like_host
 
     assert looks_like_host("api.example.com") is True
     assert looks_like_host("*.dev.example.com") is True

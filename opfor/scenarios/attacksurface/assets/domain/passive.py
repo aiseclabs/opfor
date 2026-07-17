@@ -16,7 +16,7 @@ import urllib.parse
 import urllib.request
 
 from opfor.scenarios.attacksurface import config
-from opfor.scenarios.attacksurface.net import looks_like_host, registrable_root
+from opfor.scenarios.attacksurface.hostnames import looks_like_host, registrable_root
 from opfor.scenarios.attacksurface.assets.domain.http import _JSON_LIMIT, _TIMEOUT, _UA
 from opfor.scenarios.attacksurface.assets.domain.parsers import same_host_path
 

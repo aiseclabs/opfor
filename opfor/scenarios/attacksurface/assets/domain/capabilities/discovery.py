@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from opfor.core import Capability, Done, Fact, Failed, Node, Outcome, Phase, Task, World
 from opfor.scenarios.attacksurface import config
-from opfor.scenarios.attacksurface.net import looks_like_host, registrable_root
+from opfor.scenarios.attacksurface.hostnames import looks_like_host, registrable_root
 from opfor.scenarios.attacksurface.assets.domain.capabilities.common import _coverage_gap
 from opfor.scenarios.attacksurface.assets.domain.types import CoverageGap, DomainData
 

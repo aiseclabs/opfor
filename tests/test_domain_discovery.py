@@ -347,7 +347,7 @@ def test_hint_root_is_not_reported_as_a_discovered_root():
 
 
 def test_registrable_root_keeps_multi_label_suffixes():
-    from opfor.scenarios.attacksurface.net import registrable_root
+    from opfor.scenarios.attacksurface.hostnames import registrable_root
 
     assert registrable_root("api.example.com") == "example.com"
     assert registrable_root("example.com") == "example.com"
@@ -1163,7 +1163,7 @@ def test_subdomain_enumeration_partial_failure_surfaces_a_coverage_gap():
 
 
 def test_registrable_root_recognizes_country_second_levels_generally():
-    from opfor.scenarios.attacksurface.net import registrable_root
+    from opfor.scenarios.attacksurface.hostnames import registrable_root
     # an uncurated country suffix is no longer mis-rooted, com.ph and co.nz keep three labels
     assert registrable_root("api.company.com.ph") == "company.com.ph"
     assert registrable_root("www.shop.co.nz") == "shop.co.nz"
@@ -1208,7 +1208,7 @@ def test_resolve_host_treats_a_servfail_as_a_resolver_error_not_a_no_address(mon
 
 
 def test_registrable_root_leaves_an_ip_literal_unchanged():
-    from opfor.scenarios.attacksurface.net import registrable_root
+    from opfor.scenarios.attacksurface.hostnames import registrable_root
     # an IP has no registrable root, folding it to the last two octets would mint a bogus root
     assert registrable_root("10.0.0.5") == "10.0.0.5"
     assert registrable_root("192.168.1.1") == "192.168.1.1"

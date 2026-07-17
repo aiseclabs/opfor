@@ -1,11 +1,11 @@
-# evals: detection-quality benchmark for attacksurface
+# Evals: Detection-Quality Benchmark for attacksurface
 
 The test suite locks the model-independent invariants, grounding, closure, and read-only
 reproduce, deterministically. This package is the other half, the judgment benchmark. It runs
 the real triage model against a fixed, labeled synthetic surface and scores recall and
 precision against an answer key.
 
-## Why synthetic surfaces
+## Why Synthetic Surfaces
 
 True recall is only measurable on a target whose full asset set is knowable. A live target's
 denominator, all assets that exist, is unknown by definition, so recall is unmeasurable there.
@@ -35,7 +35,7 @@ repeat with `--runs` and fold by frequency. A case's answer key is authored from
 ground truth, never from what opfor currently outputs, so a high score cannot come from the
 tool grading itself.
 
-## Not shipped with the package
+## Not Shipped with the Package
 
 The engine ships, the benchmark does not. `pyproject.toml` includes only `opfor*` in the
 wheel, so this package is a repository-only development and regression tool, run from a

@@ -31,7 +31,7 @@ from opfor.core.budget import Budget
 from opfor.core.capability import Done, Failed, Later, Task
 from opfor.core.ledger import Ledger
 from opfor.core.phase import Phase
-from opfor.core.result import CLOSED, SUSPENDED, Finding, Report
+from opfor.core.result import CLOSED, ERRORED, SUSPENDED, Finding, Report
 from opfor.core.scenario import Scenario
 from opfor.core.scope import Scope
 from opfor.core.world import Fact, World
@@ -115,12 +115,13 @@ def _drive(state: RunState) -> Report:
             suspended = _run_phase(s, phase)
         except Exception as exc:
             # An orchestration step raised, the planner, a triage judge, a post-triage step,
-            # or a confirm. A run must always answer with a Report, so the failure suspends
-            # the run loudly with its reason rather than escaping the engine, invariant 3 and 5.
+            # or a confirm. A run must always answer with a Report, so the failure is reported
+            # loudly rather than escaping the engine, invariant 3 and 5. It reports ERRORED, not
+            # SUSPENDED: a code-level crash is deterministic, so the run is not resumable and an
+            # operator or CI must not mistake it for a stall to retry or top up.
             s.notes.append(f"error in {phase.name}: {type(exc).__name__}: {exc}")
-            s.ledger.append("suspend", reason="error", phase=phase.name, error=type(exc).__name__)
-            s.resume_from = phase
-            return _report(s, SUSPENDED)
+            s.ledger.append("error", phase=phase.name, error=type(exc).__name__)
+            return _report(s, ERRORED)
         if suspended is not None:
             return suspended
         s.reached = phase

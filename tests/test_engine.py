@@ -8,7 +8,7 @@ import pytest
 
 from opfor.core import (Budget, Capability, Fact, Later, Node, Phase, RuleSet, Scenario, Scope,
                         Task, Triage, World, resume, run)
-from opfor.core.result import CLOSED, SUSPENDED
+from opfor.core.result import CLOSED, ERRORED, SUSPENDED
 from opfor.scenarios.attacksurface.hostnames import HostScope
 from opfor.scenarios.mock import MOCK
 
@@ -177,6 +177,16 @@ def test_resume_with_an_unknown_handle_is_loud_not_silent():
 # --- budget suspension resumes, and error suspension says why --------------------------
 
 
+def test_triage_charges_the_budget_for_the_model_judge():
+    """The TRIAGE judge is a model call, the run's most expensive step, so the runaway cap
+    counts it. MOCK charges MAP discover (1) + ENRICH inspect x3 (3) + the TRIAGE judge (1)."""
+    world = _world_with_root()
+    budget = Budget(100)
+    report = run(MOCK, world, scope=Scope(max_tier="recon"), budget=budget)
+    assert report.reached == Phase.TRIAGE
+    assert budget.steps == 5
+
+
 def test_a_budget_suspension_carries_resumable_state_and_continues_when_topped_up():
     """A run stopped purely by budget is resumable: it carries its state and the phase it
     stopped in, so raising the ceiling and resuming continues from there rather than losing
@@ -218,9 +228,11 @@ class _BoomTriage(Triage):
         raise RuntimeError("judge blew up")
 
 
-def test_an_orchestration_error_suspends_the_run_with_its_reason_not_a_bare_raise():
+def test_an_orchestration_error_reports_errored_not_a_resumable_suspend():
     """A triage, planner, or confirm that raises must still leave the run answering with a
-    Report, suspended with the failure named, never an exception escaping the engine."""
+    Report, never an exception escaping the engine. The status is ERRORED, not SUSPENDED, and
+    the run carries no resumable state, so a deterministic code crash is not mistaken for a
+    stall to retry or top up."""
     world = _world_with_root()
     scenario = Scenario(
         name="boom-triage",
@@ -231,6 +243,7 @@ def test_an_orchestration_error_suspends_the_run_with_its_reason_not_a_bare_rais
         terminal=Phase.TRIAGE,
     )
     report = run(scenario, world, scope=Scope(max_tier="recon"), budget=Budget(100))
-    assert report.status == SUSPENDED
+    assert report.status == ERRORED
     assert not report.closed
+    assert report.state is None
     assert any("RuntimeError" in n and "TRIAGE" in n for n in report.notes)

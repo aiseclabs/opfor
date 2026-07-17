@@ -17,9 +17,14 @@ from opfor.core.phase import Phase
 if TYPE_CHECKING:
     from opfor.core.engine import RunState
 
-# A run either ran the whole spine to its terminal, or stopped short and can resume.
+# A run either ran the whole spine to its terminal, stopped short but can resume, or hit an
+# error it cannot resume past. A suspended run is a resumable stall, an exhausted budget or
+# parked async work. An errored run is a code-level failure in the planner or a judge, a
+# distinct status so an operator or CI never mistakes a deterministic crash for a stall to
+# retry.
 CLOSED = "closed"
 SUSPENDED = "suspended"
+ERRORED = "errored"
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -49,12 +54,13 @@ class Report:
     `reached` is the last phase the engine completed, `terminal` is the phase the
     scenario declared as its finish line. A closed run reached its terminal. A
     suspended run did not, and `notes` says why, such as an exhausted budget or work
-    awaiting an async result. Coverage caveats also land in `notes`, so a bounded or
-    truncated run is loud about it.
+    awaiting an async result. An errored run hit a code-level failure, `notes` names the
+    exception. Coverage caveats also land in `notes`, so a bounded or truncated run is loud.
 
-    A run suspended on async work names the handles it is waiting on in `pending`, so a
-    stall is visible, and carries the resumable `state` an async result is fed back into,
-    so the run resumes rather than restarts. Both are empty or None on a closed run.
+    A suspended run carries the resumable `state` a resume continues from, and names any
+    async handles it is waiting on in `pending`. State rides every suspension, a budget one
+    included, though a budget suspension only makes progress once the ceiling is raised. A
+    closed or errored run carries neither, its state is not resumable.
     """
 
     scenario: str
@@ -65,8 +71,8 @@ class Report:
     notes: tuple[str, ...] = ()
     # The async handles a suspended run is waiting on, the keys to feed results back through.
     pending: tuple[str, ...] = ()
-    # The resumable state of a run suspended on async work, live objects rather than a
-    # serialized checkpoint, so `engine.resume` continues it in process. None otherwise.
+    # The resumable state of a suspended run, live objects rather than a serialized checkpoint,
+    # so `engine.resume` continues it in process. None on a closed or errored run.
     state: "RunState | None" = None
 
     @property

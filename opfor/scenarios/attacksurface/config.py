@@ -82,6 +82,16 @@ def reverse_whois_key() -> str:
     return os.environ.get("OPFOR_WHOISXML_API_KEY", "")
 
 
+def root_candidates_enabled() -> bool:
+    """Whether to propose root domains from the org name, off unless the operator opts in.
+
+    The proposal queries a public certificate log for the company name and confirms each
+    candidate with a certificate lookup, so it costs network a seeded run does not, and it stays
+    off by default. Set the variable to a truthy value to turn it on.
+    """
+    return os.environ.get("OPFOR_ROOT_CANDIDATES", "").strip().lower() in ("1", "true", "yes", "on")
+
+
 def roots_file() -> str:
     """Path to a newline-delimited root-domain seed file, empty when unset."""
     return os.environ.get("OPFOR_ROOTS_FILE", "")

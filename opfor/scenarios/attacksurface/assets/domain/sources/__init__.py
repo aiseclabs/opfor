@@ -28,12 +28,14 @@ from opfor.scenarios.attacksurface.assets.domain.sources.ports import port_scan
 from opfor.scenarios.attacksurface.assets.domain.sources.tls import tls_probe
 from opfor.scenarios.attacksurface.assets.domain.sources.passive import (
     Enumeration,
+    candidate_roots,
     cert_sibling_roots,
     certspotter_subdomains,
     cves_from_nvd,
     dnsdumpster_subdomains,
     hosts_from_file,
     nvd_cves,
+    roots_from_crtsh_org,
     otx_subdomains,
     reverse_whois,
     roots_from_file,

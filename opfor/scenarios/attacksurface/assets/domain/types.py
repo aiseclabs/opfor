@@ -28,6 +28,37 @@ class DomainData:
 
 
 @dataclass(frozen=True, kw_only=True)
+class RootCandidate:
+    """A root domain a free source proposed for the org from its name, not yet owned. `signal`
+    is the weak reason it was proposed, a subject-organization match in a public log, never
+    proof of ownership, so a candidate is a name to confirm by evidence, not a root to scan."""
+
+    name: str
+    source: str
+    signal: str = ""
+
+
+@dataclass(frozen=True, kw_only=True)
+class ProposedRoots:
+    """The candidate roots proposed for the org from its name, the guess half of discovery. It
+    carries no node, so a proposal never enters the scanned surface until a confirmer proves
+    ownership, keeping the guess out of scope."""
+
+    items: tuple[RootCandidate, ...] = ()
+
+
+@dataclass(frozen=True, kw_only=True)
+class RootCandidacy:
+    """The outcome of confirming proposed roots. `confirmed` names the candidates a hard-evidence
+    check proved owned, `unconfirmed` the ones left as guesses, each with why. A proposed root
+    that never earned proof is reported here rather than scanned or silently dropped, invariant 5."""
+
+    proposed: int = 0
+    confirmed: tuple[str, ...] = ()
+    unconfirmed: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True, kw_only=True)
 class Resolved:
     """A domain resolution result. `errored` is True when the resolver itself failed rather
     than returning an answer, so a resolver outage is told apart from a confirmed no-address.

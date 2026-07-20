@@ -58,3 +58,10 @@ let a newly confirmed root feed the next round, a snowball. Keep candidates a ge
 proposes in a separate, clearly labeled set for an operator to confirm, never mixed into
 the owned set. When every viable confirmer is exhausted and roots remain unreachable, name
 the signal that would reach them rather than reporting the map as finished.
+
+The bare-name entrypoint follows this exactly. When the operator seeds only a company name,
+a generator proposes candidate roots from certificate transparency, the roots on certificates
+whose subject organization matches the name. A candidate is recorded as a proposal that yields
+no node, so it never enters the scanned surface. A confirmer then promotes a candidate only
+when the SAN pivot proves certificate co-tenancy with an already-owned root, ladder rung 2, and
+a candidate that earns no such proof is reported unconfirmed rather than scanned or dropped.

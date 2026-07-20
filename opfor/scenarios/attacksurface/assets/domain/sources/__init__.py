@@ -26,10 +26,6 @@ from opfor.scenarios.attacksurface.assets.domain.sources.http import (
 )
 from opfor.scenarios.attacksurface.assets.domain.sources.ports import port_scan
 from opfor.scenarios.attacksurface.assets.domain.sources.tls import tls_probe
-from opfor.scenarios.attacksurface.assets.domain.sources.roots import (
-    root_from_redirect,
-    roots_from_dmarc,
-)
 from opfor.scenarios.attacksurface.assets.domain.sources.passive import (
     Enumeration,
     cert_sibling_roots,
@@ -72,3 +68,53 @@ from opfor.scenarios.attacksurface.assets.domain.sources.storage import (
     cloud_bucket_from_url,
     cloud_refs_in_text,
 )
+
+
+# The public source names this facade re-exports, declared so the public surface is explicit
+# and a name that stops being used through the facade is caught rather than lingering.
+__all__ = [
+    "Enumeration",
+    "backup_candidates",
+    "bucket_listable",
+    "cert_sibling_roots",
+    "certspotter_subdomains",
+    "cloud_bucket_from_url",
+    "cloud_refs_in_text",
+    "cves_from_nvd",
+    "dns_email_posture",
+    "dnsdumpster_subdomains",
+    "fetch_document",
+    "fetch_public_url",
+    "fetch_readonly",
+    "fetch_url",
+    "graphql_introspect",
+    "hosts_from_file",
+    "http_probe",
+    "info_from_openapi",
+    "nvd_cves",
+    "operations_from_introspection",
+    "otx_subdomains",
+    "paths_from_openapi",
+    "paths_in_javascript",
+    "port_scan",
+    "resolve_host",
+    "reverse_whois",
+    "robots_entries",
+    "roots_from_file",
+    "roots_from_reverse_whois",
+    "same_host_path",
+    "script_sources",
+    "secrets_in_text",
+    "sibling_roots_from_issuances",
+    "sitemap_paths",
+    "source_map_from_text",
+    "split_operation",
+    "subdomains",
+    "subdomains_from_dnsdumpster",
+    "subdomains_from_otx",
+    "subdomains_from_vt",
+    "tls_probe",
+    "urls_in_javascript",
+    "virustotal_subdomains",
+    "wayback_paths",
+]

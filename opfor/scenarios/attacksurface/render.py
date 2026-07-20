@@ -37,12 +37,36 @@ _CVE_MATCH = {
 
 
 class SurfaceRenderer:
-    def __init__(self, clues, takeover, fronting=None) -> None:
+    def __init__(self, clues, takeover, fronting=None, frameworks=None) -> None:
         self._clues = clues
         self._takeover = takeover
         # Fronting signatures, category -> {cnames, servers, headers}, injected like the clue and
         # takeover tables so the renderer applies reference data rather than reading knowledge.
         self._fronting = dict(fronting or {})
+        # Front-end framework signatures, name -> {body, headers, version}, injected the same way.
+        # A detected framework is a context tag on a host line, what the host is, not a finding.
+        self._frameworks = dict(frameworks or {})
+
+    def _frameworks_of(self, http) -> list[str]:
+        """The front-end frameworks a live host's response reveals, each with a version when the
+        framework publishes one plainly. Deterministic from the body and headers already gathered,
+        a host may reveal more than one, and one that matches nothing is simply untagged."""
+        if http is None:
+            return []
+        body = http.body or ""
+        header_text = "\n".join(f"{name.lower()}: {value.lower()}" for name, value in http.headers)
+        found: list[str] = []
+        for name, sig in self._frameworks.items():
+            if not (any(m in body for m in sig["body"]) or any(m in header_text for m in sig["headers"])):
+                continue
+            version = ""
+            pattern = sig.get("version")
+            if pattern is not None:
+                match = pattern.search(body)
+                if match:
+                    version = match.group(1)
+            found.append(f"{name} {version}".strip())
+        return found
 
     def _fronting_of(self, name, resolved, http) -> tuple[str, str] | None:
         """The fronting category of a host and the evidence for it, or None when nothing names it.
@@ -153,6 +177,11 @@ class SurfaceRenderer:
         front = self._fronting_of(data.name, resolved_data, http_data)
         if front is not None:
             bits.append(f"fronting {front[0]}, {front[1]}")
+        # A deterministic front-end framework tag, so the judge reads what the host is, a bespoke
+        # application on a given framework, when no product was identified. Context, not a finding.
+        techs = self._frameworks_of(http_data if alive else None)
+        if techs:
+            bits.append("tech: " + ", ".join(techs))
         line = ", ".join(bits)
         clue = self._takeover_clue(http_data)
         if clue:

@@ -161,6 +161,25 @@ def _load_fronting(path: Path) -> dict:
     }
 
 
+def _load_frameworks(path: Path) -> dict:
+    """The front-end framework signatures, name to its lowercased body and header markers and a
+    compiled version pattern. A malformed version regex fails the run loudly here, invariant 5."""
+    data = yaml.safe_load(path.read_text(encoding="utf-8")) if path.exists() else {}
+    out: dict = {}
+    for name, sig in ((data or {}).get("frameworks") or {}).items():
+        pattern = str(sig.get("version") or "").strip()
+        try:
+            version = re.compile(pattern, re.IGNORECASE) if pattern else None
+        except re.error as exc:
+            raise RuntimeError(f"invalid framework version regex for {name!r}: {exc}") from exc
+        out[str(name)] = {
+            "body": [str(m).lower() for m in (sig.get("body") or [])],
+            "headers": [str(m).lower() for m in (sig.get("headers") or [])],
+            "version": version,
+        }
+    return out
+
+
 class TriageError(RuntimeError):
     """The model reply could not be parsed into a triage result.
 
@@ -194,6 +213,7 @@ class SurfaceTriage(Triage):
         self._clues = []
         self._takeover = []
         self._fronting: dict = {}
+        self._frameworks: dict = {}
         for directory in knowledge_dirs:
             directory = Path(directory)
             self._classes.extend(_load_classes(directory / "classes"))
@@ -203,9 +223,10 @@ class SurfaceTriage(Triage):
                 dst = self._fronting.setdefault(category, {"cnames": [], "servers": [], "headers": []})
                 for key in ("cnames", "servers", "headers"):
                     dst[key].extend(sig[key])
+            self._frameworks.update(_load_frameworks(directory / "frameworks.yaml"))
         self._class_ids = frozenset(c["id"] for c in self._classes)
         self._class_impact = {c["id"]: c["impact"] for c in self._classes}
-        self._renderer = SurfaceRenderer(self._clues, self._takeover, self._fronting)
+        self._renderer = SurfaceRenderer(self._clues, self._takeover, self._fronting, self._frameworks)
 
     def judge(self, world: World) -> list[Finding]:
         findings: list[Finding] = []

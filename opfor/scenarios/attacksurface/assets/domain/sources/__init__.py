@@ -26,9 +26,15 @@ from opfor.scenarios.attacksurface.assets.domain.sources.http import (
 )
 from opfor.scenarios.attacksurface.assets.domain.sources.ports import port_scan
 from opfor.scenarios.attacksurface.assets.domain.sources.tls import tls_probe
+from opfor.scenarios.attacksurface.assets.domain.sources.roots import (
+    crtsh_org_roots,
+    github_declared_roots,
+    npm_org_roots,
+    propose_roots,
+    wikidata_official_sites,
+)
 from opfor.scenarios.attacksurface.assets.domain.sources.passive import (
     Enumeration,
-    candidate_roots,
     cert_sibling_roots,
     certspotter_subdomains,
     cves_from_nvd,

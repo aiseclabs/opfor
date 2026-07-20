@@ -525,26 +525,7 @@ def roots_from_reverse_whois(data, term: str) -> dict[str, str]:
     return roots
 
 
-# --- company name to candidate roots: propose, a separate step confirms ------
-
-
-def candidate_roots(name: str, terms: tuple[str, ...] = ()) -> dict[str, str]:
-    """Registrable roots a free source proposes for an org name, each with its weak signal.
-
-    A company name is not a domain, so the first move is a guess: certificate transparency is
-    searched for certificates whose subject organization names the org, and the roots on them
-    are proposed. This is a candidate list a separate step confirms by ownership evidence, never
-    a set to scan, so the signal is recorded as a proposal, not proof. One light query per term,
-    not the paged walk the subdomain source deliberately dropped crt.sh for.
-    """
-    proposed: dict[str, str] = {}
-    for term in (name, *terms):
-        term = term.strip()
-        if not term:
-            continue
-        for root, signal in roots_from_crtsh_org(_crtsh_org_certs(term), term).items():
-            proposed.setdefault(root, signal)
-    return proposed
+# --- crt.sh organization search: rows for the org-to-candidate-root proposal --
 
 
 def _crtsh_org_certs(term: str) -> list:

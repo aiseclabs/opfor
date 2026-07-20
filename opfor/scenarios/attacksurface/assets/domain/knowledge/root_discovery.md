@@ -59,9 +59,14 @@ proposes in a separate, clearly labeled set for an operator to confirm, never mi
 the owned set. When every viable confirmer is exhausted and roots remain unreachable, name
 the signal that would reach them rather than reporting the map as finished.
 
-The bare-name entrypoint follows this exactly. When the operator seeds only a company name,
-a generator proposes candidate roots from certificate transparency, the roots on certificates
-whose subject organization matches the name. A candidate is recorded as a proposal that yields
-no node, so it never enters the scanned surface. A confirmer then promotes a candidate only
-when the SAN pivot proves certificate co-tenancy with an already-owned root, ladder rung 2, and
-a candidate that earns no such proof is reported unconfirmed rather than scanned or dropped.
+The bare-name entrypoint follows this exactly. When the operator seeds only a company name, a
+union of free sources proposes candidate roots: a name-matched GitHub org, a Wikidata entity, an
+exact npm scope, and a crt.sh organization search. Every one is a name match, and a name match
+only names a namesake, a French town or an unrelated maker space shares a prefix, so no source
+confirms ownership on its own, not even a GitHub-verified org, which has only proven its own
+domain. A candidate is confirmed only by tying it to a root already owned, certificate co-tenancy
+with an owned root, ladder rung 2. A candidate yields no node until then, so a guess never enters
+the scanned surface, and one that earns no proof is reported unconfirmed rather than scanned. With
+no owned root to anchor against, a bare name confirms nothing, which is the honest result, and the
+candidates are left for the operator to confirm. Any one source failing is a coverage gap, not a
+failed run.

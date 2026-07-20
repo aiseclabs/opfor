@@ -1,9 +1,9 @@
-"""Bare-name root discovery: propose candidates from the org name, confirm by hard evidence.
+"""Bare-name root discovery: propose from the org name, confirm by the candidate's ladder rung.
 
-The design is a guess-and-prove split. A free source proposes candidate roots from the company
-name, and a candidate becomes a scanned root only when certificate co-tenancy proves the org
-owns it, the same evidence the cert-SAN pivot trusts. A proposal that earns no proof is reported,
-never scanned, so a guess never reaches the target.
+The design is a guess-and-prove split. A union of free sources proposes candidate roots from the
+company name. A self-declared candidate, a root the org named on a verified account or a curated
+entity, is confirmed by that declaration. A weak-tie candidate becomes a scanned root only when it
+shares a certificate with an owned root. A proposal that earns no proof is reported, never scanned.
 """
 
 from __future__ import annotations
@@ -14,9 +14,11 @@ from opfor.scenarios.attacksurface.assets.domain.capabilities.discovery import (
     ConfirmRootCandidates,
     DiscoverCandidateRoots,
 )
+from opfor.scenarios.attacksurface.assets.domain.sources import roots as rootsrc
 from opfor.scenarios.attacksurface.assets.domain.sources.passive import roots_from_crtsh_org
 from opfor.scenarios.attacksurface.assets.domain.types import (
     DomainData,
+    ProposalResult,
     ProposedRoots,
     RootCandidate,
 )
@@ -28,15 +30,53 @@ def _org_world(**over):
     return world
 
 
+# --- sources: parse and compose ----------------------------------------------
+
+
 def test_crtsh_org_parse_folds_names_to_registrable_roots():
-    rows = [
-        {"name_value": "example.com\n*.example.com"},
-        {"name_value": "api.example.net"},
-        {"name_value": "not a host"},
-    ]
+    rows = [{"name_value": "example.com\n*.example.com"}, {"name_value": "api.example.net"},
+            {"name_value": "not a host"}]
     roots = roots_from_crtsh_org(rows, "ExampleCorp")
     assert set(roots) == {"example.com", "example.net"}
     assert "ExampleCorp" in roots["example.com"]
+
+
+def test_github_records_verified_in_the_signal_and_drops_shared_hosts():
+    profiles = [
+        {"login": "examplecorp", "blog": "https://example.com/", "email": "team@example.com",
+         "verified": True},
+        {"login": "namesake", "blog": "https://namesake.github.io", "email": "x@gmail.com",
+         "verified": False},
+    ]
+    found = rootsrc.github_declared_roots("ExampleCorp", lambda n: profiles)
+    by_name = {c.name: c for c in found}
+    # a verified org is recorded in the signal, but it is still only a candidate, not confirmed
+    assert "verified" in by_name["example.com"].signal
+    # github.io and gmail.com are shared hosts, not the org's own root, so they are dropped
+    assert "namesake.github.io" not in by_name and "gmail.com" not in by_name
+
+
+def test_propose_roots_unions_sources_first_wins_and_reports_a_failure():
+    def wiki():
+        return [RootCandidate(name="example.com", source="wikidata", signal="official site")]
+
+    def crt():
+        # a duplicate from a later source does not replace the first source's signal
+        return [RootCandidate(name="example.com", source="crtsh-org", signal="org match"),
+                RootCandidate(name="example.net", source="crtsh-org", signal="org match")]
+
+    def broken():
+        raise TimeoutError("npm timed out")
+
+    result = rootsrc.propose_roots("ExampleCorp", (), sources=(
+        ("wikidata", wiki), ("crtsh-org", crt), ("npm", broken)))
+    by_name = {c.name: c for c in result.candidates}
+    assert by_name["example.com"].source == "wikidata"  # first source wins the duplicate
+    assert set(by_name) == {"example.com", "example.net"}
+    assert result.failed and "npm" in result.failed[0]
+
+
+# --- capability: propose -----------------------------------------------------
 
 
 def test_proposal_records_candidates_and_drops_a_known_hint():
@@ -44,81 +84,86 @@ def test_proposal_records_candidates_and_drops_a_known_hint():
     world = _org_world(domains=("example.com",))
 
     def candidate_fn(name, terms):
-        return {"example.com": "org match", "example-cdn.net": "org match"}
+        return ProposalResult(candidates=(
+            RootCandidate(name="example.com", source="wikidata", signal="s"),
+            RootCandidate(name="example-cdn.net", source="crtsh-org", signal="s")))
 
     outcome = DiscoverCandidateRoots(candidate_fn).run(
         Task(capability="discover_candidate_roots", node="org:ExampleCorp"), world)
     assert isinstance(outcome, Done)
-    proposal = outcome.facts[0].payload
-    assert isinstance(proposal, ProposedRoots)
-    names = {c.name for c in proposal.items}
-    assert names == {"example-cdn.net"}
+    proposal = next(f.payload for f in outcome.facts if f.kind == "root_candidates")
+    assert {c.name for c in proposal.items} == {"example-cdn.net"}
     # a proposal yields no node, so a guess never enters the scanned surface
-    assert outcome.facts[0].yields == ()
+    assert all(f.yields == () for f in outcome.facts)
 
 
-def test_unreachable_proposal_source_is_a_coverage_gap_not_a_failure():
-    # crt.sh times out often, so a source failure is reported loud as a gap, not a run error, and
-    # the empty proposal lets the confirmer no-op.
+def test_a_failed_source_is_reported_as_a_coverage_gap():
     world = _org_world()
 
     def candidate_fn(name, terms):
-        raise TimeoutError("crt.sh timed out")
+        return ProposalResult(candidates=(), failed=("crtsh-org TimeoutError",))
 
     outcome = DiscoverCandidateRoots(candidate_fn).run(
         Task(capability="discover_candidate_roots", node="org:ExampleCorp"), world)
     assert isinstance(outcome, Done)
-    kinds = {f.kind for f in outcome.facts}
-    assert "coverage_gap" in kinds and "root_candidates" in kinds
     gap = next(f.payload for f in outcome.facts if f.kind == "coverage_gap")
-    assert "TimeoutError" in gap.reasons[0]
-    proposal = next(f.payload for f in outcome.facts if f.kind == "root_candidates")
-    assert proposal.items == ()
+    assert "crtsh-org" in gap.reasons[0]
 
 
-def _world_with_proposal(candidate_name):
-    # An owned anchor root plus a proposal naming one candidate to confirm against it.
+# --- capability: confirm -----------------------------------------------------
+
+
+def _world_with_proposal(*candidates):
     world = _org_world()
     world.add(Node(id="domain:example.com", type="domain",
                    payload=DomainData(name="example.com", root="example.com",
                                       source="hint", confidence="confirmed")))
     world.absorb([Fact(kind="root_candidates", about="org:ExampleCorp",
-                       payload=ProposedRoots(items=(
-                           RootCandidate(name=candidate_name, source="crtsh-org",
-                                         signal="a certificate subject organization matches 'ExampleCorp'"),)))])
+                       payload=ProposedRoots(items=tuple(candidates)))])
     return world
 
 
-def test_a_candidate_sharing_a_certificate_with_an_owned_root_is_confirmed():
-    world = _world_with_proposal("example-cdn.net")
+def test_a_name_matched_candidate_is_not_scanned_without_a_shared_certificate():
+    # Even a GitHub-verified namesake is only a name match, so with no shared certificate it is
+    # never scanned. This is the namesake guard: a French town hall or an unrelated maker space
+    # that shares the name prefix must not enter the surface.
+    world = _world_with_proposal(
+        RootCandidate(name="namesake-town.fr", source="wikidata",
+                      signal="official website of a namesake entity"))
 
     def pivot_fn(domain):
-        # the candidate is bundled on a certificate with the owned root, the ownership proof
+        return {}  # the namesake shares no certificate with the owned root
+
+    outcome = ConfirmRootCandidates(pivot_fn).run(
+        Task(capability="confirm_candidate_roots", node="org:ExampleCorp"), world)
+    assert all(f.yields == () for f in outcome.facts)
+    report = outcome.facts[0].payload
+    assert report.confirmed == () and "namesake-town.fr" in report.unconfirmed[0]
+
+
+def test_a_weak_tie_sharing_a_certificate_with_an_owned_root_is_confirmed():
+    world = _world_with_proposal(
+        RootCandidate(name="example-cdn.net", source="crtsh-org", signal="org match"))
+
+    def pivot_fn(domain):
         return {"example.com": "shares a certificate with example-cdn.net"}
 
     outcome = ConfirmRootCandidates(pivot_fn).run(
         Task(capability="confirm_candidate_roots", node="org:ExampleCorp"), world)
-    assert isinstance(outcome, Done)
     node = next(n for f in outcome.facts for n in f.yields)
     assert node.id == "domain:example-cdn.net"
-    assert node.payload.confidence == "associated"
-    assert "example.com" in node.payload.evidence
-    report = outcome.facts[0].payload
-    assert report.confirmed == ("example-cdn.net",)
-    assert report.unconfirmed == ()
+    assert "shared certificate with example.com" in node.payload.evidence
 
 
-def test_a_candidate_with_no_shared_certificate_is_reported_not_scanned():
-    world = _world_with_proposal("example-evil.net")
+def test_a_weak_tie_with_no_shared_certificate_is_reported_not_scanned():
+    world = _world_with_proposal(
+        RootCandidate(name="example-evil.net", source="crtsh-org", signal="org match"))
 
     def pivot_fn(domain):
         return {}  # no certificate co-tenancy, so no ownership proof
 
     outcome = ConfirmRootCandidates(pivot_fn).run(
         Task(capability="confirm_candidate_roots", node="org:ExampleCorp"), world)
-    assert isinstance(outcome, Done)
-    # the guess yields no domain node, so it never reaches the target
-    assert all(f.yields == () for f in outcome.facts)
+    assert all(f.yields == () for f in outcome.facts)  # the guess never becomes a scanned root
     report = outcome.facts[0].payload
-    assert report.confirmed == ()
-    assert report.unconfirmed and "example-evil.net" in report.unconfirmed[0]
+    assert report.confirmed == () and report.unconfirmed and "example-evil.net" in report.unconfirmed[0]

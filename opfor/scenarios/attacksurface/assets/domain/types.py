@@ -29,9 +29,10 @@ class DomainData:
 
 @dataclass(frozen=True, kw_only=True)
 class RootCandidate:
-    """A root domain a free source proposed for the org from its name, not yet owned. `signal`
-    is the weak reason it was proposed, a subject-organization match in a public log, never
-    proof of ownership, so a candidate is a name to confirm by evidence, not a root to scan."""
+    """A root domain a free source proposed from the org name, not yet scanned. `signal` is why it
+    was proposed. A name match, even on a verified account, only names a namesake, not proof the
+    org owns it, so a candidate is always a guess a confirmer must tie to a known root by hard
+    evidence before it is scanned."""
 
     name: str
     source: str
@@ -45,6 +46,16 @@ class ProposedRoots:
     ownership, keeping the guess out of scope."""
 
     items: tuple[RootCandidate, ...] = ()
+
+
+@dataclass(frozen=True, kw_only=True)
+class ProposalResult:
+    """A candidate-root proposal: the candidates a source union produced and the sources that
+    failed to answer. A failed source means the proposal is partial, a coverage gap the run
+    reports rather than passing a subset off as the whole, invariant 5."""
+
+    candidates: tuple[RootCandidate, ...] = ()
+    failed: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, kw_only=True)

@@ -129,10 +129,23 @@ def build(
     if reverse_whois_fn is _DEFAULT:
         reverse_whois_fn = domain_src.reverse_whois if config.reverse_whois_key() else None
     if candidate_fn is _DEFAULT:
-        # Bare-name root proposal is opt-in. It queries a public log per run and each proposal
-        # costs a certificate lookup to confirm, so it stays off unless the operator asks, and a
-        # default run neither touches crt.sh nor pays for confirmation it did not request.
-        candidate_fn = domain_src.candidate_roots if config.root_candidates_enabled() else None
+        # Bare-name root proposal is opt-in. It unions several free sources per run, and each
+        # weak-tie candidate costs a certificate lookup to confirm, so it stays off unless the
+        # operator asks. When on, the proposal reuses the GitHub org search the GitHub class wires.
+        if config.root_candidates_enabled():
+            token = config.github_token()
+
+            def candidate_fn(name, terms):
+                sources = (
+                    ("github", lambda: domain_src.github_declared_roots(
+                        name, lambda n: search_fn(n, token))),
+                    ("wikidata", lambda: domain_src.wikidata_official_sites(name)),
+                    ("npm", lambda: domain_src.npm_org_roots(name)),
+                    ("crtsh-org", lambda: domain_src.crtsh_org_roots(name, terms)),
+                )
+                return domain_src.propose_roots(name, terms, sources=sources)
+        else:
+            candidate_fn = None
 
     # Triage is model-backed. Build the provider and model the environment selects, keyless on
     # the operator's Claude Code subscription by default, and let a test inject its own.

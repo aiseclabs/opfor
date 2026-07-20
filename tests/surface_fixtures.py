@@ -223,8 +223,9 @@ def _ports(name, addresses=()):
 def _candidate(name, terms=()):
     # By default no candidate root is proposed from the org name, so bare-name discovery is a
     # quiet no-op. A test overrides this seam to drive a proposal, and the pivot seam to confirm
-    # or reject it.
-    return {}
+    # or reject a weak-tie one.
+    from opfor.scenarios.attacksurface.assets.domain.types import ProposalResult
+    return ProposalResult()
 
 
 def _make(**over):

@@ -11,7 +11,6 @@ from opfor.scenarios.attacksurface.assets.domain.types import (
     DomainData,
     ProposedRoots,
     RootCandidacy,
-    RootCandidate,
 )
 
 
@@ -58,10 +57,10 @@ _MAX_CANDIDATE_CONFIRMATIONS = 64
 class DiscoverCandidateRoots(Capability):
     """MAP: propose candidate roots from the org name, the guess half of root discovery.
 
-    A bare company name yields no root by evidence, so this proposes candidates from a free
-    source that matches the org name in a public log. A candidate is a guess, not a root, so it
-    is recorded as a proposal and yields no domain node. Confirmation is a separate hard-evidence
-    step, so nothing here reaches the scanned surface. It reads a public log, so it is osint.
+    A bare company name yields no root by evidence, so a union of free sources proposes candidates
+    from the name. A candidate yields no domain node, so a guess never reaches the scanned surface
+    until the confirmer proves ownership. A source that did not answer is reported as a coverage
+    gap so a partial proposal is not read as complete, invariant 5. It reads public sources, osint.
     """
 
     name = "discover_candidate_roots"
@@ -74,35 +73,36 @@ class DiscoverCandidateRoots(Capability):
     def run(self, task: Task, world: World) -> Outcome:
         org = world.node(task.node).payload
         try:
-            proposed = self._candidate(org.name, org.whois_terms)
+            result = self._candidate(org.name, org.whois_terms)
         except Exception as exc:
-            # The proposal source is best-effort and crt.sh times out often, so an unreachable
-            # source is a coverage gap, not a run failure. It is reported loud, invariant 5, and
-            # an empty proposal lets the confirmer no-op rather than the run carrying an error.
             gap = CoverageGap(scan="discover_candidate_roots", host=org.name, attempted=1,
-                              failed=1, reasons=(f"proposal source {type(exc).__name__}",))
+                              failed=1, reasons=(f"proposal {type(exc).__name__}",))
             return Done(facts=(
                 Fact(kind="root_candidates", about=task.node, payload=ProposedRoots()),
                 Fact(kind="coverage_gap", about=task.node, payload=gap)))
         # A hint the operator already gave is a confirmed root, so it is never re-proposed as a
         # guess, keeping the candidate set to roots the run does not already know.
         known = {d.lower() for d in org.domains} | {registrable_root(h) for h in org.hosts}
-        items = tuple(
-            RootCandidate(name=root, source="crtsh-org", signal=signal)
-            for root, signal in sorted(proposed.items()) if root not in known
-        )
-        return Done(facts=(Fact(kind="root_candidates", about=task.node,
-                                payload=ProposedRoots(items=items)),))
+        items = tuple(c for c in result.candidates if c.name not in known)
+        facts = [Fact(kind="root_candidates", about=task.node, payload=ProposedRoots(items=items))]
+        if result.failed:
+            facts.append(Fact(kind="coverage_gap", about=task.node, payload=CoverageGap(
+                scan="discover_candidate_roots", host=org.name, attempted=len(result.failed),
+                failed=len(result.failed),
+                reasons=tuple(f"proposal source {f}" for f in result.failed))))
+        return Done(facts=tuple(facts))
 
 
 class ConfirmRootCandidates(Capability):
-    """MAP: promote a proposed root only when hard evidence proves the org owns it.
+    """MAP: promote a proposed root only when it shares a certificate with a root already owned.
 
-    A candidate is a guess until proven, so this reuses the certificate co-tenancy the cert-SAN
-    pivot trusts: a candidate that shares a certificate with a root already confirmed for the org
-    is owned by the same party. A confirmed candidate becomes a domain node and enters the normal
-    pipeline, an unconfirmed one is reported and never scanned, so a guess never reaches the
-    target, invariant 4. It reads a public log, so it is osint.
+    Every candidate is a name match, a namesake shares a prefix, so a name alone never confirms.
+    Confirmation ties the candidate to a known root by certificate co-tenancy, ladder rung 2, the
+    same evidence the cert-SAN pivot trusts. The known roots are the anchors, an operator hint or a
+    pivot or registrant match. A confirmed candidate becomes a domain node and enters the pipeline,
+    an unconfirmed one is reported and never scanned, so a guess never reaches the target,
+    invariant 4. With no anchor, no candidate confirms, which is the honest result of a bare name
+    the operator gave no known root for. It reads a public log, so it is osint.
     """
 
     name = "confirm_candidate_roots"
@@ -115,8 +115,6 @@ class ConfirmRootCandidates(Capability):
     def run(self, task: Task, world: World) -> Outcome:
         proposal = world.latest("root_candidates", task.node)
         candidates = proposal.payload.items if proposal is not None else ()
-        # The roots already proven for the org, an operator hint or a pivot or registrant match,
-        # are the anchors a candidate must share a certificate with to be confirmed.
         anchors = {
             n.payload.name for n in world.nodes("domain")
             if n.payload.name == n.payload.root
@@ -125,12 +123,14 @@ class ConfirmRootCandidates(Capability):
         found: list[Node] = []
         confirmed: list[str] = []
         unconfirmed: list[str] = []
+        cert_probes = 0
         for candidate in candidates:
             if candidate.name in anchors:
                 continue  # already an owned root by another path, nothing to add
-            if len(confirmed) + len(unconfirmed) >= _MAX_CANDIDATE_CONFIRMATIONS:
+            if cert_probes >= _MAX_CANDIDATE_CONFIRMATIONS:
                 unconfirmed.append(f"{candidate.name}: over the per-run confirmation cap")
                 continue
+            cert_probes += 1
             try:
                 siblings = self._pivot(candidate.name)
             except Exception as exc:
@@ -138,12 +138,13 @@ class ConfirmRootCandidates(Capability):
                 continue
             anchor = next((r for r in sorted(siblings) if r in anchors), None)
             if anchor is None:
-                unconfirmed.append(f"{candidate.name}: no shared certificate with an owned root")
+                unconfirmed.append(f"{candidate.name}: {candidate.signal}, "
+                                   f"no shared certificate with an owned root")
                 continue
             confirmed.append(candidate.name)
             found.append(Node(
                 id=f"domain:{candidate.name}", type="domain",
-                payload=DomainData(name=candidate.name, root=candidate.name, source="org-search",
+                payload=DomainData(name=candidate.name, root=candidate.name, source=candidate.source,
                                    confidence="associated",
                                    evidence=f"proposed for the org, {candidate.signal}, "
                                             f"confirmed by a shared certificate with {anchor}")))

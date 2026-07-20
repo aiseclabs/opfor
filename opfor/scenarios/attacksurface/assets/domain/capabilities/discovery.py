@@ -185,7 +185,14 @@ class DomainRegistrant(Capability):
 
     def run(self, task: Task, world: World) -> Outcome:
         org = world.node(task.node).payload
+        # A curated whois term is a precise registrant identity the operator supplied, so a match
+        # is confirmed ownership. The bare org name is a fallback that matches any registrant whose
+        # organization field merely contains that name, a namesake, so a match on it is only an
+        # associated candidate, not confirmed. Recording it weaker keeps a same-name company's
+        # domain from being claimed as owned, and scope still never scans a discovered root.
+        curated = bool(org.whois_terms)
         terms = org.whois_terms or (org.name,)
+        confidence = "confirmed" if curated else "associated"
         key = config.reverse_whois_key()
         roots: dict[str, str] = {}
         for term in terms:
@@ -196,7 +203,7 @@ class DomainRegistrant(Capability):
         found = tuple(
             Node(id=f"domain:{root}", type="domain",
                  payload=DomainData(name=root, root=root, source="reverse-whois",
-                                    confidence="confirmed", evidence=evidence))
+                                    confidence=confidence, evidence=evidence))
             for root, evidence in sorted(roots.items())
         )
         return Done(facts=(Fact(kind="registrant", about=task.node, yields=found),))

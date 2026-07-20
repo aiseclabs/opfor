@@ -37,16 +37,20 @@ products:
 
   - product: Grafana
     cpe: grafana:grafana
-    markers: ["grafana"]
-    version: 'grafana.{0,200}?"version"\s*:\s*"([0-9]+\.[0-9]+\.[0-9]+)"'
+    # not the bare word "grafana", which a page merely mentioning it would carry, but strings
+    # only a Grafana instance emits: its app root element and its boot-data script global
+    markers: ['grafana-app', 'grafanabootdata']
+    version: 'grafanabootdata.{0,200}?"version"\s*:\s*"([0-9]+\.[0-9]+\.[0-9]+)"'
 
   - product: GitLab
     cpe: gitlab:gitlab
-    markers: ["gitlab"]
+    # the gon JS global GitLab sets, not the bare word "gitlab"
+    markers: ['gon.gitlab']
 
   - product: Apache Airflow
     cpe: apache:airflow
-    markers: ["airflow"]
+    # the two-word product string, unlikely in incidental text, not the airflow word alone
+    markers: ['apache airflow']
 
   - product: RabbitMQ
     cpe: pivotal_software:rabbitmq

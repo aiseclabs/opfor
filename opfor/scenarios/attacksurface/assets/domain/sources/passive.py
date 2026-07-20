@@ -76,7 +76,12 @@ def subdomains(domain: str) -> Enumeration:
             errors.append(f"{source.__name__}: {exc}")
     if not names and len(errors) == len(sources):
         raise RuntimeError("all passive subdomain sources failed: " + ", ".join(errors))
-    union = Enumeration(names)
+    # Passive DNS sources return DNS control-record names too, `_dmarc`, `_domainkey`, an ACME
+    # `_acme-challenge` label. These are not hosts, so `_host_from_record` unwraps a leading
+    # validation label to the host it protects and drops a pure control record, the same filter
+    # the DNS-export path applies, so a `_dmarc` name is never admitted as a probeable subdomain.
+    hosts = {host for name in names if (host := _host_from_record(name)) is not None}
+    union = Enumeration(hosts)
     union.truncated = truncated
     # A source that failed while others answered is a blind spot, so the errors ride the
     # union and the capability surfaces them, rather than a partial set passing as the full

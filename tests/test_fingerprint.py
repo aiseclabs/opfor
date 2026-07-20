@@ -36,9 +36,15 @@ def test_kibana_header_gives_version():
 
 
 def test_marker_match_without_a_version_is_product_only():
-    got = fingerprint("title GitLab\nbody head: welcome to gitlab", _TABLE)
+    got = fingerprint('body head: <script>window.gon={};gon.gitlab_url="https://x"</script>', _TABLE)
     assert got["product"] == "GitLab"
     assert got["version"] == ""
+
+
+def test_a_bare_product_word_in_body_text_does_not_misidentify():
+    # a page that merely mentions a product must not be fingerprinted as running it, which would
+    # feed a wrong CPE to the CVE lookup and short-circuit the model, so markers stay high-signal
+    assert fingerprint("title Blog\nbody head: we monitor with grafana and deploy via gitlab", _TABLE) == {}
 
 
 def test_a_host_that_matches_nothing_returns_empty():

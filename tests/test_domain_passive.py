@@ -289,13 +289,50 @@ def test_registrant_pivot_is_off_without_a_key():
     _run(world)
     assert not world.has_fact("org:ExampleCorp", "registrant")
 
+def test_subdomains_drops_dns_control_record_names(monkeypatch):
+    # passive DNS returns control records (_dmarc, _domainkey, _acme-challenge); these are not
+    # hosts and must not be admitted as probeable subdomains, a validation label unwraps to its host
+    from opfor.scenarios.attacksurface.assets.domain.sources import passive as domains
+
+    monkeypatch.setattr(domains, "certspotter_subdomains",
+                        lambda d: {"api.example.com", "_dmarc.example.com",
+                                   "_domainkey.example.com", "_acme-challenge.www.example.com"})
+    result = set(domains.subdomains("example.com"))
+    assert "api.example.com" in result
+    assert "_dmarc.example.com" not in result
+    assert "_domainkey.example.com" not in result
+    assert "www.example.com" in result  # the acme-challenge validation label unwraps to its host
+
+
+def test_registrant_confirms_a_curated_term_but_only_associates_a_bare_name():
+    # a curated whois term is a precise registrant identity, so a match is confirmed ownership; a
+    # match on the bare org name could be a namesake, so it is only an associated candidate
+    from opfor.core import Node, Task, World
+    from opfor.scenarios.attacksurface.assets.domain.capabilities.discovery import DomainRegistrant
+    from opfor.scenarios.attacksurface.types import Org
+
+    def reverse(term, key):
+        return {"acquired-brand.com": f"registration record names {term}"}
+
+    def _run(org):
+        world = World()
+        world.add(Node(id="org:x", type="org", payload=org))
+        out = DomainRegistrant(reverse).run(Task(capability="domain_registrant", node="org:x"), world)
+        return out.facts[0].yields[0].payload.confidence
+
+    assert _run(Org(name="ExampleCorp", whois_terms=("ExampleCorp Inc",))) == "confirmed"
+    assert _run(Org(name="ExampleCorp")) == "associated"
+
+
 def test_registrant_pivot_discovers_a_root_when_wired():
     world = _seed()
     run(_with_reverse(), world, scope=Scope(max_tier="recon", matcher=HostScope(hosts=(ROOT,))), budget=Budget(500))
     org = world.node("domain:example.org")
     assert org is not None
     assert org.payload.source == "reverse-whois"
-    assert org.payload.confidence == "confirmed"
+    # searched on the bare org name, which matches any same-name registrant, so it is an
+    # associated candidate rather than confirmed ownership, a namesake is not claimed as owned
+    assert org.payload.confidence == "associated"
     assert "registration record names ExampleCorp" in org.payload.evidence
 
 def test_registrant_root_is_an_info_finding():

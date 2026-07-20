@@ -32,6 +32,10 @@ from opfor.core import Finding, Message, Provider, SEVERITIES, Triage, World, it
 from opfor.core.json_parse import require_json_object
 from opfor.scenarios.attacksurface.lifecycle import structural
 from opfor.scenarios.attacksurface.render import SurfaceRenderer
+from opfor.scenarios.attacksurface.assets.domain.sources.profile import (
+    load_frameworks as _load_frameworks,
+    load_fronting as _load_fronting,
+)
 
 SYSTEM = (
     "You are the triage judge of an authorized offensive-security reconnaissance run. You "
@@ -148,36 +152,6 @@ def _load_takeover(path: Path) -> list[tuple[str, str]]:
         (str(e["service"]), str(e["signature"]).lower())
         for e in ((data or {}).get("services") or [])
     ]
-
-
-def _load_fronting(path: Path) -> dict:
-    """The fronting signatures, category to its CNAME suffixes, server tokens, and marker headers,
-    lowercased for matching."""
-    data = yaml.safe_load(path.read_text(encoding="utf-8")) if path.exists() else {}
-    return {
-        str(category): {key: [str(s).lower() for s in (sig.get(key) or [])]
-                        for key in ("cnames", "servers", "headers")}
-        for category, sig in (data or {}).items()
-    }
-
-
-def _load_frameworks(path: Path) -> dict:
-    """The front-end framework signatures, name to its lowercased body and header markers and a
-    compiled version pattern. A malformed version regex fails the run loudly here, invariant 5."""
-    data = yaml.safe_load(path.read_text(encoding="utf-8")) if path.exists() else {}
-    out: dict = {}
-    for name, sig in ((data or {}).get("frameworks") or {}).items():
-        pattern = str(sig.get("version") or "").strip()
-        try:
-            version = re.compile(pattern, re.IGNORECASE) if pattern else None
-        except re.error as exc:
-            raise RuntimeError(f"invalid framework version regex for {name!r}: {exc}") from exc
-        out[str(name)] = {
-            "body": [str(m).lower() for m in (sig.get("body") or [])],
-            "headers": [str(m).lower() for m in (sig.get("headers") or [])],
-            "version": version,
-        }
-    return out
 
 
 class TriageError(RuntimeError):

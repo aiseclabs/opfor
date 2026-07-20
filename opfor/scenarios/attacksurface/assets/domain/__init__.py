@@ -13,6 +13,12 @@ from pathlib import Path
 from opfor.scenarios.attacksurface.assets import ClassBundle
 from opfor.scenarios.attacksurface.assets.domain import planner
 from opfor.scenarios.attacksurface.assets.domain.sources import fingerprint, load_fingerprints
+from opfor.scenarios.attacksurface.assets.domain.sources.profile import (
+    classify_frameworks,
+    classify_fronting,
+    load_frameworks,
+    load_fronting,
+)
 from opfor.scenarios.attacksurface.assets.domain.capabilities import (
     BackupScan,
     BucketScan,
@@ -28,6 +34,7 @@ from opfor.scenarios.attacksurface.assets.domain.capabilities import (
     ExpandSpec,
     GraphQLIntrospect,
     ProbeSpec,
+    ProfileHost,
     HarvestPaths,
     HTTPDomain,
     PermutePaths,
@@ -85,8 +92,24 @@ def assemble(*, enumerate_fn, pivot_fn, resolve_fn, probe_fn, fetch_fn, fetch_do
 
         def identify_fn(evidence):
             return fingerprint(evidence, fingerprints) or model_identify(evidence)
-    if identify_fn is not None and cve_fn is not None:
-        capabilities.append(CVELookup(identify_fn, cve_fn))
+    # ProfileHost is the single place a host's identity is derived: the product via the composed
+    # identify seam, and the front-end frameworks and fronting via the injected deterministic
+    # classifiers, so the capability reads no knowledge. It emits one host_profile fact the CVE
+    # lookup and the report both read, so identity survives a CVE-lookup failure and exists even
+    # with no CVE seam wired. Frameworks and fronting are deterministic, so it runs with or without
+    # a model identify seam.
+    frameworks_table = load_frameworks(KNOWLEDGE / "frameworks.yaml")
+    fronting_table = load_fronting(KNOWLEDGE / "fronting.yaml")
+
+    def framework_fn(http):
+        return classify_frameworks(http, frameworks_table)
+
+    def fronting_fn(name, resolved, http):
+        return classify_fronting(name, resolved, http, fronting_table)
+
+    capabilities.append(ProfileHost(identify_fn, framework_fn, fronting_fn))
+    if cve_fn is not None:
+        capabilities.append(CVELookup(cve_fn))
     # The plan config is loaded here, at assemble time, not at planner import, so the content
     # root stays swappable and importing the class triggers no file IO.
     config = planner.load_plan_config(KNOWLEDGE)
@@ -95,6 +118,6 @@ def assemble(*, enumerate_fn, pivot_fn, resolve_fn, probe_fn, fetch_fn, fetch_do
         capabilities=tuple(capabilities),
         map_rules=tuple(planner.map_rules(with_registrant=reverse_whois_fn is not None)),
         enrich_rules=tuple(planner.enrich_rules(
-            config, with_cve=identify_fn is not None and cve_fn is not None)),
+            config, with_profile=True, with_cve=cve_fn is not None)),
         knowledge_dir=KNOWLEDGE,
     )

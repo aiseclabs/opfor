@@ -26,6 +26,7 @@ from opfor.scenarios.attacksurface.assets.domain.capabilities.http import (
     PermutePaths,
 )
 from opfor.scenarios.attacksurface.assets.domain.capabilities.ports import PortServices
+from opfor.scenarios.attacksurface.assets.domain.capabilities.profile import ProfileHost
 from opfor.scenarios.attacksurface.assets.domain.capabilities.specs import (
     ExpandSpec,
     GraphQLIntrospect,
@@ -52,6 +53,7 @@ __all__ = [
     "PermuteSubdomains",
     "PortServices",
     "ProbeSpec",
+    "ProfileHost",
     "RedirectRoots",
     "ResolveDomain",
     "SecretScan",

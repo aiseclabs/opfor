@@ -314,16 +314,34 @@ def _bucket_rule(world: World) -> list[Task]:
     return tasks
 
 
-def _cve_rule(world: World) -> list[Task]:
-    """Scan every live host for known vulnerabilities once its surface is enumerated.
+def _profile_rule(world: World) -> list[Task]:
+    """Profile every live host once its surface is enumerated, deriving its product, front-end
+    frameworks, and fronting into one host_profile fact.
 
-    Gating on the endpoints fact holds the scan until the version endpoints have been
-    probed, so the identification has that evidence to read. The scan runs once per host,
-    gated on its own fact, and touches only public sources, so it needs no scope host.
+    Gating on the endpoints fact holds it until the version endpoints have been probed, so the
+    identification has that evidence to read. It runs once per host, gated on its own fact, and
+    reads facts and public sources, never the target, so it needs no scope host.
     """
     tasks: list[Task] = []
     for node in _live_domains(world):
         if not world.has_fact(node.id, "endpoints"):
+            continue
+        if world.has_fact(node.id, "host_profile"):
+            continue
+        tasks.append(Task(capability="domain_profile", node=node.id))
+    return tasks
+
+
+def _cve_rule(world: World) -> list[Task]:
+    """Look up known vulnerabilities for every live host once it has been profiled.
+
+    Gating on the host_profile fact holds the lookup until the product and version have been
+    identified, so it reads that identity rather than deriving its own. It runs once per host,
+    gated on its own fact, and touches only public sources, so it needs no scope host.
+    """
+    tasks: list[Task] = []
+    for node in _live_domains(world):
+        if not world.has_fact(node.id, "host_profile"):
             continue
         if world.has_fact(node.id, "cve_scanned"):
             continue
@@ -374,10 +392,11 @@ def map_rules(*, with_registrant: bool):
     return rules
 
 
-def enrich_rules(config: DomainPlanConfig, *, with_cve: bool = False):
-    """The domain ENRICH pipeline, resolve then probe then harvest then enumerate, and the
-    CVE scan last when its seams are wired, once a host's surface is enumerated. The config
-    is the capability action-config the config-driven rules hand their capabilities."""
+def enrich_rules(config: DomainPlanConfig, *, with_profile: bool = False, with_cve: bool = False):
+    """The domain ENRICH pipeline, resolve then probe then harvest then enumerate, then the host
+    profile, then the CVE lookup that reads it, each when its seams are wired and once a host's
+    surface is enumerated. The config is the capability action-config the config-driven rules
+    hand their capabilities."""
     rules = [
         each("domain", run="domain_resolve", unless_fact="resolved"),
         # Email authentication is a property of the registrable root, so read the DNS posture
@@ -399,6 +418,8 @@ def enrich_rules(config: DomainPlanConfig, *, with_cve: bool = False):
         lambda world: _backup_rule(world, config),
         _bucket_rule,
     ]
+    if with_profile:
+        rules.append(_profile_rule)
     if with_cve:
         rules.append(_cve_rule)
     return rules

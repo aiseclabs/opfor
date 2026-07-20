@@ -355,19 +355,19 @@ def test_cve_scan_records_the_match_basis_from_the_lookup():
     scans = [f.payload for f in world.facts("cve_scanned") if f.payload.product]
     assert scans and scans[0].match == "product"
 
-def test_cve_scan_fails_loud_when_identification_errors():
-    # a model or lookup error is a loud Failed, never a silent empty result, invariant 5
+def test_profile_fails_loud_when_identification_errors():
+    # a model error while profiling is a loud Failed, never a silent empty result, invariant 5
     def boom(evidence):
         raise RuntimeError("model down")
 
     report, _scenario, _world = _run_capturing(identify_fn=boom)
-    assert any("cve_scan" in note and "model down" in note for note in report.notes)
+    assert any("domain_profile" in note and "model down" in note for note in report.notes)
 
-def test_cve_evidence_surfaces_the_spec_version_from_the_endpoint_body():
-    """The CVE identification reads a specification's declared version from the endpoint's
-    own body head, before any separate parse runs, so a version-bearing spec is not missed."""
+def test_profile_evidence_surfaces_the_spec_version_from_the_endpoint_body():
+    """Host profiling reads a specification's declared version from the endpoint's own body head,
+    before any separate parse runs, so a version-bearing spec is not missed."""
     from opfor.core import Node, Task, World
-    from opfor.scenarios.attacksurface.assets.domain.capabilities import CVELookup
+    from opfor.scenarios.attacksurface.assets.domain.capabilities import ProfileHost
     from opfor.scenarios.attacksurface.assets.domain.types import DomainData, Endpoint
 
     captured = {}
@@ -375,9 +375,6 @@ def test_cve_evidence_surfaces_the_spec_version_from_the_endpoint_body():
     def identify(evidence):
         captured["evidence"] = evidence
         return {"product": "", "version": "", "cpe": ""}
-
-    def cves(product, version, cpe=""):
-        return []
 
     world = World()
     world.add(Node(id="domain:api.example.com", type="domain",
@@ -389,7 +386,8 @@ def test_cve_evidence_surfaces_the_spec_version_from_the_endpoint_body():
                                     status=200, auth_required=False,
                                     content_type="application/json", body=body)))
 
-    out = CVELookup(identify, cves).run(Task(capability="cve_scan", node="domain:api.example.com"), world)
+    out = ProfileHost(identify, lambda http: [], lambda n, r, h: None).run(
+        Task(capability="domain_profile", node="domain:api.example.com"), world)
     assert out.facts
     assert "1.90.0" in captured["evidence"]
     assert "litellm api" in captured["evidence"]

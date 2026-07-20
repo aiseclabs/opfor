@@ -54,3 +54,46 @@ def test_classify_fronting_leaves_an_unrecognized_named_host_untagged():
 def test_is_ip():
     assert is_ip("203.0.113.5") and is_ip("2606:4700::1")
     assert not is_ip("example.com")
+
+
+def test_profile_host_records_product_frameworks_and_fronting_in_one_fact():
+    from opfor.core import Fact, Node, Task, World
+    from opfor.scenarios.attacksurface.assets.domain.capabilities import ProfileHost
+    from opfor.scenarios.attacksurface.assets.domain.types import DomainData, Resolved
+
+    world = World()
+    world.add(Node(id="domain:h", type="domain",
+                   payload=DomainData(name="h", root="h", source="hint")))
+    world.absorb([Fact(kind="resolved", about="domain:h",
+                       payload=Resolved(resolvable=True, addresses=("1.2.3.4",)))])
+    world.absorb([Fact(kind="http", about="domain:h", payload=_http(server="grafana"))])
+
+    identify = lambda evidence: {"product": "Grafana", "version": "9.3.2", "cpe": "grafana:grafana"}
+    out = ProfileHost(identify, lambda http: ["Next.js"], lambda n, r, h: ("cdn", "CNAME x")).run(
+        Task(capability="domain_profile", node="domain:h"), world)
+    profile = out.facts[0].payload
+    assert out.facts[0].kind == "host_profile"
+    assert profile.product == "Grafana" and profile.version == "9.3.2"
+    assert profile.frameworks == ("Next.js",)
+    assert profile.fronting == "cdn"
+
+
+def test_cve_lookup_reads_identity_from_the_host_profile_fact():
+    # identity is derived by profiling and read here, so a CVE outage never discards it
+    from opfor.core import Fact, Node, Task, World
+    from opfor.scenarios.attacksurface.assets.domain.capabilities import CVELookup
+    from opfor.scenarios.attacksurface.assets.domain.types import DomainData, HostProfile
+
+    world = World()
+    world.add(Node(id="domain:h", type="domain", payload=DomainData(name="h", root="h", source="hint")))
+    world.absorb([Fact(kind="host_profile", about="domain:h",
+                       payload=HostProfile(product="Grafana", version="9.3.2", cpe="grafana:grafana"))])
+
+    def cves(product, version, cpe=""):
+        assert (product, version, cpe) == ("Grafana", "9.3.2", "grafana:grafana")
+        return [{"id": "CVE-2021-1", "match": "version"}]
+
+    out = CVELookup(cves).run(Task(capability="cve_scan", node="domain:h"), world)
+    scan = out.facts[0].payload
+    assert scan.product == "Grafana" and scan.match == "version"
+    assert scan.cves[0].id == "CVE-2021-1"

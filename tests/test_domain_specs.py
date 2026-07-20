@@ -135,6 +135,39 @@ def test_probe_spec_verifies_reads_defers_writes_and_skips_templated():
     assert "/process" not in calls
     assert "/jobs/{job_id}" not in calls
 
+
+def test_probe_spec_flags_a_coverage_gap_when_the_baseline_could_not_be_established():
+    # regression: with no catch-all baseline, a distinct 200 cannot be told from a blanket-200
+    # front, so a reachable operation is unfiltered and must be surfaced rather than presented as
+    # a confirmed exposed operation, the same guard the endpoint probe applies
+    from opfor.core import Fact, Node, Task, World
+    from opfor.scenarios.attacksurface.assets.domain.capabilities import ProbeSpec
+    from opfor.scenarios.attacksurface.assets.domain.types import (
+        APISpec, DomainData, Endpoint, Resolved,
+    )
+
+    def fetch(name, addresses, path):
+        if path.startswith("/opfor-baseline") or path.startswith("/does-not-exist"):
+            raise TimeoutError("baseline probe timed out")  # the catch-all baseline cannot be read
+        if path == "/config/all":
+            return {"status": 200, "content_type": "application/json", "body": "{}", "location": ""}
+        return {"status": 404, "content_type": "", "body": "", "location": ""}
+
+    world = World()
+    world.add(Node(id="domain:api.example.com", type="domain",
+                   payload=DomainData(name="api.example.com", root="example.com", source="crt")))
+    world.absorb([Fact(kind="resolved", about="domain:api.example.com",
+                       payload=Resolved(resolvable=True, addresses=("203.0.113.5",), cnames=()))])
+    ep_id = "endpoint:api.example.com/openapi.json"
+    world.add(Node(id=ep_id, type="endpoint",
+                   payload=Endpoint(url="https://api.example.com/openapi.json", path="/openapi.json",
+                                    status=200, auth_required=False, content_type="application/json")))
+    world.absorb([Fact(kind="api_spec", about=ep_id, payload=APISpec(
+        base="https://api.example.com/openapi.json", paths=("GET /config/all",), count=1))])
+
+    out = ProbeSpec(fetch).run(Task(capability="endpoint_probe_spec", node=ep_id), world)
+    assert any(f.kind == "coverage_gap" for f in out.facts)
+
 def test_spec_fetch_failure_still_closes_and_is_loud():
     def boom(name, path):
         raise TimeoutError("spec slow")

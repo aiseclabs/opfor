@@ -135,7 +135,17 @@ class ProbeSpec(Capability):
                 content_type=str(result.get("content_type", "")),
             ))
         payload = SpecAudit(base=endpoint.url, operations=tuple(operations))
-        return Done(facts=(Fact(kind="spec_audit", about=task.node, payload=payload),))
+        facts: list[Fact] = [Fact(kind="spec_audit", about=task.node, payload=payload)]
+        if baseline.get("status") is None and any(op.verified for op in operations):
+            # The catch-all baseline could not be established, so a distinct 200 cannot be told from
+            # a blanket-200 front, and every operation marked reachable here is unfiltered. Say so
+            # rather than let a blanket-200 host read as a set of confirmed exposed operations, the
+            # same guard the endpoint probe applies, invariant 5.
+            gap = _coverage_gap("spec_probe", host, len(operations),
+                                ["baseline could not be established, operation distinctness is unreliable"])
+            if gap is not None:
+                facts.append(Fact(kind="coverage_gap", about=task.node, payload=gap))
+        return Done(facts=tuple(facts))
 
     def _addresses(self, world: World, host: str):
         """The resolved public addresses of the spec's host, read from its domain node."""

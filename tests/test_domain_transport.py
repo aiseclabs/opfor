@@ -76,6 +76,42 @@ def test_resolve_host_treats_a_servfail_as_a_resolver_error_not_a_no_address(mon
     assert result["resolvable"] is True and "1.2.3.4" in result["addresses"]
     assert calls["n"] >= 3
 
+def test_resolve_host_does_not_launder_a_mixed_rcode_into_a_no_address(monkeypatch):
+    import urllib.request
+
+    from opfor.scenarios.attacksurface.assets.domain.sources import http as domains
+
+    class _Resp:
+        def __init__(self, payload):
+            self._payload = payload
+
+        def read(self, *_a):
+            return json.dumps(self._payload).encode("utf-8")
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+    calls = {"n": 0}
+
+    def fake_urlopen(request, timeout=0):
+        calls["n"] += 1
+        # first resolver: A SERVFAILs (rcode 2) while AAAA answers NOERROR-empty (rcode 0). The
+        # A absence is unproven, so this must not read as a confirmed no-address, it must fail over.
+        if calls["n"] == 1:
+            return _Resp({"Status": 2, "Answer": []})   # r1 A: SERVFAIL
+        if calls["n"] == 2:
+            return _Resp({"Status": 0, "Answer": []})   # r1 AAAA: NOERROR, empty
+        return _Resp({"Status": 0, "Answer": [{"type": 1, "data": "1.2.3.4"}]})  # r2 answers
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+    result = domains.resolve_host("h.example.com")
+    # the mixed rcode is a resolver error on the A family, not a proven no-address, so failover ran
+    assert result["resolvable"] is True and "1.2.3.4" in result["addresses"]
+    assert calls["n"] >= 3
+
 def test_doh_lookup_fails_over_resolvers_and_raises_when_all_error(monkeypatch):
     from opfor.scenarios.attacksurface.assets.domain.sources import dns as domains
 
@@ -516,9 +552,15 @@ def test_port_scan_reports_open_service_ports_with_banners(monkeypatch):
     from opfor.scenarios.attacksurface.assets.domain.sources import ports as domains
 
     opened = {22: "SSH-2.0-OpenSSH_8.9", 6379: ""}  # ssh answers a banner, redis is open silently
+    filtered = {3389}  # rdp is filtered, its state undetermined
 
     def probe(ip, port):
-        return opened.get(port)  # None means closed or filtered
+        # _probe_port returns (banner_or_None, timed_out)
+        if port in opened:
+            return opened[port], False
+        if port in filtered:
+            return None, True
+        return None, False  # a refused, proven-closed port
 
     monkeypatch.setattr(domains, "_probe_port", probe)
     out = domains.port_scan("h.example.com", ("1.2.3.4",))
@@ -526,8 +568,10 @@ def test_port_scan_reports_open_service_ports_with_banners(monkeypatch):
     ports = {p["port"]: p for p in out["open"]}
     assert ports[22]["service"] == "ssh" and "OpenSSH" in ports[22]["banner"]
     assert 6379 in ports and ports[6379]["service"] == "redis"
-    # a closed port is not reported, so an absent port is a real closed-or-filtered negative
+    # a proven-closed port is not reported as open
     assert 3389 not in ports
+    # a filtered port is counted as undetermined, never folded into the closed set
+    assert out["filtered"] == 1
 
 def test_port_scan_is_not_reachable_without_a_public_address():
     from opfor.scenarios.attacksurface.assets.domain.sources import ports as domains
@@ -553,6 +597,14 @@ def test_port_scan_capability_is_probe_tier_and_packs_facts_and_fails_loud():
     out = ok.run(task, world)
     assert isinstance(out, Done)
     assert out.facts[0].payload.open_ports[0].port == 6379
+
+    # a scan where ports timed out records the filtered count and a coverage gap, so a firewalled
+    # host with an empty open set is not read as a clean no-exposure negative
+    filtered_scan = PortServices(lambda n, a: {"reachable": True, "scanned": 24, "open": [],
+                                               "filtered": 24})
+    fout = filtered_scan.run(task, world)
+    assert fout.facts[0].payload.filtered == 24
+    assert any(f.kind == "coverage_gap" for f in fout.facts)
 
     def boom(name, addresses):
         raise RuntimeError("scan down")

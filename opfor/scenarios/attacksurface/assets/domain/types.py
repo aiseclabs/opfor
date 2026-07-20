@@ -290,6 +290,9 @@ class PortScan:
     reachable: bool = False
     reason: str = ""
     scanned: int = 0
+    # Ports that timed out, filtered and undetermined rather than proven closed, so an empty
+    # `open` set with a positive `filtered` is not proof of no exposure, only a partial scan.
+    filtered: int = 0
     open_ports: tuple[OpenPort, ...] = ()
 
 

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from opfor.core import Capability, Done, Fact, Outcome, Phase, Task, World
-from opfor.scenarios.attacksurface.assets.domain.types import OpenPort, PortScan
+from opfor.scenarios.attacksurface.assets.domain.types import CoverageGap, OpenPort, PortScan
 from opfor.scenarios.attacksurface.assets.domain.capabilities.helpers import net_failed
 
 
@@ -39,11 +39,22 @@ class PortServices(Capability):
             OpenPort(port=int(p.get("port")), service=str(p.get("service", "")),
                      banner=str(p.get("banner", "")))
             for p in result.get("open", ()) if p.get("port") is not None)
+        filtered = int(result.get("filtered", 0))
         payload = PortScan(
             host=name,
             reachable=bool(result.get("reachable")),
             reason=str(result.get("reason", "")),
             scanned=int(result.get("scanned", 0)),
+            filtered=filtered,
             open_ports=ports,
         )
-        return Done(facts=(Fact(kind="ports", about=task.node, payload=payload),))
+        facts: list[Fact] = [Fact(kind="ports", about=task.node, payload=payload)]
+        # A filtered port timed out with its state undetermined, so an empty open set is not proof
+        # of no exposure. Surface the count as a coverage gap rather than letting a firewalled host
+        # read as a clean negative, invariant 5.
+        if filtered:
+            facts.append(Fact(kind="coverage_gap", about=task.node, payload=CoverageGap(
+                scan="port_scan", host=name, attempted=payload.scanned, failed=filtered,
+                reasons=(f"{filtered} port(s) timed out, filtered and undetermined, so the empty "
+                         "open set is not proof of no sensitive exposure",))))
+        return Done(facts=tuple(facts))

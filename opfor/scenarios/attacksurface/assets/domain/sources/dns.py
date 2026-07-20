@@ -63,9 +63,6 @@ def resolve_host(name: str) -> dict:
             last = exc
             continue
         real = (_DNS_NOERROR, _DNS_NXDOMAIN)
-        if a_status not in real and aaaa_status not in real:
-            last = RuntimeError(f"DoH resolver error for {name}, rcodes A={a_status} AAAA={aaaa_status}")
-            continue
         answers = a_ans + aaaa_ans
         addresses = tuple(dict.fromkeys(
             str(a["data"]) for a in answers
@@ -73,7 +70,19 @@ def resolve_host(name: str) -> dict:
         cnames = tuple(dict.fromkeys(
             str(a["data"]).strip(".").lower() for a in answers
             if a.get("type") == _DNS_CNAME and a.get("data")))
-        return {"resolvable": bool(addresses), "addresses": addresses, "cnames": cnames}
+        # A positive answer on either family means the host resolves, so a soft error on the other
+        # family does not override an address that did answer.
+        if addresses:
+            return {"resolvable": True, "addresses": addresses, "cnames": cnames}
+        # No address answered. A no-address verdict is trusted only when BOTH families returned a
+        # real rcode. If either errored, SERVFAIL or REFUSED, the absence is unproven, so this is
+        # treated as a resolver failure and the next resolver is tried, rather than laundering an
+        # outage into a confirmed no-address, invariant 5. When every resolver errors the failure
+        # is raised, which the capability records as an errored resolution.
+        if a_status not in real or aaaa_status not in real:
+            last = RuntimeError(f"DoH resolver error for {name}, rcodes A={a_status} AAAA={aaaa_status}")
+            continue
+        return {"resolvable": False, "addresses": (), "cnames": cnames}
     raise RuntimeError(f"all DoH resolvers failed for {name}: {last}")
 
 

@@ -33,10 +33,12 @@ def _clean_banner(data: bytes) -> str:
     return text[:_BANNER_BYTES]
 
 
-def _probe_port(ip: str, port: int) -> str | None:
-    """Connect to a port and read a short banner, returning the banner, possibly empty, when
-    the port is open, or None when the connection is refused, reset, or times out. A closed
-    port answers fast with a reset, only a filtered port spends the timeout."""
+def _probe_port(ip: str, port: int) -> tuple[str | None, bool]:
+    """Connect to a port and read a short banner. Returns `(banner, timed_out)`: the banner,
+    possibly empty, with `timed_out` False when the port is open, `(None, False)` when the
+    connection is refused or reset, a proven closed port, and `(None, True)` when it times out.
+    A closed port answers fast with a reset, only a filtered port spends the timeout, so a timeout
+    is an undetermined state, not a proven closed, and the caller reports it as such, invariant 5."""
     try:
         with socket.create_connection((ip, port), timeout=_PORT_TIMEOUT) as sock:
             sock.settimeout(_PORT_TIMEOUT)
@@ -44,9 +46,11 @@ def _probe_port(ip: str, port: int) -> str | None:
                 data = sock.recv(_BANNER_BYTES)
             except OSError:
                 data = b""
-            return _clean_banner(data)
+            return _clean_banner(data), False
+    except (socket.timeout, TimeoutError):
+        return None, True
     except OSError:
-        return None
+        return None, False
 
 
 def port_scan(name: str, addresses=()) -> dict:
@@ -62,12 +66,18 @@ def port_scan(name: str, addresses=()) -> dict:
     """
     public = public_addresses(addresses)
     if not public:
-        return {"reachable": False, "reason": "no-public-address", "scanned": 0, "open": []}
+        return {"reachable": False, "reason": "no-public-address", "scanned": 0, "open": [], "filtered": 0}
     ip = public[0]
     found: list[dict] = []
+    filtered = 0
     for port, service in sorted(_SERVICE_PORTS.items()):
-        banner = _probe_port(ip, port)
+        banner, timed_out = _probe_port(ip, port)
+        if timed_out:
+            # A filtered port whose state is undetermined, so it is counted, never folded into the
+            # closed set, and the caller surfaces the count as a coverage gap.
+            filtered += 1
+            continue
         if banner is None:
             continue
         found.append({"port": port, "service": service, "banner": banner})
-    return {"reachable": True, "scanned": len(_SERVICE_PORTS), "open": found}
+    return {"reachable": True, "scanned": len(_SERVICE_PORTS), "open": found, "filtered": filtered}

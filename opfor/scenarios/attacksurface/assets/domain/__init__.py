@@ -12,6 +12,7 @@ from pathlib import Path
 
 from opfor.scenarios.attacksurface.assets import ClassBundle
 from opfor.scenarios.attacksurface.assets.domain import planner
+from opfor.scenarios.attacksurface.assets.domain.sources import fingerprint, load_fingerprints
 from opfor.scenarios.attacksurface.assets.domain.capabilities import (
     BackupScan,
     BucketScan,
@@ -71,6 +72,17 @@ def assemble(*, enumerate_fn, pivot_fn, resolve_fn, probe_fn, fetch_fn, fetch_do
     ]
     if reverse_whois_fn is not None:
         capabilities.append(DomainRegistrant(reverse_whois_fn))
+    # A deterministic fingerprint table identifies a known product without a model call, with
+    # the exact version a version header carries. It wraps the injected model identify seam, so
+    # the seam tries the table first and falls to the model on a miss, and a thin or stale table
+    # identifies less rather than wrong. The table is the class's own knowledge, loaded here at
+    # assemble time. An empty table leaves the seam pure model, so a missing file is no regression.
+    fingerprints = load_fingerprints(KNOWLEDGE / "fingerprints.yaml")
+    if identify_fn is not None and fingerprints:
+        model_identify = identify_fn
+
+        def identify_fn(evidence):
+            return fingerprint(evidence, fingerprints) or model_identify(evidence)
     if identify_fn is not None and cve_fn is not None:
         capabilities.append(CVELookup(identify_fn, cve_fn))
     # The plan config is loaded here, at assemble time, not at planner import, so the content

@@ -1,10 +1,11 @@
 """Domain-class sources facade, re-exporting the dns, http, tls, ports, passive, parsers,
-javascript, and storage modules.
+javascript, fingerprint, and storage modules.
 
 Resolution, the shared network constants, and address filtering live in `dns`, HTTP transport
 in `http`, the TLS posture in `tls`, the port scan in `ports`, passive OSINT source clients in
-`passive`, body and document parsers in `parsers`, JavaScript extraction in `javascript`, and
-cloud object-storage URL parsing in `storage`. This module gathers the public names in one
+`passive`, body and document parsers in `parsers`, JavaScript extraction in `javascript`,
+deterministic product fingerprinting in `fingerprint`, and cloud object-storage URL parsing in
+`storage`. This module gathers the public names in one
 place so a caller keeps a single import. It re-exports public names only, a caller that needs
 a module's private detail imports it from the owning module, so the facade does not turn
 implementation into public API.
@@ -23,6 +24,10 @@ from opfor.scenarios.attacksurface.assets.domain.sources.http import (
     fetch_url,
     graphql_introspect,
     http_probe,
+)
+from opfor.scenarios.attacksurface.assets.domain.sources.fingerprint import (
+    fingerprint,
+    load_fingerprints,
 )
 from opfor.scenarios.attacksurface.assets.domain.sources.ports import port_scan
 from opfor.scenarios.attacksurface.assets.domain.sources.tls import tls_probe
@@ -87,10 +92,12 @@ __all__ = [
     "fetch_public_url",
     "fetch_readonly",
     "fetch_url",
+    "fingerprint",
     "graphql_introspect",
     "hosts_from_file",
     "http_probe",
     "info_from_openapi",
+    "load_fingerprints",
     "nvd_cves",
     "operations_from_introspection",
     "otx_subdomains",

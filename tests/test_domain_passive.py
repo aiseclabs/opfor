@@ -478,6 +478,40 @@ def test_permute_subdomains_confirms_only_resolving_candidates_and_skips_a_wildc
     assert not any(f.yields for f in out2.facts)
     assert any(f.kind == "permuted" for f in out2.facts)
 
+
+def test_permute_subdomains_catches_a_wildcard_on_a_deeper_zone_not_only_the_apex():
+    # regression: an apex-only wildcard baseline missed *.eu.example.com, so every
+    # label.eu.example.com resolved to the catch-all and was minted as a confirmed host
+    from opfor.core import Done, Node, Task, World
+    from opfor.scenarios.attacksurface.assets.domain.capabilities.discovery import (
+        PermuteSubdomains)
+    from opfor.scenarios.attacksurface.assets.domain.types import DomainData
+
+    def seed():
+        world = World()
+        world.add(Node(id="domain:example.com", type="domain",
+                       payload=DomainData(name="example.com", root="example.com", source="hint")))
+        for name in ("api.example.com", "dev.eu.example.com"):
+            world.add(Node(id=f"domain:{name}", type="domain",
+                           payload=DomainData(name=name, root="example.com", source="passive")))
+        return world
+
+    def resolve(name):
+        # a wildcard on the deeper zone eu.example.com answers every name there, while the apex
+        # zone example.com has no wildcard; dev.example.com is a real host under the apex
+        answers = name.endswith(".eu.example.com") or name == "dev.example.com"
+        return {"resolvable": answers, "addresses": ("9.9.9.9",) if answers else (), "cnames": ()}
+
+    out = PermuteSubdomains(resolve).run(
+        Task(capability="domain_permute", node="domain:example.com"), seed())
+    assert isinstance(out, Done)
+    minted = {n.id for f in out.facts for n in f.yields}
+    # the real apex host is confirmed, the deep-wildcard candidate is not invented off the catch-all
+    assert "domain:dev.example.com" in minted
+    assert "domain:api.eu.example.com" not in minted
+    # the wildcard zone is surfaced as a coverage gap rather than silently swallowed
+    assert any(f.kind == "coverage_gap" for f in out.facts)
+
 def test_path_permutations_derive_parents_and_version_twins_from_observed_only():
     from opfor.scenarios.attacksurface.assets.domain.sources.parsers import path_permutations
 

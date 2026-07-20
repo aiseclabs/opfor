@@ -288,9 +288,10 @@ class PermuteSubdomains(Capability):
     Passive discovery names the subdomains seen in the wild. This extends that set without
     guessing from a dictionary: it permutes the labels and structures already observed under a
     root and confirms each candidate by resolution. A wildcard zone answers every name, so
-    resolution there proves nothing, so this first resolves an unlikely name and skips the
-    whole permutation when that answers, recording a bare fact rather than a flood of false
-    hosts. Resolving public DNS never touches the target, so it is osint.
+    resolution there proves nothing. A wildcard can sit on a deeper zone, `*.dev.root` and not
+    only `*.root`, so this probes an unlikely name in each distinct zone a candidate would live
+    in and skips only the candidates under a zone that answers, confirming the rest, rather than
+    trusting an apex probe alone. Resolving public DNS never touches the target, so it is osint.
     """
 
     name = "domain_permute"
@@ -304,20 +305,25 @@ class PermuteSubdomains(Capability):
         root = world.node(task.node).payload.name
         observed = tuple(n.payload.name for n in world.nodes("domain")
                          if n.payload.root == root and n.payload.name != root)
-        try:
-            baseline = self._resolve(f"{_WILDCARD_PROBE}.{root}")
-        except Exception as exc:
-            return net_failed("wildcard baseline", exc)
-        # a wildcard zone resolves every name, so a permutation cannot be confirmed here, the
-        # blind spot is already surfaced by the enumeration wildcard flag, so just record the
-        # fact and mint nothing rather than a flood of names that all resolve to the catch-all
-        if baseline.get("resolvable"):
-            return Done(facts=(Fact(kind="permuted", about=task.node),))
         candidates = permutation_candidates(root, observed)
         probed = candidates[:_MAX_PERMUTATION_CANDIDATES]
+        # Probe a wildcard baseline in every distinct zone a candidate would live in, not only the
+        # apex, so a wildcard on a deeper zone is caught and its candidates are not confirmed off a
+        # catch-all answer, which would invent a host without evidence, invariant 2 and 5.
+        zones = sorted({candidate.partition(".")[2] for candidate in probed})
+        wildcard_zones: set[str] = set()
+        for zone in zones:
+            try:
+                baseline = self._resolve(f"{_WILDCARD_PROBE}.{zone}")
+            except Exception as exc:
+                return net_failed("wildcard baseline", exc)
+            if baseline.get("resolvable"):
+                wildcard_zones.add(zone)
         found: list[Node] = []
         skipped: list[str] = []
         for candidate in probed:
+            if candidate.partition(".")[2] in wildcard_zones:
+                continue
             if world.node(f"domain:{candidate}") is not None:
                 continue
             try:
@@ -331,7 +337,10 @@ class PermuteSubdomains(Capability):
                     payload=DomainData(name=candidate, root=root, source="permuted",
                                        confidence="confirmed",
                                        evidence="permuted from an observed label, resolves under "
-                                                "an owned root with no wildcard")))
+                                                "an owned zone with no wildcard")))
+        if wildcard_zones:
+            skipped.append(f"{len(wildcard_zones)} zone(s) answer every name as a wildcard, so "
+                           f"their candidates were not confirmed: {', '.join(sorted(wildcard_zones))}")
         if len(candidates) > len(probed):
             skipped.append(f"{len(candidates) - len(probed)} more candidates beyond the "
                            f"{_MAX_PERMUTATION_CANDIDATES} cap were not probed")

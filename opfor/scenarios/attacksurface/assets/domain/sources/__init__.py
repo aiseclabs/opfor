@@ -31,7 +31,7 @@ from opfor.scenarios.attacksurface.assets.domain.sources.roots import (
     github_declared_roots,
     npm_org_roots,
     propose_roots,
-    wikidata_official_sites,
+    pypi_org_roots,
 )
 from opfor.scenarios.attacksurface.assets.domain.sources.passive import (
     Enumeration,

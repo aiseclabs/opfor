@@ -1,17 +1,18 @@
 """Company name to candidate root domains, the propose half of root discovery.
 
 A company name is not a domain, so the first move is a guess: several free sources each propose
-roots named after the org, its GitHub org, its Wikidata entity, its npm scope, a crt.sh
-organization search. Every one is a name match, which only names a namesake, a French town or an
-unrelated maker space share a prefix, so no source confirms ownership on its own. Each proposal is
-a candidate the confirmer must tie to a known root by certificate co-tenancy or registrant before
-it is scanned. Every source is an injected seam, so a test drives the composer with fixtures, and
-one source failing degrades to a coverage gap rather than the run.
+roots named after the org, a name-matched GitHub org, an npm scope, a PyPI package, a crt.sh
+organization search. Every one is a name match, which only names a namesake, an unrelated maker
+space shares a prefix, so no source confirms ownership on its own. Each proposal is a candidate the
+confirmer must tie to a known root by certificate co-tenancy or registrant before it is scanned.
+Every source is an injected seam, so a test drives the composer with fixtures, and one source
+failing degrades to a coverage gap rather than the run.
 """
 
 from __future__ import annotations
 
 import json
+import urllib.error
 import urllib.parse
 import urllib.request
 
@@ -29,8 +30,10 @@ from opfor.scenarios.attacksurface.assets.domain.types import ProposalResult, Ro
 _SHARED_SUFFIXES = frozenset({
     "gmail.com", "googlemail.com", "outlook.com", "hotmail.com", "yahoo.com", "qq.com",
     "163.com", "protonmail.com", "icloud.com",
+    "github.com", "gitlab.com", "bitbucket.org", "sourceforge.net", "gitee.com",
     "github.io", "gitlab.io", "herokuapp.com", "netlify.app", "vercel.app", "pages.dev",
-    "readthedocs.io", "wordpress.com", "blogspot.com", "medium.com",
+    "readthedocs.io", "readthedocs.org", "pypi.org", "npmjs.com",
+    "wordpress.com", "blogspot.com", "medium.com",
 })
 
 
@@ -88,22 +91,29 @@ def github_declared_roots(name: str, search_fn) -> list[RootCandidate]:
     return out
 
 
-def wikidata_official_sites(name: str) -> list[RootCandidate]:
-    """Candidate roots from the official website a name-matched Wikidata entity declares.
+def pypi_org_roots(name: str) -> list[RootCandidate]:
+    """Candidate roots from the project urls of a PyPI package named after the org.
 
-    The entity is matched by name, so it may be a namesake, a town rather than the company, and its
-    official website is that entity's, not proof of the target. The top hits only are read, and
-    each root is a candidate the confirmer must prove.
+    PyPI offers no free search by company, so this reads the package named for the org, an exact
+    name tie, and takes the domains it declares. It is narrow by design, a company that publishes
+    no same-named package yields nothing, but it never fudges a search PyPI does not offer. A 404
+    is no package, not a source failure, so it is skipped rather than raised.
     """
     out: list[RootCandidate] = []
     seen: set[str] = set()
-    for qid in _wikidata_entities(name)[:3]:
-        for url in _wikidata_official_sites(qid):
+    slug = name.strip().lower()
+    for candidate_slug in dict.fromkeys([slug, slug.replace(" ", "-"), slug.replace(" ", "")]):
+        if not candidate_slug:
+            continue
+        info = _pypi_project(candidate_slug)
+        urls = [str(info.get("home_page") or "")]
+        urls += [str(v or "") for v in (info.get("project_urls") or {}).values()]
+        for url in urls:
             root = _root_from_value(url)
             if root and root not in seen:
                 seen.add(root)
-                out.append(RootCandidate(name=root, source="wikidata",
-                                         signal=f"official website of Wikidata entity {qid}"))
+                out.append(RootCandidate(name=root, source="pypi",
+                                         signal=f"project url of the PyPI package {candidate_slug!r}"))
     return out
 
 
@@ -156,25 +166,16 @@ def _api_json(url: str) -> object:
         return json.loads(resp.read(_JSON_LIMIT).decode("utf-8", "replace"))
 
 
-def _wikidata_entities(name: str) -> list[str]:
-    query = urllib.parse.urlencode({"action": "wbsearchentities", "search": name,
-                                    "language": "en", "type": "item", "format": "json", "limit": "5"})
-    body = _api_json(f"https://www.wikidata.org/w/api.php?{query}")
-    hits = body.get("search", []) if isinstance(body, dict) else []
-    return [str(h.get("id", "")) for h in hits if h.get("id")]
-
-
-def _wikidata_official_sites(qid: str) -> list[str]:
-    query = urllib.parse.urlencode({"action": "wbgetclaims", "entity": qid,
-                                    "property": "P856", "format": "json"})
-    body = _api_json(f"https://www.wikidata.org/w/api.php?{query}")
-    claims = body.get("claims", {}).get("P856", []) if isinstance(body, dict) else []
-    sites: list[str] = []
-    for claim in claims:
-        value = claim.get("mainsnak", {}).get("datavalue", {}).get("value")
-        if isinstance(value, str):
-            sites.append(value)
-    return sites
+def _pypi_project(slug: str) -> dict:
+    """The info block of a PyPI package, empty for a 404, raising on a real transport error."""
+    url = f"https://pypi.org/pypi/{urllib.parse.quote(slug)}/json"
+    try:
+        body = _api_json(url)
+    except urllib.error.HTTPError as exc:
+        if exc.code == 404:
+            return {}
+        raise
+    return body.get("info", {}) if isinstance(body, dict) else {}
 
 
 def _npm_search(name: str) -> list:

@@ -56,9 +56,18 @@ def test_github_records_verified_in_the_signal_and_drops_shared_hosts():
     assert "namesake.github.io" not in by_name and "gmail.com" not in by_name
 
 
+def test_pypi_reads_project_url_domains_and_drops_shared_hosts(monkeypatch):
+    monkeypatch.setattr(rootsrc, "_pypi_project", lambda slug: {
+        "home_page": "https://example.com",
+        "project_urls": {"Source": "https://github.com/example/x", "Docs": "https://docs.example.org"}})
+    found = {c.name for c in rootsrc.pypi_org_roots("Example")}
+    assert "example.com" in found and "example.org" in found
+    assert "github.com" not in found  # a shared code host is not the org's own root
+
+
 def test_propose_roots_unions_sources_first_wins_and_reports_a_failure():
-    def wiki():
-        return [RootCandidate(name="example.com", source="wikidata", signal="official site")]
+    def gh():
+        return [RootCandidate(name="example.com", source="github", signal="github blog")]
 
     def crt():
         # a duplicate from a later source does not replace the first source's signal
@@ -66,14 +75,14 @@ def test_propose_roots_unions_sources_first_wins_and_reports_a_failure():
                 RootCandidate(name="example.net", source="crtsh-org", signal="org match")]
 
     def broken():
-        raise TimeoutError("npm timed out")
+        raise TimeoutError("pypi timed out")
 
     result = rootsrc.propose_roots("ExampleCorp", (), sources=(
-        ("wikidata", wiki), ("crtsh-org", crt), ("npm", broken)))
+        ("github", gh), ("crtsh-org", crt), ("pypi", broken)))
     by_name = {c.name: c for c in result.candidates}
-    assert by_name["example.com"].source == "wikidata"  # first source wins the duplicate
+    assert by_name["example.com"].source == "github"  # first source wins the duplicate
     assert set(by_name) == {"example.com", "example.net"}
-    assert result.failed and "npm" in result.failed[0]
+    assert result.failed and "pypi" in result.failed[0]
 
 
 # --- capability: propose -----------------------------------------------------
@@ -85,7 +94,7 @@ def test_proposal_records_candidates_and_drops_a_known_hint():
 
     def candidate_fn(name, terms):
         return ProposalResult(candidates=(
-            RootCandidate(name="example.com", source="wikidata", signal="s"),
+            RootCandidate(name="example.com", source="github", signal="s"),
             RootCandidate(name="example-cdn.net", source="crtsh-org", signal="s")))
 
     outcome = DiscoverCandidateRoots(candidate_fn).run(
@@ -128,8 +137,8 @@ def test_a_name_matched_candidate_is_not_scanned_without_a_shared_certificate():
     # never scanned. This is the namesake guard: a French town hall or an unrelated maker space
     # that shares the name prefix must not enter the surface.
     world = _world_with_proposal(
-        RootCandidate(name="namesake-town.fr", source="wikidata",
-                      signal="official website of a namesake entity"))
+        RootCandidate(name="namesake-makerspace.org", source="github",
+                      signal="named on the GitHub org 'namesake', a GitHub-verified org"))
 
     def pivot_fn(domain):
         return {}  # the namesake shares no certificate with the owned root
@@ -138,7 +147,7 @@ def test_a_name_matched_candidate_is_not_scanned_without_a_shared_certificate():
         Task(capability="confirm_candidate_roots", node="org:ExampleCorp"), world)
     assert all(f.yields == () for f in outcome.facts)
     report = outcome.facts[0].payload
-    assert report.confirmed == () and "namesake-town.fr" in report.unconfirmed[0]
+    assert report.confirmed == () and "namesake-makerspace.org" in report.unconfirmed[0]
 
 
 def test_a_weak_tie_sharing_a_certificate_with_an_owned_root_is_confirmed():

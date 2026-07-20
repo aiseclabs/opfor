@@ -12,6 +12,7 @@ from opfor.scenarios.attacksurface.assets.domain.capabilities.discovery import (
     DomainPivot,
     DomainRegistrant,
     PermuteSubdomains,
+    RedirectRoots,
     Subdomains,
 )
 from opfor.scenarios.attacksurface.assets.domain.capabilities.dns import (
@@ -51,6 +52,7 @@ __all__ = [
     "PermuteSubdomains",
     "PortServices",
     "ProbeSpec",
+    "RedirectRoots",
     "ResolveDomain",
     "SecretScan",
     "SourceMapScan",

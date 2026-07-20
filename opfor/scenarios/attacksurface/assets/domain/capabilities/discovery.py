@@ -48,23 +48,23 @@ class DiscoverDomains(Capability):
 
 
 class DeclaredRoots(Capability):
-    """MAP: grow roots outward, a root the org owns declaring another root it owns.
+    """MAP: grow roots outward via DMARC, a root the org owns declaring another root it owns.
 
-    It starts from an owned root and reads what that root itself names, its DMARC report address and
-    its redirect target, so the owner is declaring the root, ladder rung 5, and a namesake cannot
-    slip in. A declared root becomes an associated domain node and enters the pipeline. Third-party
-    DMARC processors and shared hosts are dropped, so a processor or a link to a shared platform is
-    not mistaken for the org's own root. It reads a public record, so it is osint.
+    It starts from an owned root and reads that root's DMARC report address, so the owner is
+    declaring the root, ladder rung 5, and a namesake cannot slip in. A declared root becomes an
+    associated domain node and enters the pipeline. Third-party DMARC processors and shared hosts
+    are dropped, so a processor is not mistaken for the org's own root. Reading a DMARC record is a
+    public DNS lookup that never touches the target, so it is osint. The redirect self-declaration,
+    which is an active HTTP request, is a separate scoped capability, `RedirectRoots`, so this
+    passive reader stays osint and cannot probe an out-of-scope root.
     """
 
     name = "declared_roots"
     phase = Phase.MAP
     osint = True
 
-    def __init__(self, dns_fn, resolve_fn, probe_fn) -> None:
+    def __init__(self, dns_fn) -> None:
         self._dns = dns_fn
-        self._resolve = resolve_fn
-        self._probe = probe_fn
 
     def run(self, task: Task, world: World) -> Outcome:
         root = world.node(task.node).payload.root
@@ -74,15 +74,6 @@ class DeclaredRoots(Capability):
             declared.update(roots_from_dmarc(str(self._dns(root).get("dmarc", "")), root))
         except Exception as exc:
             errors.append(f"dmarc {type(exc).__name__}")
-        try:
-            resolved = self._resolve(root)
-            if resolved.get("resolvable"):
-                location = str(self._probe(root, resolved.get("addresses", ())).get("location", ""))
-                hit = root_from_redirect(location, root)
-                if hit is not None:
-                    declared.setdefault(hit[0], hit[1])
-        except Exception as exc:
-            errors.append(f"redirect {type(exc).__name__}")
         found = tuple(
             Node(id=f"domain:{name}", type="domain",
                  payload=DomainData(name=name, root=name, source="self-declared",
@@ -94,6 +85,48 @@ class DeclaredRoots(Capability):
             facts.append(Fact(kind="coverage_gap", about=task.node, payload=CoverageGap(
                 scan="declared_roots", host=root, attempted=len(errors), failed=len(errors),
                 reasons=tuple(errors))))
+        return Done(facts=tuple(facts))
+
+
+class RedirectRoots(Capability):
+    """MAP: a root the org owns redirecting to another owned root, read from its redirect target.
+
+    It follows an owned root's HTTP redirect, so a rebrand or a moved property that points the old
+    root at a new one is the owner declaring the new root. A redirect within the anchor's own root
+    or to a shared host declares nothing. Reading the redirect is an active HTTP request to the
+    root, a scoped act rather than a public read, so unlike the DMARC declaration this is not osint
+    and is authorized against scope, the redirect of a discovered out-of-scope sibling root is
+    never probed.
+    """
+
+    name = "redirect_roots"
+    phase = Phase.MAP
+    osint = False
+
+    def __init__(self, resolve_fn, probe_fn) -> None:
+        self._resolve = resolve_fn
+        self._probe = probe_fn
+
+    def run(self, task: Task, world: World) -> Outcome:
+        root = world.node(task.node).payload.root
+        found: tuple[Node, ...] = ()
+        errors: list[str] = []
+        try:
+            resolved = self._resolve(root)
+            if resolved.get("resolvable"):
+                location = str(self._probe(root, resolved.get("addresses", ())).get("location", ""))
+                hit = root_from_redirect(location, root)
+                if hit is not None:
+                    found = (Node(id=f"domain:{hit[0]}", type="domain",
+                                  payload=DomainData(name=hit[0], root=hit[0], source="self-declared",
+                                                     confidence="associated",
+                                                     evidence=f"declared by {root}, {hit[1]}")),)
+        except Exception as exc:
+            errors.append(f"redirect {type(exc).__name__}")
+        facts: list[Fact] = [Fact(kind="redirect_declared", about=task.node, yields=found)]
+        if errors:
+            facts.append(Fact(kind="coverage_gap", about=task.node, payload=CoverageGap(
+                scan="redirect_roots", host=root, attempted=1, failed=1, reasons=tuple(errors))))
         return Done(facts=tuple(facts))
 
 

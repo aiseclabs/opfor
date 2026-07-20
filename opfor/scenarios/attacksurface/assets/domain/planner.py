@@ -359,6 +359,11 @@ def map_rules(*, with_registrant: bool):
              where=lambda p: p.name == p.root),
         each("domain", run="declared_roots", unless_fact="declared",
              where=lambda p: p.name == p.root),
+        # The redirect declaration is an active HTTP probe, so it carries the root as its scope
+        # target and is denied on a discovered out-of-scope sibling root, unlike the passive DMARC
+        # declaration above.
+        each("domain", run="redirect_roots", unless_fact="redirect_declared",
+             where=lambda p: p.name == p.root, scope_target=lambda p: p.name),
         each("domain", run="domain_subdomains", unless_fact="enumerated",
              where=lambda p: p.name == p.root),
         _permute_rule,

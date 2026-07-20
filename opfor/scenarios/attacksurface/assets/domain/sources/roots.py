@@ -1,12 +1,12 @@
-"""Company name to candidate root domains, the propose half of root discovery.
+"""Root discovery sources: propose roots from the org name, and read roots the org declares.
 
-A company name is not a domain, so the first move is a guess: several free sources each propose
-roots named after the org, a name-matched GitHub org, an npm scope, a PyPI package, a crt.sh
-organization search. Every one is a name match, which only names a namesake, an unrelated maker
-space shares a prefix, so no source confirms ownership on its own. Each proposal is a candidate the
-confirmer must tie to a known root by certificate co-tenancy or registrant before it is scanned.
-Every source is an injected seam, so a test drives the composer with fixtures, and one source
-failing degrades to a coverage gap rather than the run.
+Two mechanisms live here. The name proposers, GitHub org, npm scope, PyPI package, are a guess:
+every one is a name match, and a name match only names a namesake, an unrelated maker space shares
+a prefix, so a proposal is a candidate the confirmer must tie to a known root by certificate
+co-tenancy before it is scanned. The self-declaration readers, DMARC report address and redirect
+target, work the other way, outward from a root already owned, so a root the owned root itself
+names is the owner declaring it, ladder rung 5, and it needs no further proof. Every source is an
+injected seam, so a test drives it with fixtures, and one failing degrades to a gap, not the run.
 """
 
 from __future__ import annotations
@@ -18,15 +18,11 @@ import urllib.request
 
 from opfor.scenarios.attacksurface.hostnames import looks_like_host, registrable_root
 from opfor.scenarios.attacksurface.assets.domain.sources.dns import _JSON_LIMIT, _TIMEOUT, _UA
-from opfor.scenarios.attacksurface.assets.domain.sources.passive import (
-    _crtsh_org_certs,
-    roots_from_crtsh_org,
-)
 from opfor.scenarios.attacksurface.assets.domain.types import ProposalResult, RootCandidate
 
 
 # Public hosting and mail providers are shared by everyone, so a domain under one is not the
-# org's own root and is dropped from a proposal rather than proposed as a candidate.
+# org's own root and is dropped rather than treated as the org's declaration.
 _SHARED_SUFFIXES = frozenset({
     "gmail.com", "googlemail.com", "outlook.com", "hotmail.com", "yahoo.com", "qq.com",
     "163.com", "protonmail.com", "icloud.com",
@@ -34,6 +30,15 @@ _SHARED_SUFFIXES = frozenset({
     "github.io", "gitlab.io", "herokuapp.com", "netlify.app", "vercel.app", "pages.dev",
     "readthedocs.io", "readthedocs.org", "pypi.org", "npmjs.com",
     "wordpress.com", "blogspot.com", "medium.com",
+})
+
+# Third-party DMARC report processors: a rua address at one of these is the processor's domain, not
+# the org's, so it is not a self-declaration and is dropped.
+_DMARC_PROCESSORS = frozenset({
+    "dmarcian.com", "agari.com", "valimail.com", "proofpoint.com", "mxtoolbox.com",
+    "easydmarc.com", "postmarkapp.com", "redsift.com", "ondmarc.com", "fraudmarc.com",
+    "250ok.com", "sparkpost.com", "mailhardener.com", "uriports.com", "dmarcadvisor.com",
+    "cloudflare.com", "google.com", "dmarcreport.com", "cyberdmarc.com",
 })
 
 
@@ -51,23 +56,46 @@ def _root_from_value(value: str) -> str:
     return "" if root in _SHARED_SUFFIXES else root
 
 
-def crtsh_org_roots(name: str, terms: tuple[str, ...] = ()) -> list[RootCandidate]:
-    """Candidate roots from certificates whose subject organization matches the name, a name match.
+def roots_from_dmarc(dmarc: str, anchor_root: str) -> dict[str, str]:
+    """Roots a DMARC record declares through its report addresses, keyed by root with its signal.
 
-    The subject-organization field is loose and shared, so a match names a candidate, never proof.
-    One light query per term, not the paged walk crt.sh was dropped from for subdomains.
+    A rua or ruf mailto address names a domain the owned root sends DMARC reports to. Cross-domain
+    reporting needs the destination to authorize the sender, so a report address at the org's own
+    domain is a self-declaration. A third-party processor is dropped, it is not the org's, and the
+    anchor's own root is skipped since it adds nothing.
     """
-    out: list[RootCandidate] = []
-    seen: set[str] = set()
-    for term in (name, *terms):
-        term = term.strip()
-        if not term:
-            continue
-        for root, signal in roots_from_crtsh_org(_crtsh_org_certs(term), term).items():
-            if root not in seen:
-                seen.add(root)
-                out.append(RootCandidate(name=root, source="crtsh-org", signal=signal))
-    return out
+    # A record reads `rua=mailto:a@x.com,mailto:b@y.com!10m; ...`, so each tag value is split on the
+    # comma into addresses, and each address yields its domain, past mailto: and any size suffix.
+    declared: dict[str, str] = {}
+    for tag in ("rua", "ruf"):
+        for segment in _tag_values(dmarc, tag):
+            for address in segment.split(","):
+                domain = address.strip().split("mailto:")[-1].split("@")[-1].split("!")[0]
+                root = _root_from_value(domain)
+                if root and root != anchor_root and root not in _DMARC_PROCESSORS:
+                    declared.setdefault(root, f"a DMARC {tag} report address of {anchor_root}")
+    return declared
+
+
+def _tag_values(dmarc: str, tag: str) -> list[str]:
+    """The values of a DMARC tag, the text after each `tag=` up to the next semicolon."""
+    values: list[str] = []
+    for chunk in dmarc.split(f"{tag}=")[1:]:
+        values.append(chunk.split(";")[0].strip())
+    return values
+
+
+def root_from_redirect(location: str, anchor_root: str) -> tuple[str, str] | None:
+    """The root a redirect target declares, or None when it stays on the anchor or a shared host.
+
+    A root that redirects to another root is the owner pointing its own domain there, a rebrand or
+    a moved property, so the target is a self-declaration. A redirect within the anchor's own root
+    or to a shared host declares nothing.
+    """
+    root = _root_from_value(location)
+    if root and root != anchor_root:
+        return root, f"the redirect target of {anchor_root}"
+    return None
 
 
 def github_declared_roots(name: str, search_fn) -> list[RootCandidate]:

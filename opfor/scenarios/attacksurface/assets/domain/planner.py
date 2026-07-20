@@ -377,6 +377,8 @@ def map_rules(*, with_registrant: bool, with_candidates: bool = False):
              where=lambda p: class_enabled(p, "domain")),
         each("domain", run="domain_pivot", unless_fact="pivoted",
              where=lambda p: p.name == p.root),
+        each("domain", run="declared_roots", unless_fact="declared",
+             where=lambda p: p.name == p.root),
         each("domain", run="domain_subdomains", unless_fact="enumerated",
              where=lambda p: p.name == p.root),
         _permute_rule,

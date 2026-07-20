@@ -27,11 +27,12 @@ from opfor.scenarios.attacksurface.assets.domain.sources.http import (
 from opfor.scenarios.attacksurface.assets.domain.sources.ports import port_scan
 from opfor.scenarios.attacksurface.assets.domain.sources.tls import tls_probe
 from opfor.scenarios.attacksurface.assets.domain.sources.roots import (
-    crtsh_org_roots,
     github_declared_roots,
     npm_org_roots,
     propose_roots,
     pypi_org_roots,
+    root_from_redirect,
+    roots_from_dmarc,
 )
 from opfor.scenarios.attacksurface.assets.domain.sources.passive import (
     Enumeration,
@@ -41,7 +42,6 @@ from opfor.scenarios.attacksurface.assets.domain.sources.passive import (
     dnsdumpster_subdomains,
     hosts_from_file,
     nvd_cves,
-    roots_from_crtsh_org,
     otx_subdomains,
     reverse_whois,
     roots_from_file,

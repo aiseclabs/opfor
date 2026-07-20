@@ -6,6 +6,10 @@ from opfor.core import Capability, Done, Fact, Failed, Node, Outcome, Phase, Tas
 from opfor.scenarios.attacksurface import config
 from opfor.scenarios.attacksurface.hostnames import looks_like_host, registrable_root
 from opfor.scenarios.attacksurface.assets.domain.capabilities.helpers import _coverage_gap
+from opfor.scenarios.attacksurface.assets.domain.sources.roots import (
+    root_from_redirect,
+    roots_from_dmarc,
+)
 from opfor.scenarios.attacksurface.assets.domain.types import (
     CoverageGap,
     DomainData,
@@ -152,6 +156,57 @@ class ConfirmRootCandidates(Capability):
                                confirmed=tuple(confirmed), unconfirmed=tuple(unconfirmed))
         return Done(facts=(Fact(kind="root_candidates_confirmed", about=task.node,
                                 payload=report, yields=tuple(found)),))
+
+
+class DeclaredRoots(Capability):
+    """MAP: grow roots outward, a root the org owns declaring another root it owns.
+
+    Unlike the name proposers, this starts from an owned root and reads what that root itself
+    names, its DMARC report address and its redirect target, so the owner is declaring the root,
+    ladder rung 5, and a namesake cannot slip in. A declared root becomes an associated domain node
+    and enters the pipeline. Third-party DMARC processors and shared hosts are dropped, so a
+    processor or a link to a shared platform is not mistaken for the org's own root. It reads a
+    public record, so it is osint.
+    """
+
+    name = "declared_roots"
+    phase = Phase.MAP
+    osint = True
+
+    def __init__(self, dns_fn, resolve_fn, probe_fn) -> None:
+        self._dns = dns_fn
+        self._resolve = resolve_fn
+        self._probe = probe_fn
+
+    def run(self, task: Task, world: World) -> Outcome:
+        root = world.node(task.node).payload.root
+        declared: dict[str, str] = {}
+        errors: list[str] = []
+        try:
+            declared.update(roots_from_dmarc(str(self._dns(root).get("dmarc", "")), root))
+        except Exception as exc:
+            errors.append(f"dmarc {type(exc).__name__}")
+        try:
+            resolved = self._resolve(root)
+            if resolved.get("resolvable"):
+                location = str(self._probe(root, resolved.get("addresses", ())).get("location", ""))
+                hit = root_from_redirect(location, root)
+                if hit is not None:
+                    declared.setdefault(hit[0], hit[1])
+        except Exception as exc:
+            errors.append(f"redirect {type(exc).__name__}")
+        found = tuple(
+            Node(id=f"domain:{name}", type="domain",
+                 payload=DomainData(name=name, root=name, source="self-declared",
+                                    confidence="associated", evidence=f"declared by {root}, {signal}"))
+            for name, signal in sorted(declared.items())
+        )
+        facts: list[Fact] = [Fact(kind="declared", about=task.node, yields=found)]
+        if errors:
+            facts.append(Fact(kind="coverage_gap", about=task.node, payload=CoverageGap(
+                scan="declared_roots", host=root, attempted=len(errors), failed=len(errors),
+                reasons=tuple(errors))))
+        return Done(facts=tuple(facts))
 
 
 class DomainPivot(Capability):

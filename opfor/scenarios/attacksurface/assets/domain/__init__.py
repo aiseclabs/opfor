@@ -17,6 +17,7 @@ from opfor.scenarios.attacksurface.assets.domain.capabilities import (
     BucketScan,
     CVELookup,
     ConfirmRootCandidates,
+    DeclaredRoots,
     DiscoverCandidateRoots,
     DiscoverDomains,
     DNSEmailSecurity,
@@ -54,6 +55,7 @@ def assemble(*, enumerate_fn, pivot_fn, resolve_fn, probe_fn, fetch_fn, fetch_do
     capabilities = [
         DiscoverDomains(),
         DomainPivot(pivot_fn),
+        DeclaredRoots(dns_fn, resolve_fn, probe_fn),
         Subdomains(enumerate_fn),
         PermuteSubdomains(resolve_fn),
         ResolveDomain(resolve_fn),

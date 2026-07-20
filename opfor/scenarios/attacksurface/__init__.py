@@ -141,7 +141,6 @@ def build(
                         name, lambda n: search_fn(n, token))),
                     ("npm", lambda: domain_src.npm_org_roots(name)),
                     ("pypi", lambda: domain_src.pypi_org_roots(name)),
-                    ("crtsh-org", lambda: domain_src.crtsh_org_roots(name, terms)),
                 )
                 return domain_src.propose_roots(name, terms, sources=sources)
         else:

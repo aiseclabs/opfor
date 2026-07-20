@@ -525,35 +525,6 @@ def roots_from_reverse_whois(data, term: str) -> dict[str, str]:
     return roots
 
 
-# --- crt.sh organization search: rows for the org-to-candidate-root proposal --
-
-
-def _crtsh_org_certs(term: str) -> list:
-    """Certificate rows whose subject organization matches `term`, one light query to crt.sh."""
-    url = f"https://crt.sh/?O={urllib.parse.quote(term)}&output=json"
-    request = urllib.request.Request(url, headers={"User-Agent": _UA, "Accept": "application/json"})
-    with urllib.request.urlopen(request, timeout=_TIMEOUT) as resp:
-        return json.loads(resp.read(_JSON_LIMIT).decode("utf-8", "replace")) or []
-
-
-def roots_from_crtsh_org(rows, term: str) -> dict[str, str]:
-    """Registrable roots from crt.sh organization-search rows, keyed by root with its signal.
-
-    The parse lives apart from the network call, so a test drives it with a fixture. Each row
-    names one or more hosts in `name_value`, newline separated, so every host folds to its
-    registrable root with any wildcard prefix stripped.
-    """
-    proposed: dict[str, str] = {}
-    for row in rows or []:
-        for host in str(row.get("name_value", "")).splitlines():
-            host = host.strip().lower().lstrip("*.")
-            if host and looks_like_host(host):
-                proposed.setdefault(
-                    registrable_root(host),
-                    f"a certificate subject organization matches {term!r}")
-    return proposed
-
-
 def wayback_paths(host: str) -> set[str]:
     """Historical url paths for a host from the Wayback Machine CDX index, a passive read.
 

@@ -12,10 +12,10 @@ from opfor.core import Done, Fact, Node, Task, World
 from opfor.scenarios.attacksurface.types import Org
 from opfor.scenarios.attacksurface.assets.domain.capabilities.discovery import (
     ConfirmRootCandidates,
+    DeclaredRoots,
     DiscoverCandidateRoots,
 )
 from opfor.scenarios.attacksurface.assets.domain.sources import roots as rootsrc
-from opfor.scenarios.attacksurface.assets.domain.sources.passive import roots_from_crtsh_org
 from opfor.scenarios.attacksurface.assets.domain.types import (
     DomainData,
     ProposalResult,
@@ -31,14 +31,6 @@ def _org_world(**over):
 
 
 # --- sources: parse and compose ----------------------------------------------
-
-
-def test_crtsh_org_parse_folds_names_to_registrable_roots():
-    rows = [{"name_value": "example.com\n*.example.com"}, {"name_value": "api.example.net"},
-            {"name_value": "not a host"}]
-    roots = roots_from_crtsh_org(rows, "ExampleCorp")
-    assert set(roots) == {"example.com", "example.net"}
-    assert "ExampleCorp" in roots["example.com"]
 
 
 def test_github_records_verified_in_the_signal_and_drops_shared_hosts():
@@ -71,14 +63,14 @@ def test_propose_roots_unions_sources_first_wins_and_reports_a_failure():
 
     def crt():
         # a duplicate from a later source does not replace the first source's signal
-        return [RootCandidate(name="example.com", source="crtsh-org", signal="org match"),
-                RootCandidate(name="example.net", source="crtsh-org", signal="org match")]
+        return [RootCandidate(name="example.com", source="npm", signal="org match"),
+                RootCandidate(name="example.net", source="npm", signal="org match")]
 
     def broken():
         raise TimeoutError("pypi timed out")
 
     result = rootsrc.propose_roots("ExampleCorp", (), sources=(
-        ("github", gh), ("crtsh-org", crt), ("pypi", broken)))
+        ("github", gh), ("npm", crt), ("pypi", broken)))
     by_name = {c.name: c for c in result.candidates}
     assert by_name["example.com"].source == "github"  # first source wins the duplicate
     assert set(by_name) == {"example.com", "example.net"}
@@ -95,7 +87,7 @@ def test_proposal_records_candidates_and_drops_a_known_hint():
     def candidate_fn(name, terms):
         return ProposalResult(candidates=(
             RootCandidate(name="example.com", source="github", signal="s"),
-            RootCandidate(name="example-cdn.net", source="crtsh-org", signal="s")))
+            RootCandidate(name="example-cdn.net", source="npm", signal="s")))
 
     outcome = DiscoverCandidateRoots(candidate_fn).run(
         Task(capability="discover_candidate_roots", node="org:ExampleCorp"), world)
@@ -110,13 +102,13 @@ def test_a_failed_source_is_reported_as_a_coverage_gap():
     world = _org_world()
 
     def candidate_fn(name, terms):
-        return ProposalResult(candidates=(), failed=("crtsh-org TimeoutError",))
+        return ProposalResult(candidates=(), failed=("npm TimeoutError",))
 
     outcome = DiscoverCandidateRoots(candidate_fn).run(
         Task(capability="discover_candidate_roots", node="org:ExampleCorp"), world)
     assert isinstance(outcome, Done)
     gap = next(f.payload for f in outcome.facts if f.kind == "coverage_gap")
-    assert "crtsh-org" in gap.reasons[0]
+    assert "npm" in gap.reasons[0]
 
 
 # --- capability: confirm -----------------------------------------------------
@@ -152,7 +144,7 @@ def test_a_name_matched_candidate_is_not_scanned_without_a_shared_certificate():
 
 def test_a_weak_tie_sharing_a_certificate_with_an_owned_root_is_confirmed():
     world = _world_with_proposal(
-        RootCandidate(name="example-cdn.net", source="crtsh-org", signal="org match"))
+        RootCandidate(name="example-cdn.net", source="npm", signal="org match"))
 
     def pivot_fn(domain):
         return {"example.com": "shares a certificate with example-cdn.net"}
@@ -166,7 +158,7 @@ def test_a_weak_tie_sharing_a_certificate_with_an_owned_root_is_confirmed():
 
 def test_a_weak_tie_with_no_shared_certificate_is_reported_not_scanned():
     world = _world_with_proposal(
-        RootCandidate(name="example-evil.net", source="crtsh-org", signal="org match"))
+        RootCandidate(name="example-evil.net", source="npm", signal="org match"))
 
     def pivot_fn(domain):
         return {}  # no certificate co-tenancy, so no ownership proof
@@ -176,3 +168,40 @@ def test_a_weak_tie_with_no_shared_certificate_is_reported_not_scanned():
     assert all(f.yields == () for f in outcome.facts)  # the guess never becomes a scanned root
     report = outcome.facts[0].payload
     assert report.confirmed == () and report.unconfirmed and "example-evil.net" in report.unconfirmed[0]
+
+
+# --- self-declaration: roots the org's own root names, outward from an owned root -------------
+
+
+def test_dmarc_declares_the_orgs_own_report_domain_and_drops_a_processor():
+    dmarc = ("v=DMARC1; p=reject; rua=mailto:dmarc@brand-infra.com,mailto:r@dmarcian.com; "
+             "ruf=mailto:f@example.com")
+    declared = rootsrc.roots_from_dmarc(dmarc, "example.com")
+    assert "brand-infra.com" in declared      # a report address at the org's own domain
+    assert "dmarcian.com" not in declared     # a third-party DMARC processor is dropped
+    assert "example.com" not in declared      # the anchor's own root adds nothing
+
+
+def test_redirect_declares_another_root_but_not_the_anchor_or_a_shared_host():
+    assert rootsrc.root_from_redirect("https://newbrand.io/en", "example.com")[0] == "newbrand.io"
+    assert rootsrc.root_from_redirect("https://www.example.com/x", "example.com") is None
+    assert rootsrc.root_from_redirect("https://github.com/x", "example.com") is None
+
+
+def test_declared_roots_yields_from_dmarc_and_redirect_as_self_declared():
+    world = World()
+    world.add(Node(id="domain:example.com", type="domain",
+                   payload=DomainData(name="example.com", root="example.com",
+                                      source="hint", confidence="confirmed")))
+    dns_fn = lambda root: {"dmarc": "v=DMARC1; rua=mailto:d@brand-infra.com",
+                           "spf": (), "caa": (), "dnssec": False}
+    resolve_fn = lambda root: {"resolvable": True, "addresses": ("1.2.3.4",)}
+    probe_fn = lambda root, addresses=(): {"location": "https://newbrand.io/"}
+    outcome = DeclaredRoots(dns_fn, resolve_fn, probe_fn).run(
+        Task(capability="declared_roots", node="domain:example.com"), world)
+    yielded = {n.id: n for f in outcome.facts for n in f.yields}
+    assert "domain:brand-infra.com" in yielded   # a DMARC report address self-declaration
+    assert "domain:newbrand.io" in yielded        # a redirect self-declaration
+    node = yielded["domain:brand-infra.com"]
+    assert node.payload.source == "self-declared"
+    assert "declared by example.com" in node.payload.evidence

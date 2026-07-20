@@ -59,13 +59,19 @@ proposes in a separate, clearly labeled set for an operator to confirm, never mi
 the owned set. When every viable confirmer is exhausted and roots remain unreachable, name
 the signal that would reach them rather than reporting the map as finished.
 
-The bare-name entrypoint follows this exactly. When the operator seeds only a company name, a
-union of free sources proposes candidate roots: a name-matched GitHub org, an exact npm scope, a
-same-named PyPI package, and a crt.sh organization search. Every one is a name match, and a name
-match only names a namesake, an unrelated maker space shares a prefix, so no source confirms
-ownership on its own, not even a GitHub-verified org, which has only proven its own domain. A candidate is confirmed only by tying it to a root already owned, certificate co-tenancy
-with an owned root, ladder rung 2. A candidate yields no node until then, so a guess never enters
-the scanned surface, and one that earns no proof is reported unconfirmed rather than scanned. With
-no owned root to anchor against, a bare name confirms nothing, which is the honest result, and the
-candidates are left for the operator to confirm. Any one source failing is a coverage gap, not a
-failed run.
+Two implemented paths follow this ladder. Outward from a root already owned, always on, the
+scenario grows roots by strong evidence: the certificate SAN pivot, rung 2, and self-declaration,
+rung 5, a root the owned root itself names through its DMARC report address or its redirect target,
+with third-party DMARC processors and shared hosts dropped so a processor or a shared platform is
+never taken for the org's own root. Both start from an owned root, so a namesake cannot enter.
+
+The bare-name entrypoint is the weaker, opt-in path. When the operator seeds only a company name, a
+union of free sources proposes candidate roots: a name-matched GitHub org, an exact npm scope, and
+a same-named PyPI package. Every one is a name match, and a name match only names a namesake, an
+unrelated maker space shares a prefix, so no source confirms ownership on its own, not even a
+GitHub-verified org, which has only proven its own domain. A candidate is confirmed only by tying
+it to a root already owned, certificate co-tenancy, rung 2. A candidate yields no node until then,
+so a guess never enters the scanned surface, and one that earns no proof is reported unconfirmed
+rather than scanned. With no owned root to anchor against, a bare name confirms nothing, which is
+the honest result, and the candidates are left for the operator to confirm. Any one source failing
+is a coverage gap, not a failed run.

@@ -318,6 +318,26 @@ class TLSPosture:
 
 
 @dataclass(frozen=True, kw_only=True)
+class HostProfile:
+    """What a live host is, the single record answering the host's role: the open-source product
+    and version behind it, the front-end frameworks it reveals, and how it is fronted. Each field
+    is a raw identification signal, whether the host is an exposed product, a bespoke application,
+    or an edge is triage's judgment. `product`, `version`, and `cpe` are empty when nothing
+    identifiable was found, a real negative. `frameworks` are the front-end frameworks detected,
+    each with a version when published plainly. `fronting` is the edge category, cdn, cloud,
+    vendor, or direct, empty when unrecognized, and `fronting_evidence` is the one-line reason.
+    The vulnerability lookup reads product and version from here, so identity survives even when
+    that lookup fails or is not wired, and the report renders this record rather than recomputing."""
+
+    product: str = ""
+    version: str = ""
+    cpe: str = ""
+    frameworks: tuple[str, ...] = ()
+    fronting: str = ""
+    fronting_evidence: str = ""
+
+
+@dataclass(frozen=True, kw_only=True)
 class CVE:
     """One known vulnerability record from a public database. `cvss` and `severity` are the
     published score, kept as raw facts, whether the CVE truly applies to the exposed surface

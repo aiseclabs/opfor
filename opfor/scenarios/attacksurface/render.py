@@ -9,6 +9,11 @@ knowledge, it only shapes facts into text, so the render stays separate from the
 from __future__ import annotations
 
 import ipaddress
+
+from opfor.scenarios.attacksurface.assets.domain.sources.profile import (
+    classify_frameworks,
+    classify_fronting,
+)
 from urllib.parse import urlparse
 
 from opfor.core import World
@@ -48,51 +53,15 @@ class SurfaceRenderer:
         self._frameworks = dict(frameworks or {})
 
     def _frameworks_of(self, http) -> list[str]:
-        """The front-end frameworks a live host's response reveals, each with a version when the
-        framework publishes one plainly. Deterministic from the body and headers already gathered,
-        a host may reveal more than one, and one that matches nothing is simply untagged."""
-        if http is None:
-            return []
-        body = http.body or ""
-        header_text = "\n".join(f"{name.lower()}: {value.lower()}" for name, value in http.headers)
-        found: list[str] = []
-        for name, sig in self._frameworks.items():
-            if not (any(m in body for m in sig["body"]) or any(m in header_text for m in sig["headers"])):
-                continue
-            version = ""
-            pattern = sig.get("version")
-            if pattern is not None:
-                match = pattern.search(body)
-                if match:
-                    version = match.group(1)
-            found.append(f"{name} {version}".strip())
-        return found
+        """The front-end frameworks a live host reveals, applying the injected table. The
+        classification is a pure source function so a profiling capability and this report share
+        one implementation."""
+        return classify_frameworks(http, self._frameworks)
 
     def _fronting_of(self, name, resolved, http) -> tuple[str, str] | None:
-        """The fronting category of a host and the evidence for it, or None when nothing names it.
-
-        A CNAME to a known suffix is the strongest signal, then a server token or marker header on a
-        live host. A bare IP with no name is direct. A host that matches none is left unclassified,
-        an unrecognized front is not proof there is none, so an honest gap beats a wrong guess.
-        """
-        cnames = [c.lower().rstrip(".") for c in (resolved.cnames if resolved else ())]
-        for category, sig in self._fronting.items():
-            for suffix in sig.get("cnames", ()):
-                if any(c == suffix or c.endswith("." + suffix) for c in cnames):
-                    return category, f"CNAME to {suffix}"
-        if http is not None:
-            server = (http.server or "").lower()
-            header_names = {n.lower() for n, _ in http.headers}
-            for category, sig in self._fronting.items():
-                for token in sig.get("servers", ()):
-                    if token in server:
-                        return category, f"server {http.server}"
-                for header in sig.get("headers", ()):
-                    if header.lower() in header_names:
-                        return category, f"header {header}"
-        if _is_ip(name):
-            return "direct", "a bare IP with no fronting name"
-        return None
+        """The fronting category of a host and its evidence, applying the injected table through
+        the shared source classifier."""
+        return classify_fronting(name, resolved, http, self._fronting)
 
     def units(self, world: World) -> list[str]:
         """Render the enriched world into one report block per host, so the surface can be

@@ -61,9 +61,16 @@ class Done:
 @dataclass(frozen=True, kw_only=True)
 class Failed:
     """The capability could not complete. The reason is preserved and surfaced, a
-    failure is never reported as a clean empty result, invariant 5."""
+    failure is never reported as a clean empty result, invariant 5.
+
+    `transient` marks a failure that is a network blip rather than a real refusal, a timeout, a
+    rate limit, a gateway error. It is not a fourth outcome, it is a property of this one: the
+    engine retries a transient failure a bounded number of times before it becomes terminal, so a
+    momentary blip does not drop the whole result, and a genuine failure still fails loud.
+    """
 
     reason: str
+    transient: bool = False
 
 
 @dataclass(frozen=True, kw_only=True)

@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-from opfor.core import Capability, Done, Fact, Failed, Outcome, Phase, Task, World
+from opfor.core import Capability, Done, Fact, Outcome, Phase, Task, World
 from opfor.scenarios.attacksurface.assets.domain.types import OpenPort, PortScan
+from opfor.scenarios.attacksurface.assets.domain.capabilities.helpers import net_failed
 
 
 class PortServices(Capability):
@@ -33,7 +34,7 @@ class PortServices(Capability):
         try:
             result = self._scan(name, addresses)
         except Exception as exc:
-            return Failed(reason=f"port scan {type(exc).__name__}: {exc}")
+            return net_failed("port scan", exc)
         ports = tuple(
             OpenPort(port=int(p.get("port")), service=str(p.get("service", "")),
                      banner=str(p.get("banner", "")))

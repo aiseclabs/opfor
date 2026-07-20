@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-from opfor.core import Capability, Done, Fact, Failed, Outcome, Phase, Task, World
+from opfor.core import Capability, Done, Fact, Outcome, Phase, Task, World
 from opfor.scenarios.attacksurface.assets.domain.capabilities.helpers import (
     _MAX_SOURCE_MAPS,
     _coverage_gap,
     _distinct,
+    net_failed,
 )
 from opfor.scenarios.attacksurface.assets.domain.candidates import backup_targets
 from opfor.scenarios.attacksurface.assets.domain.sources import (
@@ -48,7 +49,7 @@ class SourceMapScan(Capability):
         try:
             home = self._fetch_doc(name, "/").get("text", "")
         except Exception as exc:
-            return Failed(reason=f"source map scan home fetch {type(exc).__name__}: {exc}")
+            return net_failed("source map scan home fetch", exc)
         bundles = script_sources(home, name)
         probed = bundles[:_MAX_SOURCE_MAPS]
         leaks: list[SourceMapLeak] = []
@@ -106,7 +107,7 @@ class SecretScan(Capability):
         try:
             home = self._fetch_doc(name, "/").get("text", "")
         except Exception as exc:
-            return Failed(reason=f"secret scan home fetch {type(exc).__name__}: {exc}")
+            return net_failed("secret scan home fetch", exc)
         bundles = script_sources(home, name)
         probed = bundles[:_MAX_SOURCE_MAPS]
         matches: list[SecretMatch] = []

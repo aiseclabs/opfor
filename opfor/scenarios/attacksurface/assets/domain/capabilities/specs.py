@@ -6,7 +6,7 @@ import json
 from urllib.parse import urlparse
 
 from opfor.core import Capability, Done, Fact, Failed, Outcome, Phase, Task, World
-from opfor.scenarios.attacksurface.assets.domain.capabilities.helpers import _coverage_gap, _distinct
+from opfor.scenarios.attacksurface.assets.domain.capabilities.helpers import _coverage_gap, _distinct, net_failed
 from opfor.scenarios.attacksurface.assets.domain.capabilities.http import Endpoints
 from opfor.scenarios.attacksurface.assets.domain.sources import (
     info_from_openapi,
@@ -43,7 +43,7 @@ class ExpandSpec(Capability):
         try:
             document = self._fetch(host, endpoint.path)
         except Exception as exc:
-            return Failed(reason=f"spec fetch {type(exc).__name__}: {exc}")
+            return net_failed("spec fetch", exc)
         text = document.get("text") or ""
         if document.get("status") is None:
             # the endpoint probed reachable but the full document did not answer, a transport
@@ -172,7 +172,7 @@ class GraphQLIntrospect(Capability):
         try:
             schema = self._introspect(host, endpoint.path)
         except Exception as exc:
-            return Failed(reason=f"graphql introspection {type(exc).__name__}: {exc}")
+            return net_failed("graphql introspection", exc)
         operations = operations_from_introspection(schema) if schema else []
         payload = GraphQLSchema(enabled=bool(schema), operations=tuple(operations),
                                 count=len(operations))

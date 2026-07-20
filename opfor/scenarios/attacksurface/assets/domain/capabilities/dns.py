@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from opfor.core import Capability, Done, Fact, Failed, Outcome, Phase, Task, World
-from opfor.scenarios.attacksurface.assets.domain.capabilities.helpers import _coverage_gap
+from opfor.core import Capability, Done, Fact, Outcome, Phase, Task, World
+from opfor.scenarios.attacksurface.assets.domain.capabilities.helpers import _coverage_gap, net_failed
 from opfor.scenarios.attacksurface.assets.domain.types import DNSEmailPosture, Resolved
 
 
@@ -64,7 +64,7 @@ class DNSEmailSecurity(Capability):
         try:
             posture = self._dns(name)
         except Exception as exc:
-            return Failed(reason=f"dns email posture {type(exc).__name__}: {exc}")
+            return net_failed("dns email posture", exc)
         payload = DNSEmailPosture(
             domain=name,
             spf=tuple(str(s) for s in posture.get("spf", ())),

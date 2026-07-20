@@ -4,13 +4,14 @@ from __future__ import annotations
 
 from urllib.parse import urlparse
 
-from opfor.core import Capability, Done, Fact, Failed, Node, Outcome, Phase, Task, World
+from opfor.core import Capability, Done, Fact, Node, Outcome, Phase, Task, World
 from opfor.scenarios.attacksurface.assets.domain.capabilities.helpers import (
     _coverage_gap,
     _distinct,
     _home_paths,
     _is_static_asset,
     _safe,
+    net_failed,
 )
 from opfor.scenarios.attacksurface.assets.domain.sources.parsers import path_permutations
 from opfor.scenarios.attacksurface.assets.domain.sources import (
@@ -47,7 +48,7 @@ class HTTPDomain(Capability):
         try:
             result = self._probe(name, addresses)
         except Exception as exc:
-            return Failed(reason=f"http {type(exc).__name__}: {exc}")
+            return net_failed("http", exc)
         payload = HTTP(
             alive=bool(result["alive"]),
             status=result.get("status"),

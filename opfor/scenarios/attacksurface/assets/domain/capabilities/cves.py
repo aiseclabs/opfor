@@ -5,9 +5,10 @@ from __future__ import annotations
 import json
 from urllib.parse import urlparse
 
-from opfor.core import Capability, Done, Fact, Failed, Outcome, Phase, Task, World
+from opfor.core import Capability, Done, Fact, Outcome, Phase, Task, World
 from opfor.scenarios.attacksurface.assets.domain.sources import info_from_openapi
 from opfor.scenarios.attacksurface.assets.domain.types import CVE, CVEScan
+from opfor.scenarios.attacksurface.assets.domain.capabilities.helpers import net_failed
 
 
 class CVELookup(Capability):
@@ -34,7 +35,7 @@ class CVELookup(Capability):
         try:
             found = self._identify(self._evidence(world, host))
         except Exception as exc:
-            return Failed(reason=f"product identification {type(exc).__name__}: {exc}")
+            return net_failed("product identification", exc)
         product = str(found.get("product", "")).strip()
         version = str(found.get("version", "")).strip()
         cpe = str(found.get("cpe", "")).strip()
@@ -43,7 +44,7 @@ class CVELookup(Capability):
             try:
                 raw = self._cve(product, version, cpe)
             except Exception as exc:
-                return Failed(reason=f"cve lookup {type(exc).__name__}: {exc}")
+                return net_failed("cve lookup", exc)
             cves = tuple(
                 CVE(id=str(c.get("id", "")), cvss=c.get("cvss"),
                     severity=str(c.get("severity", "")), summary=str(c.get("summary", "")),

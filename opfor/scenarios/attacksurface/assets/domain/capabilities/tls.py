@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-from opfor.core import Capability, Done, Fact, Failed, Outcome, Phase, Task, World
+from opfor.core import Capability, Done, Fact, Outcome, Phase, Task, World
 from opfor.scenarios.attacksurface.assets.domain.types import TLSPosture
+from opfor.scenarios.attacksurface.assets.domain.capabilities.helpers import net_failed
 
 
 class TLSSecurity(Capability):
@@ -32,7 +33,7 @@ class TLSSecurity(Capability):
         try:
             result = self._tls(name, addresses)
         except Exception as exc:
-            return Failed(reason=f"tls probe {type(exc).__name__}: {exc}")
+            return net_failed("tls probe", exc)
         payload = TLSPosture(
             host=name,
             reachable=bool(result.get("reachable")),

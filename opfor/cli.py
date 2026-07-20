@@ -23,6 +23,22 @@ from opfor.scenarios.registry import known_scenarios
 _SEVERITY_ORDER = ("CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO")
 
 
+def _env_int(name: str, default: int) -> int:
+    """An integer environment override, the default when the variable is unset or unparsable."""
+    try:
+        return int(os.environ[name])
+    except (KeyError, ValueError):
+        return default
+
+
+def _env_float(name: str, default: float) -> float:
+    """A float environment override, the default when the variable is unset or unparsable."""
+    try:
+        return float(os.environ[name])
+    except (KeyError, ValueError):
+        return default
+
+
 def _resolve_seed(args) -> tuple[str, tuple[str, ...], tuple[str, ...], tuple[str, ...]]:
     """Resolve command input into a target name, seed roots, seed hosts, and scope hosts.
 
@@ -85,7 +101,11 @@ def _run(args) -> int:
             reproduce=getattr(args, "reproduce", False), confirm=getattr(args, "confirm", False))
     else:
         scenario = get_scenario(args.scenario)
-    report = engine_run(scenario, world, scope=scope, budget=Budget(args.budget))
+    # Retry and the per-task wall-clock are engine rails. They have safe defaults, and the
+    # environment overrides them for a flaky network or a slow one, an int and a float in seconds.
+    report = engine_run(scenario, world, scope=scope, budget=Budget(args.budget),
+                        max_retries=_env_int("OPFOR_TASK_RETRIES", 2),
+                        task_timeout=_env_float("OPFOR_TASK_TIMEOUT", 600.0))
     _print_report(report, world)
     outdir = _persist(report, world, name, getattr(args, "output", None))
     if outdir is not None:

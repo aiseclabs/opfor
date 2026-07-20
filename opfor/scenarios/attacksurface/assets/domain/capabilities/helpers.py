@@ -4,7 +4,18 @@ from __future__ import annotations
 
 import re
 
+from opfor.core.capability import Failed
+from opfor.core.transient import is_transient
 from opfor.scenarios.attacksurface.assets.domain.types import CoverageGap
+
+
+def net_failed(prefix: str, exc: Exception) -> Failed:
+    """A `Failed` for a network error, marked transient when the error is a retryable blip.
+
+    So the engine retries a rate limit, a gateway error, or a timeout rather than dropping the
+    whole capability result, while a real error still fails terminal and loud, invariant 5.
+    """
+    return Failed(reason=f"{prefix} {type(exc).__name__}: {exc}", transient=is_transient(exc))
 
 _LINK = re.compile(r'(?:href|src)\s*=\s*["\']([^"\'#?]+)', re.IGNORECASE)
 # Same-host bundles checked for a source map per host, bounded so a bundle-heavy app stays

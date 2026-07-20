@@ -23,7 +23,9 @@ invariant rather than only its first half.
 
 from __future__ import annotations
 
-from concurrent.futures import ThreadPoolExecutor, as_completed
+import threading
+import time
+from concurrent.futures import Future, ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from typing import Iterable
 
@@ -34,6 +36,7 @@ from opfor.core.phase import Phase
 from opfor.core.result import CLOSED, ERRORED, SUSPENDED, Finding, Report
 from opfor.core.scenario import Scenario
 from opfor.core.scope import Scope
+from opfor.core.transient import is_transient
 from opfor.core.world import Fact, World
 
 
@@ -60,6 +63,9 @@ class RunState:
     reached: Phase = Phase.SEED
     resume_from: Phase | None = None
     max_workers: int = 8
+    max_retries: int = 2         # extra attempts after the first when a task fails transiently
+    task_timeout: float = 600.0  # per-task wall-clock, a generous hang net, not a slow-task cap
+    retry_backoff: float = 2.0   # seconds, scaled by attempt number between retries
 
 
 def run(
@@ -70,6 +76,9 @@ def run(
     budget: Budget,
     ledger: Ledger | None = None,
     max_workers: int = 8,
+    max_retries: int = 2,
+    task_timeout: float = 600.0,
+    retry_backoff: float = 2.0,
 ) -> Report:
     """Run one scenario to closure or suspension against the world, and report."""
     ledger = ledger or Ledger()
@@ -79,7 +88,8 @@ def run(
     # what it later denied.
     ledger.append("authorization", max_tier=scope.max_tier, authorized=scope.authorized)
     state = RunState(scenario=scenario, world=world, scope=scope, budget=budget,
-                     ledger=ledger, max_workers=max_workers)
+                     ledger=ledger, max_workers=max_workers, max_retries=max_retries,
+                     task_timeout=task_timeout, retry_backoff=retry_backoff)
     return _drive(state)
 
 
@@ -191,7 +201,7 @@ def _run_phase(state: RunState, phase: Phase) -> Report | None:
             ready = sorted(ready, key=lambda t: t.id)[:remaining]
 
         _run_batch(s.scenario, s.world, ready, s.budget, s.done, s.pending, s.ledger,
-                   s.notes, s.max_workers)
+                   s.notes, s.max_workers, s.max_retries, s.task_timeout, s.retry_backoff)
 
     if s.pending:
         s.notes.append(f"awaiting async results: {len(s.pending)}")
@@ -225,21 +235,74 @@ def _authorize(scenario, scope, world, phase, done, pending, ledger, notes) -> l
     return ready
 
 
-def _run_batch(scenario, world, ready, budget, done, pending, ledger, notes, max_workers) -> None:
+def _bounded(cap, task, world, timeout: float):
+    """Run a capability under a hard wall-clock deadline, raising if it overruns.
+
+    The worker is a daemon thread, so a capability that never returns, a source that forgot a
+    socket timeout, does not block the run or interpreter exit, and the deadline raises rather
+    than letting a stalled capability hold the pool slot forever. The deadline is generous, a hang
+    net rather than a cap on a legitimately slow task.
+    """
+    fut: Future = Future()
+
+    def work() -> None:
+        try:
+            fut.set_result(cap.run(task, world))
+        except Exception as exc:
+            fut.set_exception(exc)
+
+    threading.Thread(target=work, daemon=True).start()
+    return fut.result(timeout=timeout)
+
+
+def _attempt(cap, task, world, *, max_retries: int, timeout: float, backoff: float):
+    """Run one task, retrying a transient failure a bounded number of times with backoff.
+
+    A transient failure, a raised network blip or a `Failed` the capability marked transient, is a
+    momentary condition, so a bounded retry recovers it rather than dropping the whole result. A
+    wall-clock overrun is itself transient, so a hung attempt is abandoned and retried. A
+    non-transient failure returns at once, and any failure that survives every attempt returns
+    terminal, so a real failure still fails loud, invariant 5.
+    """
+    for attempt in range(max_retries + 1):
+        final = attempt == max_retries
+        try:
+            outcome = _bounded(cap, task, world, timeout)
+        except Exception as exc:
+            if not is_transient(exc):
+                raise
+            if final:
+                return Failed(reason=f"{type(exc).__name__}: {exc} after {attempt + 1} attempts")
+            time.sleep(backoff * (attempt + 1))
+            continue
+        if isinstance(outcome, Failed) and outcome.transient and not final:
+            time.sleep(backoff * (attempt + 1))
+            continue
+        if isinstance(outcome, Failed) and outcome.transient:
+            return Failed(reason=f"{outcome.reason} after {attempt + 1} attempts")
+        return outcome
+
+
+def _run_batch(scenario, world, ready, budget, done, pending, ledger, notes, max_workers,
+               max_retries, task_timeout, retry_backoff) -> None:
     """Run authorized tasks concurrently, then record outcomes on the main thread.
 
-    Outcomes are collected while the pool runs and applied only after it joins, so the
-    world is mutated by one thread and a running capability never reads a half-written
-    world. They are applied in a deterministic order, sorted by task id, not in thread
-    completion order, so two identical runs absorb facts in the same order and the world,
-    the triage prompt built from it, the ledger, and the findings are reproducible rather
-    than shuffled by scheduling. A failure is added to the run notes as well as the ledger,
-    so the report is loud about it and a caller does not have to read the ledger to see a
-    failed step.
+    Each task runs through `_attempt`, so a transient failure is retried and a hang is bounded by a
+    wall-clock, before its final outcome is collected. Outcomes are collected while the pool runs
+    and applied only after it joins, so the world is mutated by one thread and a running capability
+    never reads a half-written world. They are applied in a deterministic order, sorted by task id,
+    not in thread completion order, so two identical runs absorb facts in the same order and the
+    world, the triage prompt built from it, the ledger, and the findings are reproducible rather
+    than shuffled by scheduling. A failure is added to the run notes as well as the ledger, so the
+    report is loud about it and a caller does not have to read the ledger to see a failed step.
     """
     collected: list[tuple[Task, object]] = []
     with ThreadPoolExecutor(max_workers=max_workers) as pool:
-        futures = {pool.submit(scenario.capability(t.capability).run, t, world): t for t in ready}
+        futures = {
+            pool.submit(_attempt, scenario.capability(t.capability), t, world,
+                        max_retries=max_retries, timeout=task_timeout, backoff=retry_backoff): t
+            for t in ready
+        }
         for future in as_completed(futures):
             task = futures[future]
             budget.charge()

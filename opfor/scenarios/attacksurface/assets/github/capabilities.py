@@ -11,6 +11,7 @@ from __future__ import annotations
 from urllib.parse import urlparse
 
 from opfor.core import Capability, Done, Fact, Failed, Node, Outcome, Phase, Task, World
+from opfor.core.transient import is_transient
 from opfor.scenarios.attacksurface import config
 from opfor.scenarios.attacksurface.hostnames import registrable_root
 from opfor.scenarios.attacksurface.assets.github.types import GitHubOrg, GitHubRepo
@@ -48,7 +49,7 @@ class DiscoverGitHub(Capability):
         try:
             orgs = self._search(org.name, config.github_token())
         except Exception as exc:
-            return Failed(reason=f"github search {type(exc).__name__}: {exc}")
+            return Failed(reason=f"github search {type(exc).__name__}: {exc}", transient=is_transient(exc))
         # A name match alone does not prove ownership, so a candidate is attributed by the
         # domain its profile links to. Linking to an in-scope root confirms it. Linking to a
         # different registrable root is positive counter-evidence that it belongs to someone
@@ -92,7 +93,7 @@ class GitHubRepos(Capability):
         try:
             repos = self._repos(login, config.github_token())
         except Exception as exc:
-            return Failed(reason=f"github repos {type(exc).__name__}: {exc}")
+            return Failed(reason=f"github repos {type(exc).__name__}: {exc}", transient=is_transient(exc))
         found = tuple(
             Node(id=f"github_repo:{r['full_name']}", type="github_repo",
                  payload=GitHubRepo(full_name=r["full_name"], url=r.get("url", ""),

@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from opfor.core import Capability, Done, Fact, Failed, Node, Outcome, Phase, Task, World
+from opfor.core import Capability, Done, Fact, Node, Outcome, Phase, Task, World
 from opfor.scenarios.attacksurface import config
 from opfor.scenarios.attacksurface.hostnames import looks_like_host, registrable_root
-from opfor.scenarios.attacksurface.assets.domain.capabilities.helpers import _coverage_gap
+from opfor.scenarios.attacksurface.assets.domain.capabilities.helpers import _coverage_gap, net_failed
 from opfor.scenarios.attacksurface.assets.domain.sources.roots import (
     root_from_redirect,
     roots_from_dmarc,
@@ -119,7 +119,7 @@ class DomainPivot(Capability):
         try:
             siblings = self._pivot(name)
         except Exception as exc:
-            return Failed(reason=f"cert pivot {type(exc).__name__}: {exc}")
+            return net_failed("cert pivot", exc)
         # Cert co-tenancy is weaker evidence of ownership than a registration match, a shared
         # certificate can still bundle a few unrelated roots, so a cert-SAN sibling is recorded
         # as associated rather than confirmed, and triage sees the weaker confidence.
@@ -159,7 +159,7 @@ class DomainRegistrant(Capability):
             try:
                 roots.update(self._reverse(term, key))
             except Exception as exc:
-                return Failed(reason=f"reverse-whois {type(exc).__name__}: {exc}")
+                return net_failed("reverse-whois", exc)
         found = tuple(
             Node(id=f"domain:{root}", type="domain",
                  payload=DomainData(name=root, root=root, source="reverse-whois",
@@ -188,7 +188,7 @@ class Subdomains(Capability):
         try:
             names = self._enumerate(root)
         except Exception as exc:
-            return Failed(reason=f"passive enumeration {type(exc).__name__}: {exc}")
+            return net_failed("passive enumeration", exc)
         # A wildcard such as *.dev.example.com names its base but hides every host under it
         # from certificate transparency, so the base is recorded once and flagged, and the
         # flag is what triage reports as a blind spot rather than a silent gap.
@@ -274,7 +274,7 @@ class PermuteSubdomains(Capability):
         try:
             baseline = self._resolve(f"{_WILDCARD_PROBE}.{root}")
         except Exception as exc:
-            return Failed(reason=f"wildcard baseline {type(exc).__name__}: {exc}")
+            return net_failed("wildcard baseline", exc)
         # a wildcard zone resolves every name, so a permutation cannot be confirmed here, the
         # blind spot is already surfaced by the enumeration wildcard flag, so just record the
         # fact and mint nothing rather than a flood of names that all resolve to the catch-all

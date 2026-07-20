@@ -247,9 +247,12 @@ def _seed(*, domains=(ROOT,), hosts=(), classes=()):
     return world
 
 
+# A test drives a transient failure to prove the run still closes and is loud, so the engine
+# retries it. The backoff is zeroed so those retries do not sleep in the suite.
 def _run(world, scope=None, budget=500):
     return run(_scenario(), world,
-               scope=scope or Scope(max_tier="recon", matcher=HostScope(hosts=(ROOT,))), budget=Budget(budget))
+               scope=scope or Scope(max_tier="recon", matcher=HostScope(hosts=(ROOT,))),
+               budget=Budget(budget), retry_backoff=0.0)
 
 
 def _run_capturing(world=None, *, scope=None, budget=2000, **over):
@@ -258,7 +261,8 @@ def _run_capturing(world=None, *, scope=None, budget=2000, **over):
     scenario = _make(**over)
     world = world if world is not None else _seed()
     report = run(scenario, world,
-                 scope=scope or Scope(max_tier="recon", matcher=HostScope(hosts=(ROOT,))), budget=Budget(budget))
+                 scope=scope or Scope(max_tier="recon", matcher=HostScope(hosts=(ROOT,))),
+                 budget=Budget(budget), retry_backoff=0.0)
     return report, scenario, world
 
 

@@ -1,35 +1,29 @@
-"""Front-end framework tagging: a context tag on a host line so the judge reads what a host is,
-a bespoke application on a given framework, rather than a nameless page.
+"""Front-end framework classification against the shipped table.
 
-Detection is deterministic from the HTTP body and headers the recon probe already gathered, no
-browser. A version is read only where the framework publishes it plainly, Angular's ng-version,
-never guessed. A host that reveals no known framework is left untagged. It is context, not a
-finding, and never a CVE input, so a React version does not reach the vulnerability lookup.
+The profiling capability records a host's frameworks in its host_profile fact and the report
+renders that. This exercises the classifier over the real frameworks.yaml, so a marker or a
+version regex that regresses is caught. Detection is deterministic from the HTTP body and
+headers, no browser, and a version is read only where the framework publishes it plainly.
 """
 
 from __future__ import annotations
 
 import re
 
-from opfor.core import Fact, Node, World
-from opfor.scenarios.attacksurface.render import SurfaceRenderer
-from opfor.scenarios.attacksurface.lifecycle.triage import _load_frameworks
 from opfor.scenarios.attacksurface.assets.domain import KNOWLEDGE
-from opfor.scenarios.attacksurface.assets.domain.types import DomainData, HTTP, Resolved
+from opfor.scenarios.attacksurface.assets.domain.sources.profile import (
+    classify_frameworks,
+    load_frameworks,
+)
+from opfor.scenarios.attacksurface.assets.domain.types import HTTP
 
-_FRAMEWORKS = _load_frameworks(KNOWLEDGE / "frameworks.yaml")
+_FRAMEWORKS = load_frameworks(KNOWLEDGE / "frameworks.yaml")
 
 
-def _rendered(name, *, body="", server="", headers=()):
-    world = World()
-    world.add(Node(id=f"domain:{name}", type="domain",
-                   payload=DomainData(name=name, root=name, source="passive")))
-    world.absorb([Fact(kind="resolved", about=f"domain:{name}",
-                       payload=Resolved(resolvable=True, addresses=("1.2.3.4",)))])
-    world.absorb([Fact(kind="http", about=f"domain:{name}",
-                       payload=HTTP(alive=True, status=200, url=f"https://{name}/", server=server,
-                                    title="", body=body.lower(), location="", headers=tuple(headers)))])
-    return "\n".join(SurfaceRenderer([], [], frameworks=_FRAMEWORKS).units(world))
+def _classify(*, server="", headers=(), body=""):
+    http = HTTP(alive=True, status=200, url="https://h/", server=server, title="",
+                body=body.lower(), location="", headers=tuple(headers))
+    return classify_frameworks(http, _FRAMEWORKS)
 
 
 def test_shipped_framework_table_loads():
@@ -37,36 +31,29 @@ def test_shipped_framework_table_loads():
 
 
 def test_a_next_js_body_marker_tags_next():
-    text = _rendered("app.example.com", body='<div id="__next"></div>')
-    assert "tech: Next.js" in text
+    assert "Next.js" in _classify(body='<div id="__next"></div>')
 
 
 def test_a_powered_by_header_tags_the_framework():
-    text = _rendered("api.example.com", headers=(("X-Powered-By", "Next.js"),))
-    assert "tech: Next.js" in text
+    assert "Next.js" in _classify(headers=(("X-Powered-By", "Next.js"),))
 
 
 def test_angular_ng_version_carries_the_version():
-    text = _rendered("ui.example.com", body='<app-root ng-version="16.2.0"></app-root>')
-    assert "tech: Angular 16.2.0" in text
+    assert "Angular 16.2.0" in _classify(body='<app-root ng-version="16.2.0"></app-root>')
 
 
-def test_an_untagged_host_carries_no_tech_line():
-    assert "tech:" not in _rendered("plain.example.com", body="<html><body>welcome</body></html>",
-                                    server="nginx")
+def test_an_untagged_host_is_empty():
+    assert _classify(server="nginx", body="<html><body>welcome</body></html>") == []
 
 
 def test_detection_is_case_insensitive_via_the_lowercased_body():
-    text = _rendered("app.example.com", body='<DIV ID="__NEXT">')
-    assert "tech: Next.js" in text
+    assert "Next.js" in _classify(body='<DIV ID="__NEXT">')
 
 
-def test_frameworks_of_returns_empty_for_a_host_with_no_response():
-    renderer = SurfaceRenderer([], [], frameworks=_FRAMEWORKS)
-    assert renderer._frameworks_of(None) == []
+def test_no_response_is_empty():
+    assert classify_frameworks(None, _FRAMEWORKS) == []
 
 
 def test_a_version_regex_is_compiled_at_load():
-    # a framework declaring a version pattern loads it as a compiled regex, ready to search
     assert isinstance(_FRAMEWORKS["Angular"]["version"], re.Pattern)
     assert _FRAMEWORKS["Next.js"]["version"] is None

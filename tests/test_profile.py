@@ -78,6 +78,25 @@ def test_profile_host_records_product_frameworks_and_fronting_in_one_fact():
     assert profile.fronting == "cdn"
 
 
+def test_report_renders_product_tech_and_fronting_from_the_host_profile_fact():
+    from opfor.core import Fact, Node, World
+    from opfor.scenarios.attacksurface.render import SurfaceRenderer
+    from opfor.scenarios.attacksurface.assets.domain.types import DomainData, HostProfile, Resolved
+
+    world = World()
+    world.add(Node(id="domain:h", type="domain", payload=DomainData(name="h", root="h", source="passive")))
+    world.absorb([Fact(kind="resolved", about="domain:h",
+                       payload=Resolved(resolvable=True, addresses=("1.2.3.4",)))])
+    world.absorb([Fact(kind="http", about="domain:h", payload=_http(server="nginx"))])
+    world.absorb([Fact(kind="host_profile", about="domain:h", payload=HostProfile(
+        product="Grafana", version="9.3.2", frameworks=("Next.js",),
+        fronting="cdn", fronting_evidence="CNAME to cloudflare.net"))])
+    report = "\n".join(SurfaceRenderer([], []).units(world))
+    assert "fronting cdn, CNAME to cloudflare.net" in report
+    assert "tech: Next.js" in report
+    assert "product: Grafana 9.3.2" in report
+
+
 def test_cve_lookup_reads_identity_from_the_host_profile_fact():
     # identity is derived by profiling and read here, so a CVE outage never discards it
     from opfor.core import Fact, Node, Task, World

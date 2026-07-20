@@ -32,10 +32,6 @@ from opfor.core import Finding, Message, Provider, SEVERITIES, Triage, World, it
 from opfor.core.json_parse import require_json_object
 from opfor.scenarios.attacksurface.lifecycle import structural
 from opfor.scenarios.attacksurface.render import SurfaceRenderer
-from opfor.scenarios.attacksurface.assets.domain.sources.profile import (
-    load_frameworks as _load_frameworks,
-    load_fronting as _load_fronting,
-)
 
 SYSTEM = (
     "You are the triage judge of an authorized offensive-security reconnaissance run. You "
@@ -183,24 +179,19 @@ class SurfaceTriage(Triage):
         # The judgment knowledge lives with the asset classes that own it, so triage reads
         # each class's directory and unions the classes, clues, and takeover signatures. A
         # class that mints only structural findings declares no directory and is absent here.
+        # Fronting and framework classification moved to the profiling capability, which records
+        # them in the host_profile fact the renderer reads, so triage no longer loads those tables.
         self._classes = []
         self._clues = []
         self._takeover = []
-        self._fronting: dict = {}
-        self._frameworks: dict = {}
         for directory in knowledge_dirs:
             directory = Path(directory)
             self._classes.extend(_load_classes(directory / "classes"))
             self._clues.extend(_load_clues(directory / "exposures.yaml"))
             self._takeover.extend(_load_takeover(directory / "takeover.yaml"))
-            for category, sig in _load_fronting(directory / "fronting.yaml").items():
-                dst = self._fronting.setdefault(category, {"cnames": [], "servers": [], "headers": []})
-                for key in ("cnames", "servers", "headers"):
-                    dst[key].extend(sig[key])
-            self._frameworks.update(_load_frameworks(directory / "frameworks.yaml"))
         self._class_ids = frozenset(c["id"] for c in self._classes)
         self._class_impact = {c["id"]: c["impact"] for c in self._classes}
-        self._renderer = SurfaceRenderer(self._clues, self._takeover, self._fronting, self._frameworks)
+        self._renderer = SurfaceRenderer(self._clues, self._takeover)
 
     def judge(self, world: World) -> list[Finding]:
         findings: list[Finding] = []

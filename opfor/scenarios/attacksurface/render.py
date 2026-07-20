@@ -8,24 +8,11 @@ knowledge, it only shapes facts into text, so the render stays separate from the
 
 from __future__ import annotations
 
-import ipaddress
-
-from opfor.scenarios.attacksurface.assets.domain.sources.profile import (
-    classify_frameworks,
-    classify_fronting,
-)
 from urllib.parse import urlparse
 
 from opfor.core import World
 from opfor.scenarios.attacksurface.assets.domain.sources.http import SECURITY_HEADERS
 
-
-def _is_ip(name: str) -> bool:
-    try:
-        ipaddress.ip_address(name)
-        return True
-    except ValueError:
-        return False
 
 _MAX_BODY = 600
 _MAX_LIST = 40
@@ -42,26 +29,9 @@ _CVE_MATCH = {
 
 
 class SurfaceRenderer:
-    def __init__(self, clues, takeover, fronting=None, frameworks=None) -> None:
+    def __init__(self, clues, takeover) -> None:
         self._clues = clues
         self._takeover = takeover
-        # Fronting signatures, category -> {cnames, servers, headers}, injected like the clue and
-        # takeover tables so the renderer applies reference data rather than reading knowledge.
-        self._fronting = dict(fronting or {})
-        # Front-end framework signatures, name -> {body, headers, version}, injected the same way.
-        # A detected framework is a context tag on a host line, what the host is, not a finding.
-        self._frameworks = dict(frameworks or {})
-
-    def _frameworks_of(self, http) -> list[str]:
-        """The front-end frameworks a live host reveals, applying the injected table. The
-        classification is a pure source function so a profiling capability and this report share
-        one implementation."""
-        return classify_frameworks(http, self._frameworks)
-
-    def _fronting_of(self, name, resolved, http) -> tuple[str, str] | None:
-        """The fronting category of a host and its evidence, applying the injected table through
-        the shared source classifier."""
-        return classify_fronting(name, resolved, http, self._fronting)
 
     def units(self, world: World) -> list[str]:
         """Render the enriched world into one report block per host, so the surface can be
@@ -141,30 +111,30 @@ class SurfaceRenderer:
             bits.append("does not resolve, seen only passively")
         if resolved_data is not None and resolved_data.cnames:
             bits.append("CNAME to " + ", ".join(resolved_data.cnames))
-        # A deterministic fronting tag, so the judge reads a finding as describing the edge or the
-        # origin, and tells the org's own server from a third-party's. Context, not a finding.
-        front = self._fronting_of(data.name, resolved_data, http_data)
-        if front is not None:
-            bits.append(f"fronting {front[0]}, {front[1]}")
-        # A deterministic front-end framework tag, so the judge reads what the host is, a bespoke
-        # application on a given framework, when no product was identified. Context, not a finding.
-        techs = self._frameworks_of(http_data if alive else None)
-        if techs:
-            bits.append("tech: " + ", ".join(techs))
+        # The host profile carries what the host is, derived once and read here. The fronting tag
+        # lets the judge read a finding as the edge or the origin and tell the org's own server
+        # from a third-party's, and the framework tag says what a bespoke host is built on. Both
+        # are context, not findings.
+        profile = world.latest("host_profile", node.id)
+        profile_data = profile.payload if profile is not None else None
+        if profile_data is not None and profile_data.fronting:
+            bits.append(f"fronting {profile_data.fronting}, {profile_data.fronting_evidence}")
+        if profile_data is not None and profile_data.frameworks:
+            bits.append("tech: " + ", ".join(profile_data.frameworks))
         line = ", ".join(bits)
         clue = self._takeover_clue(http_data)
         if clue:
             line += f"\n  clue: {clue}"
         if alive and http_data.body:
             line += f"\n  body head: {_snippet(http_data.body)}"
+        if profile_data is not None and profile_data.product:
+            version = f" {profile_data.version}" if profile_data.version else ""
+            line += f"\n  product: {profile_data.product}{version}"
         scan = world.latest("cve_scanned", node.id)
-        if scan is not None and scan.payload.product:
-            version = f" {scan.payload.version}" if scan.payload.version else ""
-            line += f"\n  product: {scan.payload.product}{version}"
-            if scan.payload.cves:
-                basis = _CVE_MATCH.get(scan.payload.match)
-                if basis:
-                    line += f"\n  cve match: {basis}"
+        if scan is not None and scan.payload.cves:
+            basis = _CVE_MATCH.get(scan.payload.match)
+            if basis:
+                line += f"\n  cve match: {basis}"
             # Rank by CVSS descending so the highest-scored vulnerabilities reach the model
             # first. The public database returns them in its own order, not by score, so a
             # blind head slice could drop a critical and show only low ones, and the model

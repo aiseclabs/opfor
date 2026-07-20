@@ -150,6 +150,17 @@ def _load_takeover(path: Path) -> list[tuple[str, str]]:
     ]
 
 
+def _load_fronting(path: Path) -> dict:
+    """The fronting signatures, category to its CNAME suffixes, server tokens, and marker headers,
+    lowercased for matching."""
+    data = yaml.safe_load(path.read_text(encoding="utf-8")) if path.exists() else {}
+    return {
+        str(category): {key: [str(s).lower() for s in (sig.get(key) or [])]
+                        for key in ("cnames", "servers", "headers")}
+        for category, sig in (data or {}).items()
+    }
+
+
 class TriageError(RuntimeError):
     """The model reply could not be parsed into a triage result.
 
@@ -182,14 +193,19 @@ class SurfaceTriage(Triage):
         self._classes = []
         self._clues = []
         self._takeover = []
+        self._fronting: dict = {}
         for directory in knowledge_dirs:
             directory = Path(directory)
             self._classes.extend(_load_classes(directory / "classes"))
             self._clues.extend(_load_clues(directory / "exposures.yaml"))
             self._takeover.extend(_load_takeover(directory / "takeover.yaml"))
+            for category, sig in _load_fronting(directory / "fronting.yaml").items():
+                dst = self._fronting.setdefault(category, {"cnames": [], "servers": [], "headers": []})
+                for key in ("cnames", "servers", "headers"):
+                    dst[key].extend(sig[key])
         self._class_ids = frozenset(c["id"] for c in self._classes)
         self._class_impact = {c["id"]: c["impact"] for c in self._classes}
-        self._renderer = SurfaceRenderer(self._clues, self._takeover)
+        self._renderer = SurfaceRenderer(self._clues, self._takeover, self._fronting)
 
     def judge(self, world: World) -> list[Finding]:
         findings: list[Finding] = []

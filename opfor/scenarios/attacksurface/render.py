@@ -8,10 +8,19 @@ knowledge, it only shapes facts into text, so the render stays separate from the
 
 from __future__ import annotations
 
+import ipaddress
 from urllib.parse import urlparse
 
 from opfor.core import World
 from opfor.scenarios.attacksurface.assets.domain.sources.http import SECURITY_HEADERS
+
+
+def _is_ip(name: str) -> bool:
+    try:
+        ipaddress.ip_address(name)
+        return True
+    except ValueError:
+        return False
 
 _MAX_BODY = 600
 _MAX_LIST = 40
@@ -20,9 +29,38 @@ _MAX_CVES = 10
 
 
 class SurfaceRenderer:
-    def __init__(self, clues, takeover) -> None:
+    def __init__(self, clues, takeover, fronting=None) -> None:
         self._clues = clues
         self._takeover = takeover
+        # Fronting signatures, category -> {cnames, servers, headers}, injected like the clue and
+        # takeover tables so the renderer applies reference data rather than reading knowledge.
+        self._fronting = dict(fronting or {})
+
+    def _fronting_of(self, name, resolved, http) -> tuple[str, str] | None:
+        """The fronting category of a host and the evidence for it, or None when nothing names it.
+
+        A CNAME to a known suffix is the strongest signal, then a server token or marker header on a
+        live host. A bare IP with no name is direct. A host that matches none is left unclassified,
+        an unrecognized front is not proof there is none, so an honest gap beats a wrong guess.
+        """
+        cnames = [c.lower().rstrip(".") for c in (resolved.cnames if resolved else ())]
+        for category, sig in self._fronting.items():
+            for suffix in sig.get("cnames", ()):
+                if any(c == suffix or c.endswith("." + suffix) for c in cnames):
+                    return category, f"CNAME to {suffix}"
+        if http is not None:
+            server = (http.server or "").lower()
+            header_names = {n.lower() for n, _ in http.headers}
+            for category, sig in self._fronting.items():
+                for token in sig.get("servers", ()):
+                    if token in server:
+                        return category, f"server {http.server}"
+                for header in sig.get("headers", ()):
+                    if header.lower() in header_names:
+                        return category, f"header {header}"
+        if _is_ip(name):
+            return "direct", "a bare IP with no fronting name"
+        return None
 
     def units(self, world: World) -> list[str]:
         """Render the enriched world into one report block per host, so the surface can be
@@ -102,6 +140,11 @@ class SurfaceRenderer:
             bits.append("does not resolve, seen only passively")
         if resolved_data is not None and resolved_data.cnames:
             bits.append("CNAME to " + ", ".join(resolved_data.cnames))
+        # A deterministic fronting tag, so the judge reads a finding as describing the edge or the
+        # origin, and tells the org's own server from a third-party's. Context, not a finding.
+        front = self._fronting_of(data.name, resolved_data, http_data)
+        if front is not None:
+            bits.append(f"fronting {front[0]}, {front[1]}")
         line = ", ".join(bits)
         clue = self._takeover_clue(http_data)
         if clue:

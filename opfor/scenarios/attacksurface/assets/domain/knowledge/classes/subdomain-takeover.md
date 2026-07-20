@@ -93,3 +93,7 @@ provider the target belongs to. The PoC is the safe observation, `curl -s <url>`
 the unclaimed page or a `dig <name>` showing the CNAME to the released target, and a note
 that an operator should confirm the dangling record before claiming the resource. Do not
 claim it here.
+
+A host line tagged `fronting vendor` points at third-party hosting, so it is the natural place
+for this risk: the subdomain rides on a provider resource the org may have released. Weigh a
+`fronting vendor` host that also reads dangling or unclaimed as a takeover candidate.

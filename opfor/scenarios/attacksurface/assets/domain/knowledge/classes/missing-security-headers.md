@@ -59,3 +59,8 @@ header.
 Quote the `not set` list from the posture line and name the host type that makes the omission
 matter, an authenticated app or a login. A safe read is `curl -sI <the exact url>` to show
 the response headers, never an attack.
+
+When the host line carries a `fronting cdn` or `fronting cloud` tag, the response headers are
+the edge's, not the origin's, so a missing header may be the proxy's default rather than the
+application's posture. Note that the observation is at the edge and keep the severity modest,
+rather than asserting the origin application ships no protection.

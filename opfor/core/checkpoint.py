@@ -163,15 +163,21 @@ class Checkpoint:
         )
 
 
-def checkpoint(state) -> Checkpoint:
-    """Snapshot a suspended run's live state into a durable checkpoint. The engine imports this
-    lazily to avoid a cycle, `RunState` lives in engine and this module reads only its fields."""
+def checkpoint(state, *, resume_from: Phase | None = None) -> Checkpoint:
+    """Snapshot a run's live state into a durable checkpoint. The engine imports this lazily to
+    avoid a cycle, `RunState` lives in engine and this module reads only its fields.
+
+    `resume_from` overrides the phase a restore re-enters, so a mid-run save records the phase in
+    progress rather than the state's own resume marker, which is only set on suspend. A restore
+    then re-enters that phase, where the done set skips the tasks that already ran.
+    """
+    marker = resume_from if resume_from is not None else state.resume_from
     return Checkpoint(
         version=CHECKPOINT_VERSION,
         scenario=state.scenario.name,
         status="suspended",
         reached=state.reached.name,
-        resume_from=state.resume_from.name if state.resume_from is not None else None,
+        resume_from=marker.name if marker is not None else None,
         done=tuple(sorted(state.done)),
         pending={handle: _task_to_dict(task) for handle, task in state.pending.items()},
         budget={"max_steps": state.budget.max_steps, "steps": state.budget.steps},

@@ -76,7 +76,7 @@ def _resolve_seed(args) -> tuple[str, tuple[str, ...], tuple[str, ...], tuple[st
 
 
 def _run(args) -> int:
-    from opfor.core import Budget, Scope
+    from opfor.core import Budget, Checkpoint, Scope, restore, resume_run
     from opfor.core.engine import run as engine_run
     from opfor.scenarios.attacksurface import seed as attacksurface_seed
     from opfor.scenarios.attacksurface.hostnames import HostScope
@@ -88,7 +88,6 @@ def _run(args) -> int:
                          f"runnable: {', '.join(sorted(seed_builders))}")
 
     name, roots, hosts, scope_hosts = _resolve_seed(args)
-    world = seed_builders[args.scenario](name, domains=roots, hosts=hosts)
     scope = Scope(max_tier=args.tier, matcher=HostScope(hosts=scope_hosts),
                   authorized=args.authorize)
     if getattr(args, "confirm", False) or getattr(args, "reproduce", False):
@@ -101,15 +100,40 @@ def _run(args) -> int:
             reproduce=getattr(args, "reproduce", False), confirm=getattr(args, "confirm", False))
     else:
         scenario = get_scenario(args.scenario)
+
+    outdir = Path(args.output) if args.output else _default_output(name)
+    ckpt = outdir / "checkpoint.json"
     # Retry and the per-task wall-clock are engine rails. They have safe defaults, and the
     # environment overrides them for a flaky network or a slow one, an int and a float in seconds.
-    report = engine_run(scenario, world, scope=scope, budget=Budget(args.budget),
-                        max_retries=_env_int("OPFOR_TASK_RETRIES", 2),
-                        task_timeout=_env_float("OPFOR_TASK_TIMEOUT", 600.0))
+    retries = _env_int("OPFOR_TASK_RETRIES", 2)
+    timeout = _env_float("OPFOR_TASK_TIMEOUT", 600.0)
+
+    if getattr(args, "resume", False) and ckpt.exists():
+        # Continue a run a crash or a suspend left a checkpoint for, from where it stopped rather
+        # than from SEED. The seed args still name the target, the world comes from the checkpoint.
+        state = restore(Checkpoint.from_json(ckpt.read_text(encoding="utf-8")), scenario)
+        state.checkpoint_path = ckpt
+        state.max_retries = retries
+        state.task_timeout = timeout
+        # Raise the budget ceiling to the resumed run's, else it resumes with the exhausted budget
+        # that stopped it and suspends again at once. Already-spent steps still count against it.
+        state.budget.max_steps = args.budget
+        world = state.world
+        report = resume_run(state)
+    else:
+        # The directory must exist before the run so the first checkpoint can be written. A
+        # directory it cannot make disables checkpointing rather than failing the run.
+        try:
+            outdir.mkdir(parents=True, exist_ok=True, mode=0o700)
+        except OSError:
+            ckpt = None
+        world = seed_builders[args.scenario](name, domains=roots, hosts=hosts)
+        report = engine_run(scenario, world, scope=scope, budget=Budget(args.budget),
+                            max_retries=retries, task_timeout=timeout, checkpoint_path=ckpt)
     _print_report(report, world)
-    outdir = _persist(report, world, name, getattr(args, "output", None))
-    if outdir is not None:
-        print(f"written: {outdir}/findings.json, {outdir}/report.md")
+    written = _persist(report, world, name, getattr(args, "output", None))
+    if written is not None:
+        print(f"written: {written}/findings.json, {written}/report.md")
     return 0 if report.closed else 1
 
 
@@ -270,6 +294,8 @@ def main(argv: list[str] | None = None) -> int:
     run.add_argument("--hosts", help="a file of seed hosts, defaults to OPFOR_HOSTS_FILE")
     run.add_argument("--tier", default="recon", help="the scope tier ceiling, default recon")
     run.add_argument("--authorize", action="store_true", help="record the intrusive-tier authorization")
+    run.add_argument("--resume", action="store_true",
+                     help="continue from a checkpoint in the output directory rather than starting fresh")
     run.add_argument("--reproduce", action="store_true",
                      help="raise the terminal to EXPLOIT and replay each grounded safe-read poc, "
                           "read only, also needs --tier intrusive --authorize")

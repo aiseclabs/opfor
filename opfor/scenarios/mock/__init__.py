@@ -99,4 +99,7 @@ MOCK = Scenario(
     }),
     triage=WidgetTriage(),
     terminal=Phase.TRIAGE,
+    # The one payload type, registered so the kernel fixture round-trips through a durable
+    # checkpoint like any real scenario, since a suspended mock run is restored in the tests.
+    payloads={"WidgetData": WidgetData},
 )

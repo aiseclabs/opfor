@@ -23,10 +23,12 @@ invariant rather than only its first half.
 
 from __future__ import annotations
 
+import os
 import threading
 import time
 from concurrent.futures import Future, ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Iterable
 
 from opfor.core.budget import Budget
@@ -66,6 +68,7 @@ class RunState:
     max_retries: int = 2         # extra attempts after the first when a task fails transiently
     task_timeout: float = 600.0  # per-task wall-clock, a generous hang net, not a slow-task cap
     retry_backoff: float = 2.0   # seconds, scaled by attempt number between retries
+    checkpoint_path: Path | None = None  # when set, the run saves its state here as it advances
 
 
 def run(
@@ -79,8 +82,14 @@ def run(
     max_retries: int = 2,
     task_timeout: float = 600.0,
     retry_backoff: float = 2.0,
+    checkpoint_path: Path | None = None,
 ) -> Report:
-    """Run one scenario to closure or suspension against the world, and report."""
+    """Run one scenario to closure or suspension against the world, and report.
+
+    When `checkpoint_path` is set the run saves its state there as it advances, so a crash resumes
+    from the last save rather than from SEED. The file is removed on a clean close and kept on a
+    suspend, so `resume_run` can pick it up.
+    """
     ledger = ledger or Ledger()
     ledger.append("run_start", scenario=scenario.name, terminal=scenario.terminal.name)
     # Author the run's authorization envelope, the tier ceiling and whether intrusive acts
@@ -89,8 +98,35 @@ def run(
     ledger.append("authorization", max_tier=scope.max_tier, authorized=scope.authorized)
     state = RunState(scenario=scenario, world=world, scope=scope, budget=budget,
                      ledger=ledger, max_workers=max_workers, max_retries=max_retries,
-                     task_timeout=task_timeout, retry_backoff=retry_backoff)
+                     task_timeout=task_timeout, retry_backoff=retry_backoff,
+                     checkpoint_path=checkpoint_path)
     return _drive(state)
+
+
+def resume_run(state: RunState) -> Report:
+    """Continue a run restored from a durable checkpoint, to closure or suspension.
+
+    This is the crash-recovery path, distinct from `resume`, which feeds async results. Here the
+    state was rebuilt from a saved checkpoint and simply driven onward from the phase it recorded.
+    """
+    state.ledger.append("resume_run", reached=state.reached.name)
+    return _drive(state)
+
+
+def _save(state: RunState, phase: Phase) -> None:
+    """Write a durable checkpoint mid-run, so a crash resumes from here rather than from SEED.
+
+    The write is atomic, a temp file renamed into place, so a crash mid-write leaves the previous
+    checkpoint intact rather than a truncated one. The saved marker is this phase, so a restore
+    re-enters it, where the done set skips the tasks that already ran, invariant 3.
+    """
+    path = state.checkpoint_path
+    if path is None:
+        return
+    from opfor.core.checkpoint import checkpoint as _checkpoint
+    tmp = path.with_name(path.name + ".tmp")
+    tmp.write_text(_checkpoint(state, resume_from=phase).to_json(), encoding="utf-8")
+    os.replace(tmp, path)
 
 
 def resume(state: RunState, results: dict[str, Iterable[Fact]]) -> Report:
@@ -125,6 +161,9 @@ def _drive(state: RunState) -> Report:
         if s.resume_from is not None and phase < s.resume_from:
             continue
         s.ledger.append("phase_enter", phase=phase.name)
+        # Save on entry so a crash before this phase does any work still resumes here, with every
+        # earlier phase's facts and findings already on the checkpoint.
+        _save(s, phase)
         try:
             suspended = _run_phase(s, phase)
         except Exception as exc:
@@ -141,6 +180,10 @@ def _drive(state: RunState) -> Report:
         s.reached = phase
 
     s.ledger.append("run_end", status=CLOSED, reached=s.reached.name, findings=len(s.findings))
+    # A closed run needs no resume, so its checkpoint is removed rather than left stale. A suspend
+    # keeps the file, that is the resume story, and an error keeps it for inspection.
+    if s.checkpoint_path is not None:
+        s.checkpoint_path.unlink(missing_ok=True)
     return _report(s, CLOSED)
 
 
@@ -202,6 +245,9 @@ def _run_phase(state: RunState, phase: Phase) -> Report | None:
 
         _run_batch(s.scenario, s.world, ready, s.budget, s.done, s.pending, s.ledger,
                    s.notes, s.max_workers, s.max_retries, s.task_timeout, s.retry_backoff)
+        # Save after each batch is absorbed, so a crash mid-phase loses at most one batch of a long
+        # phase rather than the whole phase, and a restore re-enters here with the done set full.
+        _save(s, phase)
 
     if s.pending:
         s.notes.append(f"awaiting async results: {len(s.pending)}")

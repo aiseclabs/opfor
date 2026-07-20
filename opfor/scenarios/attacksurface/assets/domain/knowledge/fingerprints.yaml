@@ -55,3 +55,15 @@ products:
   - product: Prometheus
     cpe: prometheus:prometheus
     markers: ["prometheus time series collection"]
+
+  - product: SonarQube
+    cpe: sonarsource:sonarqube
+    markers: ["sonarqube"]
+
+  - product: Argo CD
+    cpe: argoproj:argo_cd
+    markers: ["argocd", "argo-cd"]
+
+  - product: HashiCorp Consul
+    cpe: hashicorp:consul
+    markers: ["/v1/agent/self"]

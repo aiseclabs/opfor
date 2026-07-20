@@ -220,14 +220,6 @@ def _ports(name, addresses=()):
     return {"reachable": True, "scanned": 24, "open": []}
 
 
-def _candidate(name, terms=()):
-    # By default no candidate root is proposed from the org name, so bare-name discovery is a
-    # quiet no-op. A test overrides this seam to drive a proposal, and the pivot seam to confirm
-    # or reject a weak-tie one.
-    from opfor.scenarios.attacksurface.assets.domain.types import ProposalResult
-    return ProposalResult()
-
-
 def _make(**over):
     """Build the scenario with every seam faked, so no test touches the network or the
     model. A MockProvider stands in for the triage model, returning an empty result by
@@ -236,8 +228,7 @@ def _make(**over):
     seams = dict(search_fn=_search, repos_fn=_repos, enumerate_fn=_enumerate, pivot_fn=_pivot,
                  resolve_fn=_resolve, probe_fn=_probe, fetch_fn=_fetch, fetch_doc_fn=_fetch_doc,
                  introspect_fn=_introspect, wayback_fn=_wayback, identify_fn=_identify, cve_fn=_cves,
-                 probe_url_fn=_probe_url, dns_fn=_dns, tls_fn=_tls, ports_fn=_ports,
-                 candidate_fn=_candidate)
+                 probe_url_fn=_probe_url, dns_fn=_dns, tls_fn=_tls, ports_fn=_ports)
     seams.update(over)
     seams.setdefault("provider", MockProvider(default='{"findings": []}'))
     seams.setdefault("model", "test-model")
@@ -343,7 +334,6 @@ __all__ = [
     '_dns',
     '_tls',
     '_ports',
-    '_candidate',
     '_make',
     '_scenario',
     '_seed',

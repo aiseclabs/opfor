@@ -349,29 +349,9 @@ def _permute_rule(world: World) -> list[Task]:
     return tasks
 
 
-def _confirm_candidates_rule(world: World) -> list[Task]:
-    """Confirm the proposed candidate roots once the proposal exists, once per org.
-
-    Gated on the org's `root_candidates` fact so it runs after the proposal is made, and on its
-    own `root_candidates_confirmed` fact so it runs once. It reads a public log, so `Task` mints
-    it with no scope host and scope waves it through as osint.
-    """
-    tasks: list[Task] = []
-    for node in world.nodes("org"):
-        if not class_enabled(node.payload, "domain"):
-            continue
-        if not world.has_fact(node.id, "root_candidates"):
-            continue
-        if world.has_fact(node.id, "root_candidates_confirmed"):
-            continue
-        tasks.append(Task(capability="confirm_candidate_roots", node=node.id))
-    return tasks
-
-
-def map_rules(*, with_registrant: bool, with_candidates: bool = False):
+def map_rules(*, with_registrant: bool):
     """The domain MAP rules, discovery and the evidence pivots. The registrant pivot rides
-    only when its keyed source is wired, so a keyless run omits it rather than failing. The
-    bare-name candidate proposal and its confirmer ride only when the candidate seam is wired."""
+    only when its keyed source is wired, so a keyless run omits it rather than failing."""
     rules = [
         each("org", run="discover_domains", unless_fact="domains_discovered",
              where=lambda p: class_enabled(p, "domain")),
@@ -386,10 +366,6 @@ def map_rules(*, with_registrant: bool, with_candidates: bool = False):
     if with_registrant:
         rules.append(each("org", run="domain_registrant", unless_fact="registrant",
                           where=lambda p: class_enabled(p, "domain")))
-    if with_candidates:
-        rules.append(each("org", run="discover_candidate_roots", unless_fact="root_candidates",
-                          where=lambda p: class_enabled(p, "domain")))
-        rules.append(_confirm_candidates_rule)
     return rules
 
 

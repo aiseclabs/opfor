@@ -16,9 +16,7 @@ from opfor.scenarios.attacksurface.assets.domain.capabilities import (
     BackupScan,
     BucketScan,
     CVELookup,
-    ConfirmRootCandidates,
     DeclaredRoots,
-    DiscoverCandidateRoots,
     DiscoverDomains,
     DNSEmailSecurity,
     DomainPivot,
@@ -44,14 +42,11 @@ KNOWLEDGE = Path(__file__).resolve().parent / "knowledge"
 
 def assemble(*, enumerate_fn, pivot_fn, resolve_fn, probe_fn, fetch_fn, fetch_doc_fn,
              introspect_fn, wayback_fn, probe_url_fn, dns_fn, tls_fn, ports_fn,
-             reverse_whois_fn=None, identify_fn=None, cve_fn=None,
-             candidate_fn=None) -> ClassBundle:
+             reverse_whois_fn=None, identify_fn=None, cve_fn=None) -> ClassBundle:
     """The domain class's contribution. The seams are the passive and active sources,
     injected so a test drives the class with fixtures. The registrant pivot rides only when
     its keyed source is wired, so a keyless run omits it rather than failing per root. The
-    CVE scan rides only when both its identify and lookup seams are wired. The bare-name root
-    proposal rides only when its candidate seam is wired, and it confirms every proposal with
-    the same cert-SAN evidence the pivot uses, so a guess never enters the scanned surface."""
+    CVE scan rides only when both its identify and lookup seams are wired."""
     capabilities = [
         DiscoverDomains(),
         DomainPivot(pivot_fn),
@@ -78,17 +73,13 @@ def assemble(*, enumerate_fn, pivot_fn, resolve_fn, probe_fn, fetch_fn, fetch_do
         capabilities.append(DomainRegistrant(reverse_whois_fn))
     if identify_fn is not None and cve_fn is not None:
         capabilities.append(CVELookup(identify_fn, cve_fn))
-    if candidate_fn is not None:
-        capabilities.append(DiscoverCandidateRoots(candidate_fn))
-        capabilities.append(ConfirmRootCandidates(pivot_fn))
     # The plan config is loaded here, at assemble time, not at planner import, so the content
     # root stays swappable and importing the class triggers no file IO.
     config = planner.load_plan_config(KNOWLEDGE)
     return ClassBundle(
         name="domain",
         capabilities=tuple(capabilities),
-        map_rules=tuple(planner.map_rules(with_registrant=reverse_whois_fn is not None,
-                                          with_candidates=candidate_fn is not None)),
+        map_rules=tuple(planner.map_rules(with_registrant=reverse_whois_fn is not None)),
         enrich_rules=tuple(planner.enrich_rules(
             config, with_cve=identify_fn is not None and cve_fn is not None)),
         knowledge_dir=KNOWLEDGE,

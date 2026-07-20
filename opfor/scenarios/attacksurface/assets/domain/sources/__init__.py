@@ -27,10 +27,6 @@ from opfor.scenarios.attacksurface.assets.domain.sources.http import (
 from opfor.scenarios.attacksurface.assets.domain.sources.ports import port_scan
 from opfor.scenarios.attacksurface.assets.domain.sources.tls import tls_probe
 from opfor.scenarios.attacksurface.assets.domain.sources.roots import (
-    github_declared_roots,
-    npm_org_roots,
-    propose_roots,
-    pypi_org_roots,
     root_from_redirect,
     roots_from_dmarc,
 )

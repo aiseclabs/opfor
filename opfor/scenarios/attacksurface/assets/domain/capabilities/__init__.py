@@ -7,9 +7,7 @@ from opfor.scenarios.attacksurface.assets.domain.capabilities.artifacts import (
 )
 from opfor.scenarios.attacksurface.assets.domain.capabilities.cves import CVELookup
 from opfor.scenarios.attacksurface.assets.domain.capabilities.discovery import (
-    ConfirmRootCandidates,
     DeclaredRoots,
-    DiscoverCandidateRoots,
     DiscoverDomains,
     DomainPivot,
     DomainRegistrant,
@@ -39,9 +37,7 @@ __all__ = [
     "BackupScan",
     "BucketScan",
     "CVELookup",
-    "ConfirmRootCandidates",
     "DeclaredRoots",
-    "DiscoverCandidateRoots",
     "DiscoverDomains",
     "DNSEmailSecurity",
     "DomainPivot",

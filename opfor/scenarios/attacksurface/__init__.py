@@ -112,7 +112,6 @@ def build(
     ports_fn=domain_src.port_scan,
     identify_fn=None,
     cve_fn=domain_src.nvd_cves,
-    candidate_fn=_DEFAULT,
     provider: Provider | None = None,
     model: str | None = None,
     challenger: Provider | None = None,
@@ -128,23 +127,6 @@ def build(
     # without a key.
     if reverse_whois_fn is _DEFAULT:
         reverse_whois_fn = domain_src.reverse_whois if config.reverse_whois_key() else None
-    if candidate_fn is _DEFAULT:
-        # Bare-name root proposal is opt-in. It unions several free sources per run, and each
-        # weak-tie candidate costs a certificate lookup to confirm, so it stays off unless the
-        # operator asks. When on, the proposal reuses the GitHub org search the GitHub class wires.
-        if config.root_candidates_enabled():
-            token = config.github_token()
-
-            def candidate_fn(name, terms):
-                sources = (
-                    ("github", lambda: domain_src.github_declared_roots(
-                        name, lambda n: search_fn(n, token))),
-                    ("npm", lambda: domain_src.npm_org_roots(name)),
-                    ("pypi", lambda: domain_src.pypi_org_roots(name)),
-                )
-                return domain_src.propose_roots(name, terms, sources=sources)
-        else:
-            candidate_fn = None
 
     # Triage is model-backed. Build the provider and model the environment selects, keyless on
     # the operator's Claude Code subscription by default, and let a test inject its own.
@@ -170,7 +152,7 @@ def build(
                         introspect_fn=introspect_fn, wayback_fn=wayback_fn,
                         probe_url_fn=probe_url_fn, dns_fn=dns_fn, tls_fn=tls_fn,
                         ports_fn=ports_fn, reverse_whois_fn=reverse_whois_fn,
-                        identify_fn=identify_fn, cve_fn=cve_fn, candidate_fn=candidate_fn),
+                        identify_fn=identify_fn, cve_fn=cve_fn),
         github.assemble(search_fn=search_fn, repos_fn=repos_fn),
     ]
     capabilities = tuple(cap for bundle in bundles for cap in bundle.capabilities)

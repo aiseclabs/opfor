@@ -333,9 +333,13 @@ class CVE:
 class CVEScan:
     """The result of identifying a host's product and looking up its known vulnerabilities.
     `product` is empty when nothing identifiable was found, a real negative, not a failure.
-    The CVE list is raw, triage decides which matter and how severe given the surface."""
+    The CVE list is raw, triage decides which matter and how severe given the surface. `match`
+    is the basis the lookup found the list on, `version` tied to the affected-version range,
+    `product` the product's whole history, or `keyword` a product-name text match, so triage
+    weighs a name match apart from a version match rather than trusting a bare list."""
 
     product: str = ""
     version: str = ""
     cpe: str = ""
+    match: str = ""
     cves: tuple[CVE, ...] = ()

@@ -40,17 +40,20 @@ class CVELookup(Capability):
         version = str(found.get("version", "")).strip()
         cpe = str(found.get("cpe", "")).strip()
         cves: tuple[CVE, ...] = ()
+        match = ""
         if product:
             try:
                 raw = self._cve(product, version, cpe)
             except Exception as exc:
                 return net_failed("cve lookup", exc)
+            # The whole list is found on one basis per lookup, so the scan records it once.
+            match = str(raw[0].get("match", "")) if raw else ""
             cves = tuple(
                 CVE(id=str(c.get("id", "")), cvss=c.get("cvss"),
                     severity=str(c.get("severity", "")), summary=str(c.get("summary", "")),
                     references=tuple(str(u) for u in c.get("references", ())))
                 for c in raw if c.get("id"))
-        payload = CVEScan(product=product, version=version, cpe=cpe, cves=cves)
+        payload = CVEScan(product=product, version=version, cpe=cpe, match=match, cves=cves)
         return Done(facts=(Fact(kind="cve_scanned", about=task.node, payload=payload),))
 
     def _evidence(self, world: World, host) -> str:

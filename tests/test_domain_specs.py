@@ -247,7 +247,7 @@ def test_nvd_falls_back_to_a_product_keyword_when_the_cpe_match_is_empty(monkeyp
 
     monkeypatch.setattr(domains, "_nvd_fetch", fake_fetch)
     result = domains.nvd_cves("litellm", "1.90.0", cpe="berriai:litellm")
-    assert result == [{"id": "CVE-2026-40217"}]
+    assert result == [{"id": "CVE-2026-40217", "match": "keyword"}]
     assert len(queries) == 2
     assert queries[0].startswith("virtualMatchString")
     assert queries[1] == "keywordSearch=litellm"
@@ -259,9 +259,22 @@ def test_nvd_cpe_match_with_results_does_not_fall_back(monkeypatch):
     monkeypatch.setattr(domains, "_nvd_fetch",
                         lambda q: queries.append(q) or [{"id": "CVE-2020-0001"}])
     result = domains.nvd_cves("grafana", "9.0.0", cpe="grafana:grafana")
-    assert result == [{"id": "CVE-2020-0001"}]
+    assert result == [{"id": "CVE-2020-0001", "match": "version"}]
     assert len(queries) == 1
     assert queries[0].startswith("virtualMatchString")
+
+def test_nvd_tags_the_match_basis_version_product_or_keyword(monkeypatch):
+    """Each record carries how it was matched, so triage weighs a version match apart from a
+    product-wide or a bare product-name match."""
+    from opfor.scenarios.attacksurface.assets.domain.sources import passive as domains
+
+    monkeypatch.setattr(domains, "_nvd_fetch", lambda q: [{"id": "CVE-1"}])
+    # a cpe match with a version is tied to the affected-version range
+    assert domains.nvd_cves("grafana", "9.0.0", cpe="grafana:grafana")[0]["match"] == "version"
+    # a cpe match without a version is the product's whole history
+    assert domains.nvd_cves("grafana", "", cpe="grafana:grafana")[0]["match"] == "product"
+    # no cpe means a keyword text search on the product name
+    assert domains.nvd_cves("grafana", "9.0.0")[0]["match"] == "keyword"
 
 def test_nvd_throttle_serializes_calls_to_stay_under_the_rate_limit(monkeypatch):
     from opfor.scenarios.attacksurface.assets.domain.sources import passive as domains
@@ -295,6 +308,19 @@ def test_cve_scan_records_the_identified_product_and_its_cves():
     assert scans, "expected a cve_scanned fact carrying a product"
     assert scans[0].product == "grafana" and scans[0].version == "8.0.0"
     assert any(c.id == "CVE-2021-39226" and c.severity == "CRITICAL" for c in scans[0].cves)
+
+def test_cve_scan_records_the_match_basis_from_the_lookup():
+    # the scan records how the lookup matched its list, once, so triage weighs a name match
+    # apart from a version match rather than trusting a bare list
+    def identify(evidence):
+        return {"product": "grafana", "version": "", "cpe": "grafana:grafana"}
+
+    def cves(product, version, cpe=""):
+        return [{"id": "CVE-2021-39226", "match": "product"}]
+
+    _report, _scenario, world = _run_capturing(identify_fn=identify, cve_fn=cves)
+    scans = [f.payload for f in world.facts("cve_scanned") if f.payload.product]
+    assert scans and scans[0].match == "product"
 
 def test_cve_scan_fails_loud_when_identification_errors():
     # a model or lookup error is a loud Failed, never a silent empty result, invariant 5
@@ -356,3 +382,20 @@ def test_cve_render_ranks_by_cvss_and_notes_truncation():
     assert "CVE-CRIT" in report
     # the truncation is stated rather than silent
     assert "more CVE(s) not shown" in report
+
+def test_cve_render_states_a_weak_match_basis_so_the_judge_weighs_it():
+    from opfor.core import Fact
+    from opfor.scenarios.attacksurface.assets.domain.types import CVE, CVEScan, DomainData, HTTP, Resolved
+    from opfor.scenarios.attacksurface.render import SurfaceRenderer
+
+    world = World()
+    world.add(Node(id="domain:h", type="domain", payload=DomainData(name="h", root="h", source="s")))
+    world.absorb([
+        Fact(kind="resolved", about="domain:h", payload=Resolved(resolvable=True, addresses=("1.2.3.4",))),
+        Fact(kind="http", about="domain:h", payload=HTTP(alive=True, status=200, url="https://h/")),
+    ])
+    cves = (CVE(id="CVE-1", cvss=7.0, severity="HIGH", summary="x"),)
+    world.absorb([Fact(kind="cve_scanned", about="domain:h",
+                       payload=CVEScan(product="acme", version="", match="keyword", cves=cves))])
+    report = "\n".join(SurfaceRenderer(clues=[], takeover=[]).units(world))
+    assert "cve match: matched by product name only" in report

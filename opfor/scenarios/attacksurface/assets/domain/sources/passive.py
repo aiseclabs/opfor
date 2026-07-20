@@ -312,15 +312,22 @@ def _nvd_wait(interval: float) -> None:
 def nvd_cves(product: str, version: str, cpe: str = "") -> list[dict]:
     """CVEs affecting a product from the NVD 2.0 API, most a bounded page.
 
-    A cpe as a `vendor:product` string matches the affected set precisely, including a range
-    the version falls in, which the model supplies when it knows the product. A cpe match
-    that names nothing, a wrong vendor guess or a cve not tagged with the cpe, falls back to
-    a keyword search on the product so a real advisory is not missed. The keyword search uses
-    the product name alone and never the version, since NVD keyword search matches the cve
-    description text, and a version string almost never appears there, so adding it would
-    return nothing. Whether a returned cve applies to this version and how severe is triage's
-    judgment, which reads the version from the surface, not this seam. Querying NVD is a
-    public read that never touches the target, keyless by default and higher-rate with a key.
+    Each returned record carries a `match` tag naming how it was found, so triage weighs how
+    precisely it applies rather than trusting a bare list, the honest way past a product-name
+    match read as a version match. Three bases, strongest first:
+
+    - `version`, a cpe match with the running version, so the database tied the cve to the
+      affected-version range. The model supplies the cpe when it knows the product.
+    - `product`, a cpe match without a version, so the list is the product's whole history,
+      not filtered to what is running.
+    - `keyword`, a fallback text search on the product name when the cpe match named nothing,
+      a wrong vendor guess or a cve not tagged with the cpe, so a real advisory is not missed.
+      It never uses the version, since NVD keyword search matches the cve description text and
+      a version string almost never appears there.
+
+    Whether a returned cve applies and how severe is triage's judgment, this seam reports the
+    raw records and the basis. Querying NVD is a public read that never touches the target,
+    keyless by default and higher-rate with a key.
     """
     if not product:
         return []
@@ -329,8 +336,15 @@ def nvd_cves(product: str, version: str, cpe: str = "") -> list[dict]:
         match = urllib.parse.quote(f"cpe:2.3:a:{cpe}:{version_field}:*:*:*:*:*:*:*", safe="")
         results = _nvd_fetch(f"virtualMatchString={match}")
         if results:
-            return results
-    return _nvd_fetch(f"keywordSearch={urllib.parse.quote(product)}")
+            return _tag_match(results, "version" if version else "product")
+    return _tag_match(_nvd_fetch(f"keywordSearch={urllib.parse.quote(product)}"), "keyword")
+
+
+def _tag_match(results: list[dict], basis: str) -> list[dict]:
+    """Tag each cve record with the basis on which the lookup matched it."""
+    for record in results:
+        record["match"] = basis
+    return results
 
 
 def _nvd_fetch(query: str) -> list[dict]:

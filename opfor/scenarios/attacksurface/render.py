@@ -27,6 +27,14 @@ _MAX_LIST = 40
 # CVEs shown per host, most the lookup returns, so a noisy product does not flood the prompt.
 _MAX_CVES = 10
 
+# How the CVE lookup matched its list, phrased so the judge weighs a name match apart from a
+# version match. Strongest to weakest, see the known-vulnerability class.
+_CVE_MATCH = {
+    "version": "matched to this version's affected range",
+    "product": "matched to the product across all versions, not filtered to the running version",
+    "keyword": "matched by product name only, not the version",
+}
+
 
 class SurfaceRenderer:
     def __init__(self, clues, takeover, fronting=None) -> None:
@@ -155,6 +163,10 @@ class SurfaceRenderer:
         if scan is not None and scan.payload.product:
             version = f" {scan.payload.version}" if scan.payload.version else ""
             line += f"\n  product: {scan.payload.product}{version}"
+            if scan.payload.cves:
+                basis = _CVE_MATCH.get(scan.payload.match)
+                if basis:
+                    line += f"\n  cve match: {basis}"
             # Rank by CVSS descending so the highest-scored vulnerabilities reach the model
             # first. The public database returns them in its own order, not by score, so a
             # blind head slice could drop a critical and show only low ones, and the model

@@ -5,6 +5,7 @@ from __future__ import annotations
 from opfor.core import Capability, Done, Fact, Outcome, Phase, Task, World
 from opfor.scenarios.attacksurface.assets.domain.capabilities.helpers import (
     _MAX_SOURCE_MAPS,
+    _baseline,
     _coverage_gap,
     _distinct,
     net_failed,
@@ -167,7 +168,7 @@ class BackupScan(Capability):
         rename = tuple(task.params.get("rename") or ())
         swap = tuple(task.params.get("swap") or ())
         candidates = backup_targets(world, host, append, rename, swap)
-        baseline = self._baseline(name, addresses)
+        baseline = _baseline(self._fetch, self._BASELINE_PATHS, name, addresses)
         hits: list[BackupHit] = []
         skipped: list[str] = []
         for path in candidates:
@@ -199,13 +200,3 @@ class BackupScan(Capability):
             facts.append(Fact(kind="coverage_gap", about=task.node, payload=gap))
         return Done(facts=tuple(facts))
 
-    def _baseline(self, name, addresses) -> dict:
-        """The host's answer to a backup name that does not exist, its catch-all signature."""
-        for path in self._BASELINE_PATHS:
-            try:
-                result = self._fetch(name, addresses, path)
-            except Exception:
-                continue
-            if result.get("status") is not None:
-                return result
-        return {"status": None, "content_type": "", "body": ""}

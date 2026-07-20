@@ -6,6 +6,7 @@ from urllib.parse import urlparse
 
 from opfor.core import Capability, Done, Fact, Node, Outcome, Phase, Task, World
 from opfor.scenarios.attacksurface.assets.domain.capabilities.helpers import (
+    _baseline,
     _coverage_gap,
     _distinct,
     _home_paths,
@@ -238,7 +239,7 @@ class Endpoints(Capability):
         prefixes = tuple(task.params.get("static_prefixes") or ())
         cleaned = self._clean(seed, suffixes, prefixes)
         candidates = cleaned[: self._MAX_CANDIDATES]
-        baseline = self._baseline(name, addresses)
+        baseline = _baseline(self._fetch, self._BASELINE_PATHS, name, addresses)
         endpoints: list[Node] = []
         skipped: list[str] = []
         if baseline.get("status") is None and candidates:
@@ -297,13 +298,3 @@ class Endpoints(Capability):
                 out.append(path)
         return out
 
-    def _baseline(self, name, addresses) -> dict:
-        """The host's answer to a path that does not exist, its catch-all signature."""
-        for path in self._BASELINE_PATHS:
-            try:
-                result = self._fetch(name, addresses, path)
-            except Exception:
-                continue
-            if result.get("status") is not None:
-                return result
-        return {"status": None, "content_type": "", "body": ""}

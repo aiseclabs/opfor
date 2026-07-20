@@ -6,7 +6,12 @@ import json
 from urllib.parse import urlparse
 
 from opfor.core import Capability, Done, Fact, Failed, Outcome, Phase, Task, World
-from opfor.scenarios.attacksurface.assets.domain.capabilities.helpers import _coverage_gap, _distinct, net_failed
+from opfor.scenarios.attacksurface.assets.domain.capabilities.helpers import (
+    _baseline,
+    _coverage_gap,
+    _distinct,
+    net_failed,
+)
 from opfor.scenarios.attacksurface.assets.domain.capabilities.http import Endpoints
 from opfor.scenarios.attacksurface.assets.domain.sources import (
     info_from_openapi,
@@ -99,7 +104,7 @@ class ProbeSpec(Capability):
         endpoint = world.node(task.node).payload
         host = urlparse(endpoint.url).hostname or ""
         addresses = self._addresses(world, host)
-        baseline = self._baseline(host, addresses)
+        baseline = _baseline(self._fetch, Endpoints._BASELINE_PATHS, host, addresses)
         operations: list[SpecOperation] = []
         for entry in list(spec.payload.paths)[: self._MAX_OPERATIONS]:
             methods, path = split_operation(entry)
@@ -139,16 +144,6 @@ class ProbeSpec(Capability):
                 resolved = world.latest("resolved", node.id)
                 return resolved.payload.addresses if resolved else ()
         return ()
-
-    def _baseline(self, host, addresses) -> dict:
-        for path in Endpoints._BASELINE_PATHS:
-            try:
-                result = self._fetch(host, addresses, path)
-            except Exception:
-                continue
-            if result.get("status") is not None:
-                return result
-        return {"status": None, "content_type": "", "body": ""}
 
 
 class GraphQLIntrospect(Capability):

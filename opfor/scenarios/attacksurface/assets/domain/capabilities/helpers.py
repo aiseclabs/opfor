@@ -50,6 +50,21 @@ def _is_static_asset(path: str, suffixes, prefixes) -> bool:
     return lowered.endswith(tuple(suffixes)) or lowered.startswith(tuple(prefixes))
 
 
+def _baseline(fetch, paths, name, addresses) -> dict:
+    """A host's answer to paths that do not exist, its catch-all signature, so `_distinct` can
+    tell a real endpoint from a blanket 200 or a uniform redirect. The first path that answers
+    with any status wins, and an empty signature is returned when none does. The caller injects
+    its own fetch and its own unlikely paths, so the probe reads the target the caller scopes."""
+    for path in paths:
+        try:
+            result = fetch(name, addresses, path)
+        except Exception:
+            continue
+        if result.get("status") is not None:
+            return result
+    return {"status": None, "content_type": "", "body": ""}
+
+
 def _distinct(result: dict, baseline: dict) -> bool:
     """Whether a response is a real endpoint rather than the host's catch-all.
 

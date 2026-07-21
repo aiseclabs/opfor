@@ -1,5 +1,4 @@
 ---
-kind: service
 cpe: elastic:elasticsearch
 markers:
   - "you know, for search"

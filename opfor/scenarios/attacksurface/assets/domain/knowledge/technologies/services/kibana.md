@@ -1,5 +1,4 @@
 ---
-kind: service
 cpe: elastic:kibana
 markers:
   - "kbn-name:"

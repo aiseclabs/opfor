@@ -13,19 +13,19 @@ from __future__ import annotations
 
 from opfor.scenarios.attacksurface.assets.domain import KNOWLEDGE
 from opfor.scenarios.attacksurface.assets.domain.sources.profile import (
-    classify_fronting,
-    load_fronting,
+    classify_edge,
+    load_edge,
 )
 from opfor.scenarios.attacksurface.assets.domain.types import HTTP, Resolved
 
-_FRONTING = load_fronting(KNOWLEDGE / "fingerprints")
+_FRONTING = load_edge(KNOWLEDGE / "edge")
 
 
 def _classify(name, *, cnames=(), server="", headers=()):
     resolved = Resolved(resolvable=True, addresses=("1.2.3.4",), cnames=tuple(cnames))
     http = HTTP(alive=True, status=200, url=f"https://{name}/", server=server, title="",
                 body="", location="", headers=tuple(headers))
-    return classify_fronting(name, resolved, http, _FRONTING)
+    return classify_edge(name, resolved, http, _FRONTING)
 
 
 def test_cname_to_cdn_tags_cdn():
@@ -42,11 +42,11 @@ def test_header_marker_tags_cdn_without_a_cname():
 
 
 def test_a_bare_ip_is_direct():
-    assert classify_fronting("203.0.113.5", None, None, _FRONTING)[0] == "direct"
+    assert classify_edge("203.0.113.5", None, None, _FRONTING)[0] == "direct"
 
 
 def test_an_unrecognized_host_is_left_untagged_not_guessed_direct():
-    assert classify_fronting("app.example.com", None,
+    assert classify_edge("app.example.com", None,
                              HTTP(alive=True, status=200, url="https://app.example.com/",
                                   server="nginx", title="", body="", location="", headers=()),
                              _FRONTING) is None

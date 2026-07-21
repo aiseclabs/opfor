@@ -21,7 +21,7 @@ from opfor.scenarios.attacksurface.types import Org
 from opfor.scenarios.attacksurface.assets.domain import KNOWLEDGE
 from opfor.scenarios.attacksurface.assets.domain.sources import fingerprint, load_services
 
-_TABLE = load_services(KNOWLEDGE / "fingerprints")
+_TABLE = load_services(KNOWLEDGE / "technologies" / "services")
 
 
 def _fingerprint_only(evidence: str) -> dict:

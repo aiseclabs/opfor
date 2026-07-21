@@ -1,5 +1,5 @@
 """Deterministic host classification helpers: the shared source functions the report and the
-profiling capability both use, so framework and fronting detection has one implementation.
+profiling capability both use, so framework and edge detection has one implementation.
 """
 
 from __future__ import annotations
@@ -8,7 +8,7 @@ import re
 
 from opfor.scenarios.attacksurface.assets.domain.sources.profile import (
     classify_frameworks,
-    classify_fronting,
+    classify_edge,
     is_ip,
 )
 from opfor.scenarios.attacksurface.assets.domain.types import HTTP, Resolved
@@ -40,15 +40,15 @@ def test_classify_frameworks_is_empty_for_no_response_or_no_match():
     assert classify_frameworks(_http(server="nginx", body="<html>hi</html>"), _FRAMEWORKS) == []
 
 
-def test_classify_fronting_prefers_cname_then_marker_then_bare_ip():
+def test_classify_edge_prefers_cname_then_marker_then_bare_ip():
     resolved = Resolved(resolvable=True, addresses=("1.2.3.4",), cnames=("x.cloudflare.net",))
-    assert classify_fronting("www.h", resolved, _http(), _FRONTING) == ("cdn", "CNAME to cloudflare.net")
-    assert classify_fronting("api.h", None, _http(headers=(("cf-ray", "1"),)), _FRONTING)[0] == "cdn"
-    assert classify_fronting("203.0.113.5", None, _http(), _FRONTING)[0] == "direct"
+    assert classify_edge("www.h", resolved, _http(), _FRONTING) == ("cdn", "CNAME to cloudflare.net")
+    assert classify_edge("api.h", None, _http(headers=(("cf-ray", "1"),)), _FRONTING)[0] == "cdn"
+    assert classify_edge("203.0.113.5", None, _http(), _FRONTING)[0] == "direct"
 
 
-def test_classify_fronting_leaves_an_unrecognized_named_host_untagged():
-    assert classify_fronting("app.h", None, _http(server="nginx"), _FRONTING) is None
+def test_classify_edge_leaves_an_unrecognized_named_host_untagged():
+    assert classify_edge("app.h", None, _http(server="nginx"), _FRONTING) is None
 
 
 def test_is_ip():
@@ -56,7 +56,7 @@ def test_is_ip():
     assert not is_ip("example.com")
 
 
-def test_profile_host_records_product_frameworks_and_fronting_in_one_fact():
+def test_profile_host_records_product_frameworks_and_edge_in_one_fact():
     from opfor.core import Fact, Node, Task, World
     from opfor.scenarios.attacksurface.assets.domain.capabilities import ProfileHost
     from opfor.scenarios.attacksurface.assets.domain.types import DomainData, Resolved
@@ -75,10 +75,10 @@ def test_profile_host_records_product_frameworks_and_fronting_in_one_fact():
     assert out.facts[0].kind == "host_profile"
     assert profile.product == "Grafana" and profile.version == "9.3.2"
     assert profile.frameworks == ("Next.js",)
-    assert profile.fronting == "cdn"
+    assert profile.edge == "cdn"
 
 
-def test_report_renders_product_tech_and_fronting_from_the_host_profile_fact():
+def test_report_renders_product_tech_and_edge_from_the_host_profile_fact():
     from opfor.core import Fact, Node, World
     from opfor.scenarios.attacksurface.render import SurfaceRenderer
     from opfor.scenarios.attacksurface.assets.domain.types import DomainData, HostProfile, Resolved
@@ -90,9 +90,9 @@ def test_report_renders_product_tech_and_fronting_from_the_host_profile_fact():
     world.absorb([Fact(kind="http", about="domain:h", payload=_http(server="nginx"))])
     world.absorb([Fact(kind="host_profile", about="domain:h", payload=HostProfile(
         product="Grafana", version="9.3.2", frameworks=("Next.js",),
-        fronting="cdn", fronting_evidence="CNAME to cloudflare.net"))])
+        edge="cdn", edge_evidence="CNAME to cloudflare.net"))])
     report = "\n".join(SurfaceRenderer([], []).units(world))
-    assert "fronting cdn, CNAME to cloudflare.net" in report
+    assert "edge cdn, CNAME to cloudflare.net" in report
     assert "tech: Next.js" in report
     assert "product: Grafana 9.3.2" in report
 

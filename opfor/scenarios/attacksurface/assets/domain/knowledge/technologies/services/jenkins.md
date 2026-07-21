@@ -1,5 +1,4 @@
 ---
-kind: service
 cpe: jenkins:jenkins
 markers:
   - "x-jenkins:"

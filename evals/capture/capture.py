@@ -59,7 +59,7 @@ def _paths() -> list[str]:
     capture that read only `paths.yaml` would silently miss those endpoints, invariant 5."""
     data = yaml.safe_load((KNOWLEDGE / "paths.yaml").read_text(encoding="utf-8")) or {}
     paths = [str(p) for p in (data.get("paths") or []) if str(p).startswith("/")]
-    for endpoint in service_probe_paths(load_services(KNOWLEDGE / "fingerprints")):
+    for endpoint in service_probe_paths(load_services(KNOWLEDGE / "technologies" / "services")):
         if endpoint not in paths:
             paths.append(endpoint)
     return paths

@@ -1,5 +1,4 @@
 ---
-kind: fronting
 category: cdn
 cnames:
   - cloudflare.net

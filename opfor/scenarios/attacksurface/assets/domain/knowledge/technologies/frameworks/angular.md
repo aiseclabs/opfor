@@ -1,5 +1,4 @@
 ---
-kind: framework
 body:
   - "ng-version="
   - "_nghost-"

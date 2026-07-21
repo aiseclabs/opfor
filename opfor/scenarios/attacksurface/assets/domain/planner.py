@@ -304,7 +304,7 @@ def _bucket_rule(world: World) -> list[Task]:
 
 def _profile_rule(world: World) -> list[Task]:
     """Profile every live host once its surface is enumerated, deriving its product, front-end
-    frameworks, and fronting into one host_profile fact.
+    frameworks, and edge into one host_profile fact.
 
     Gating on the endpoints fact holds it until the version endpoints have been probed, so the
     identification has that evidence to read. It runs once per host, gated on its own fact, and

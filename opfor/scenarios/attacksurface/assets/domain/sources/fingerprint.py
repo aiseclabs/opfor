@@ -2,10 +2,10 @@
 
 It matches a host's gathered evidence against a curated set of high-signal markers, so a known
 service such as a Jenkins or a Kibana is identified without a model call, with the exact version a
-version header or endpoint carries. Each service is one `fingerprints/<name>.md` knowledge unit of
-kind `service`, its `cpe` frontmatter field the NVD `vendor:product` key, its markers and version
-the detection knowledge, and its title the human name. A service the markers miss returns empty,
-which the caller falls to the model, so a thin or stale set identifies less, never wrong.
+version header or endpoint carries. Each service is one `technologies/services/<name>.md` knowledge
+unit, its `cpe` frontmatter field the NVD `vendor:product` key, its markers and version the
+detection knowledge, and its title the human name. A service the markers miss returns empty, which
+the caller falls to the model, so a thin or stale set identifies less, never wrong.
 """
 
 from __future__ import annotations
@@ -40,16 +40,13 @@ class Fingerprint:
 
 
 def load_services(directory: Path) -> tuple[Fingerprint, ...]:
-    """Load the service fingerprints at build time, one `fingerprints/<name>.md` unit of kind
-    `service` each. The `cpe` frontmatter field is the NVD `vendor:product` lookup key, the title is
-    the human name, and the markers and version are the detection knowledge. A unit of another kind
-    is skipped, so frameworks and other fingerprints share the tree. A missing directory is an empty
-    set, so the identify seam stays pure model. A malformed version regex fails the run loudly here
-    rather than silently skipping a service during a scan, invariant 5."""
+    """Load the service fingerprints at build time, one `technologies/services/<name>.md` unit each.
+    The `cpe` frontmatter field is the NVD `vendor:product` lookup key, the title is the human name,
+    and the markers and version are the detection knowledge. A missing directory is an empty set, so
+    the identify seam stays pure model. A malformed version regex fails the run loudly here rather
+    than silently skipping a service during a scan, invariant 5."""
     table: list[Fingerprint] = []
     for path, meta, body in iter_md_docs(Path(directory)):
-        if str(meta.get("kind", "")).strip() != "service":
-            continue
         cpe = str(meta.get("cpe", "")).strip()
         markers = tuple(str(m).strip().lower() for m in (meta.get("markers") or []) if str(m).strip())
         if not (cpe and markers):

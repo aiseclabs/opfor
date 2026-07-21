@@ -1,5 +1,4 @@
 ---
-kind: fronting
 category: cloud
 cnames:
   - elb.amazonaws.com

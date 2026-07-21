@@ -20,9 +20,9 @@ from opfor.scenarios.attacksurface.assets.domain.sources import (
 )
 from opfor.scenarios.attacksurface.assets.domain.sources.profile import (
     classify_frameworks,
-    classify_fronting,
+    classify_edge,
     load_frameworks,
-    load_fronting,
+    load_edge,
 )
 from opfor.scenarios.attacksurface.assets.domain.capabilities.specs import (
     SPEC_PROBE_PATHS,
@@ -85,28 +85,28 @@ def assemble(*, enumerate_fn, resolve_fn, probe_fn, fetch_fn, fetch_doc_fn,
     # seam, so the seam tries the services first and falls to the model on a miss, and a thin or
     # stale set identifies less rather than wrong. They are the class's own knowledge, loaded here
     # at assemble time. An empty set leaves the seam pure model, so a missing tree is no regression.
-    fingerprints = load_services(KNOWLEDGE / "fingerprints")
+    fingerprints = load_services(KNOWLEDGE / "technologies" / "services")
     if identify_fn is not None and fingerprints:
         model_identify = identify_fn
 
         def identify_fn(evidence):
             return fingerprint(evidence, fingerprints) or model_identify(evidence)
     # ProfileHost is the single place a host's identity is derived: the product via the composed
-    # identify seam, and the front-end frameworks and fronting via the injected deterministic
+    # identify seam, and the front-end frameworks and edge via the injected deterministic
     # classifiers, so the capability reads no knowledge. It emits one host_profile fact the CVE
     # lookup and the report both read, so identity survives a CVE-lookup failure and exists even
-    # with no CVE seam wired. Frameworks and fronting are deterministic, so it runs with or without
+    # with no CVE seam wired. Frameworks and edge are deterministic, so it runs with or without
     # a model identify seam.
-    frameworks_table = load_frameworks(KNOWLEDGE / "fingerprints")
-    fronting_table = load_fronting(KNOWLEDGE / "fingerprints")
+    frameworks_table = load_frameworks(KNOWLEDGE / "technologies" / "frameworks")
+    edge_table = load_edge(KNOWLEDGE / "edge")
 
     def framework_fn(http):
         return classify_frameworks(http, frameworks_table)
 
-    def fronting_fn(name, resolved, http):
-        return classify_fronting(name, resolved, http, fronting_table)
+    def edge_fn(name, resolved, http):
+        return classify_edge(name, resolved, http, edge_table)
 
-    capabilities.append(ProfileHost(identify_fn, framework_fn, fronting_fn))
+    capabilities.append(ProfileHost(identify_fn, framework_fn, edge_fn))
     if cve_fn is not None:
         capabilities.append(CVELookup(cve_fn))
     # The plan config is loaded here, at assemble time, not at planner import, so the content root

@@ -1,5 +1,5 @@
 ---
-title: Zero-trust proxy fronting
+title: Zero-trust proxy
 impact: INFO
 triggers:
   - redirect to

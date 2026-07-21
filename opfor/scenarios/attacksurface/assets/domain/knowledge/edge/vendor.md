@@ -1,5 +1,4 @@
 ---
-kind: fronting
 category: vendor
 cnames:
   - github.io

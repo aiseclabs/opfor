@@ -1,5 +1,4 @@
 ---
-kind: framework
 body:
   - 'id="__next"'
   - "/_next/static/"

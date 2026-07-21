@@ -12,7 +12,7 @@ class ProfileHost(Capability):
     """ENRICH: derive what a live host is into one host_profile fact.
 
     It gathers the host's evidence and calls three injected seams, the composed identify seam
-    for the product, and the deterministic framework and fronting classifiers, so this capability
+    for the product, and the deterministic framework and edge classifiers, so this capability
     holds no model and no knowledge. It records one host_profile fact the CVE lookup and the
     report both read, so a host's identity is derived once, survives a later CVE-lookup failure,
     and exists even when no CVE seam is wired. Identifying nothing is a clean negative, a seam
@@ -24,10 +24,10 @@ class ProfileHost(Capability):
     phase = Phase.ENRICH
     osint = True
 
-    def __init__(self, identify_fn, framework_fn, fronting_fn) -> None:
+    def __init__(self, identify_fn, framework_fn, edge_fn) -> None:
         self._identify = identify_fn
         self._frameworks = framework_fn
-        self._fronting = fronting_fn
+        self._edge = edge_fn
 
     def run(self, task: Task, world: World) -> Outcome:
         host = world.node(task.node)
@@ -46,8 +46,8 @@ class ProfileHost(Capability):
             version = str(found.get("version", "")).strip()
             cpe = str(found.get("cpe", "")).strip()
         frameworks = tuple(self._frameworks(http_payload))
-        front = self._fronting(name, resolved_payload, http_payload)
+        front = self._edge(name, resolved_payload, http_payload)
         payload = HostProfile(
             product=product, version=version, cpe=cpe, frameworks=frameworks,
-            fronting=front[0] if front else "", fronting_evidence=front[1] if front else "")
+            edge=front[0] if front else "", edge_evidence=front[1] if front else "")
         return Done(facts=(Fact(kind="host_profile", about=task.node, payload=payload),))

@@ -1,5 +1,4 @@
 ---
-kind: service
 cpe: grafana:grafana
 markers:
   - public/build/grafana

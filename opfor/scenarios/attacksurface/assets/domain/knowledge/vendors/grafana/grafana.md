@@ -1,6 +1,4 @@
 ---
-vendor: grafana
-product: grafana
 markers:
   - public/build/grafana
 version_paths:

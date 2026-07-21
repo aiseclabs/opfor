@@ -1,6 +1,4 @@
 ---
-vendor: gitlab
-product: gitlab
 markers:
   - gon.gitlab
 ---

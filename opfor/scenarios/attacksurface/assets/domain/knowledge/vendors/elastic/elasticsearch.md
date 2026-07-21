@@ -1,6 +1,4 @@
 ---
-vendor: elastic
-product: elasticsearch
 markers:
   - "you know, for search"
   - lucene_version

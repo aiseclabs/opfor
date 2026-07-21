@@ -1,6 +1,4 @@
 ---
-vendor: apache
-product: airflow
 markers:
   - apache airflow
 ---

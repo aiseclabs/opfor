@@ -3,11 +3,10 @@
 It matches a host's gathered evidence against a curated set of high-signal markers, so a known
 service such as a Jenkins or a Kibana is identified without a model call, with the exact version a
 version header or endpoint carries. Each service is one self-contained knowledge unit under
-`knowledge/services/<name>.md`, its structured identity in the frontmatter and prose for the model
-in the body, so a service's identification and version knowledge lives in one place. Its CPE
-`vendor` and `product` compose the NVD lookup key, and its title is the human name. A service the
-markers miss returns empty, which the caller falls to the model, so a thin or stale set identifies
-less, never wrong.
+`knowledge/vendors/<vendor>/<product>.md`, so its path is its NVD CPE `vendor:product` key, the
+frontmatter carries only the detection markers and version, and the title is the human name. A
+service the markers miss returns empty, which the caller falls to the model, so a thin or stale
+set identifies less, never wrong.
 """
 
 from __future__ import annotations
@@ -41,20 +40,25 @@ class Fingerprint:
 
 
 def load_services(directory: Path) -> tuple[Fingerprint, ...]:
-    """Load the per-service knowledge units at build time, one `services/<name>.md` each. The
-    structured identity is the frontmatter, its CPE `vendor` and `product` and its markers, the
-    human name is the unit's title, and the body is prose for the model. A missing directory is an
-    empty set, so the identify seam stays pure model. A malformed version regex fails the run
-    loudly here rather than silently skipping a service during a scan, invariant 5."""
+    """Load the per-service knowledge units at build time, one `vendors/<vendor>/<product>.md` each.
+    The unit's path is its CPE, the vendor directory and the product filename compose the NVD
+    `vendor:product` key, so the canonical identity cannot drift from a duplicated field. The
+    frontmatter carries only the detection knowledge, the markers and the version, and the title is
+    the human name. A missing directory is an empty set, so the identify seam stays pure model. A
+    malformed version regex fails the run loudly here rather than silently skipping a service during
+    a scan, invariant 5."""
+    root = Path(directory)
     table: list[Fingerprint] = []
-    for path, meta, body in iter_md_docs(directory):
-        vendor = str(meta.get("vendor", "")).strip()
-        product = str(meta.get("product", "")).strip()
+    for path, meta, body in iter_md_docs(root):
+        if path.parent.parent != root:
+            continue
+        vendor = path.parent.name
+        product = path.stem
         markers = tuple(str(m).strip().lower() for m in (meta.get("markers") or []) if str(m).strip())
-        if not (vendor and product) or not markers:
+        if not markers:
             continue
         title = _TITLE.search(body)
-        name = title.group(1).strip() if title else path.stem
+        name = title.group(1).strip() if title else product
         pattern = str(meta.get("version") or "").strip()
         try:
             version = re.compile(pattern, re.IGNORECASE) if pattern else None

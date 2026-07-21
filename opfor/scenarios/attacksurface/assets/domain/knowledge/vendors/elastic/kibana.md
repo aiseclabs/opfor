@@ -1,6 +1,4 @@
 ---
-vendor: elastic
-product: kibana
 markers:
   - "kbn-version:"
   - "kbn-name:"

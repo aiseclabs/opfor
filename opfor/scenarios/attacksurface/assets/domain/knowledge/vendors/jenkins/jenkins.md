@@ -1,6 +1,4 @@
 ---
-vendor: jenkins
-product: jenkins
 markers:
   - "x-jenkins:"
 version: 'x-jenkins:\s*([0-9]+\.[0-9]+(?:\.[0-9]+)?)'

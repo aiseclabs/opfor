@@ -57,9 +57,11 @@ def subdomains(domain: str) -> Enumeration:
     data class is already covered by certspotter. A source that hit its page cap marks the
     union truncated, so a bounded fetch is reported as a blind spot rather than a full set.
     """
-    # Two keyless sources with different windows: certificate logs name cert-holding hosts, the
-    # Wayback archive names crawled or linked hosts, so together they cover a wildcard-hidden host.
-    sources = [certspotter_subdomains, wayback_subdomains]
+    # Three keyless windows: certificate logs name cert-holding hosts, the Wayback archive names
+    # crawled or linked hosts, urlscan names scanned hosts, so together they cover a host one alone
+    # misses, such as one a wildcard certificate hides. Each is tolerated if it fails, the union
+    # raises only when every source fails.
+    sources = [certspotter_subdomains, wayback_subdomains, urlscan_subdomains]
     if config.virustotal_key():
         sources.append(virustotal_subdomains)
     if config.otx_key():
@@ -500,6 +502,34 @@ def sibling_roots_from_issuances(issuances, domain: str) -> dict[str, str]:
             siblings.setdefault(
                 root, f"shares a certificate with {known}, {len(roots)} roots on the cert")
     return siblings
+
+
+def urlscan_subdomains(domain: str) -> Enumeration:
+    """Subdomains of a domain seen by urlscan.io scans, a passive read.
+
+    A third window past certificate logs and the archive: hosts submitted to or scanned by
+    urlscan, so a recently live host that holds no public certificate can still surface. The free
+    search endpoint is keyless but rate-limited, so under load it may fail or return a partial
+    page, which the union tolerates as a coverage gap rather than a full set. It reads a public
+    index and never touches the target. `has_more` marks the result truncated so a capped page
+    reads as a blind spot.
+    """
+    url = f"https://urlscan.io/api/v1/search/?q=domain:{urllib.parse.quote(domain)}&size=1000"
+    request = urllib.request.Request(url, headers={"User-Agent": _UA, "Accept": "application/json"})
+    with urllib.request.urlopen(request, timeout=_TIMEOUT) as resp:
+        data = json.loads(resp.read(_JSON_LIMIT).decode("utf-8", "replace"))
+    suffix = "." + domain
+    names: set[str] = set()
+    for entry in data.get("results", []) or []:
+        page = entry.get("page") or {}
+        for candidate in (str(page.get("domain", "")),
+                          urllib.parse.urlsplit(str(page.get("url", ""))).hostname or ""):
+            host = candidate.strip().lower()
+            if host.endswith(suffix) and looks_like_host(host):
+                names.add(host)
+    result = Enumeration(names)
+    result.truncated = bool(data.get("has_more"))
+    return result
 
 
 def wayback_subdomains(domain: str) -> Enumeration:

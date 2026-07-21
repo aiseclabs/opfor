@@ -33,7 +33,6 @@ from opfor.scenarios.attacksurface.assets.domain.sources.ports import port_scan
 from opfor.scenarios.attacksurface.assets.domain.sources.tls import tls_probe
 from opfor.scenarios.attacksurface.assets.domain.sources.passive import (
     Enumeration,
-    cert_sibling_roots,
     certspotter_subdomains,
     cves_from_nvd,
     dnsdumpster_subdomains,
@@ -41,7 +40,6 @@ from opfor.scenarios.attacksurface.assets.domain.sources.passive import (
     nvd_cves,
     otx_subdomains,
     roots_from_file,
-    sibling_roots_from_issuances,
     subdomains,
     subdomains_from_dnsdumpster,
     subdomains_from_otx,
@@ -79,7 +77,6 @@ __all__ = [
     "Enumeration",
     "backup_candidates",
     "bucket_listable",
-    "cert_sibling_roots",
     "certspotter_subdomains",
     "cloud_bucket_from_url",
     "cloud_refs_in_text",
@@ -108,7 +105,6 @@ __all__ = [
     "same_host_path",
     "script_sources",
     "secrets_in_text",
-    "sibling_roots_from_issuances",
     "sitemap_paths",
     "source_map_from_text",
     "split_operation",

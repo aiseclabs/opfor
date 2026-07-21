@@ -368,21 +368,12 @@ def _permute_rule(world: World) -> list[Task]:
 
 
 def map_rules():
-    """The domain MAP rules, discovery and the evidence pivots. Root discovery grows only along
-    signals that prove common ownership from the seed, cert-SAN co-tenancy and the DMARC and
-    redirect self-declarations, so a namesake cannot enter."""
+    """The domain MAP rules. The operator's seed roots are materialized, then each root is
+    expanded to its subdomains. Root discovery beyond the seed is deliberately not done, so the
+    run maps exactly the roots the operator supplied, no more."""
     return [
         each("org", run="discover_domains", unless_fact="domains_discovered",
              where=lambda p: class_enabled(p, "domain")),
-        each("domain", run="domain_pivot", unless_fact="pivoted",
-             where=lambda p: p.name == p.root),
-        each("domain", run="declared_roots", unless_fact="declared",
-             where=lambda p: p.name == p.root),
-        # The redirect declaration is an active HTTP probe, so it carries the root as its scope
-        # target and is denied on a discovered out-of-scope sibling root, unlike the passive DMARC
-        # declaration above.
-        each("domain", run="redirect_roots", unless_fact="redirect_declared",
-             where=lambda p: p.name == p.root, scope_target=lambda p: p.name),
         each("domain", run="domain_subdomains", unless_fact="enumerated",
              where=lambda p: p.name == p.root),
         _permute_rule,

@@ -460,50 +460,6 @@ def _host_from_record(name: str) -> str | None:
 
 # --- certificate SAN pivot: sibling roots that share a certificate ----------
 
-# A certificate spanning more distinct roots than this is treated as shared multi-tenant
-# infrastructure, a CDN or a managed-TLS provider bundling unrelated customers onto one
-# certificate, so it proves no common ownership and is skipped. Kept small, since a managed
-# certificate bundling the target with a few unrelated customer roots is the failure mode,
-# and cert co-tenancy is in any case recorded at a lower confidence than a registration match.
-_MAX_CERT_ROOTS = 3
-
-
-def cert_sibling_roots(domain: str) -> dict[str, str]:
-    """Registrable roots that share a certificate with `domain`, each with its evidence.
-
-    A certificate names every host its holder proved control of to the certificate
-    authority, so a root bundled on the same certificate as a known root is owned by the
-    same party, evidence rather than a guess. The log is paged the same way the subdomain
-    source pages it, so a sibling on a certificate past the first page is not missed. The
-    parse and the multi-tenant guard live in `sibling_roots_from_issuances`, so a test
-    drives them without a network call.
-    """
-    issuances, _ = _certspotter_paged(domain)
-    return sibling_roots_from_issuances(issuances, domain)
-
-
-def sibling_roots_from_issuances(issuances, domain: str) -> dict[str, str]:
-    """Sibling roots from certificate-transparency issuances, guarding shared certs.
-
-    A certificate holding the known root and only a few distinct roots is dedicated, so
-    its other roots are owned by the same party. A certificate holding many distinct
-    roots is shared infrastructure and proves nothing, so it is skipped. The known root
-    is never returned.
-    """
-    known = registrable_root(domain)
-    siblings: dict[str, str] = {}
-    for issuance in issuances:
-        names = [str(n).strip().lower().lstrip("*.") for n in issuance.get("dns_names", [])]
-        roots = {registrable_root(n) for n in names if n and looks_like_host(n)}
-        if known not in roots or len(roots) > _MAX_CERT_ROOTS:
-            continue
-        others = sorted(roots - {known})
-        for root in others:
-            siblings.setdefault(
-                root, f"shares a certificate with {known}, {len(roots)} roots on the cert")
-    return siblings
-
-
 def urlscan_subdomains(domain: str) -> Enumeration:
     """Subdomains of a domain seen by urlscan.io scans, a passive read.
 

@@ -25,78 +25,6 @@ def test_hosts_from_file_normalizes_a_dns_export(tmp_path):
     hosts = hosts_from_file(str(export))
     assert hosts == ("api.dev.example.com", "api.hodor.example.com", "sandbox.example.com")
 
-def test_cert_san_pivot_discovers_a_sibling_root_with_evidence():
-    world = _seed()
-    _run(world)
-    net = world.node("domain:example.net")
-    assert net is not None
-    assert net.payload.root == "example.net"
-    assert net.payload.source == "cert-san"
-    # cert co-tenancy is weaker evidence than a registration match, so a cert-SAN sibling is
-    # associated, not confirmed, and triage sees the lower confidence
-    assert net.payload.confidence == "associated"
-    assert "shares a certificate" in net.payload.evidence
-
-def test_discovered_root_is_an_info_finding_carrying_its_evidence():
-    report = _run(_seed())
-    roots = [f for f in report.findings if f.data.get("kind") == "root"]
-    assert [f.where for f in roots] == ["example.net"]
-    assert roots[0].severity == "INFO"
-    assert "shares a certificate" in roots[0].evidence
-
-def test_hint_root_is_not_reported_as_a_discovered_root():
-    report = _run(_seed())
-    assert "example.com" not in {f.where for f in report.findings if f.data.get("kind") == "root"}
-
-def test_shared_certificate_is_not_treated_as_ownership_evidence():
-    from opfor.scenarios.attacksurface.assets.domain.sources import sibling_roots_from_issuances
-
-    # a dedicated cert bundling two roots yields the sibling
-    dedicated = [{"dns_names": ["example.com", "www.example.net"]}]
-    assert sibling_roots_from_issuances(dedicated, "example.com") == {
-        "example.net": "shares a certificate with example.com, 2 roots on the cert"
-    }
-    # a multi-tenant cert bundling many unrelated roots proves nothing, so it is skipped
-    shared = [{"dns_names": ["example.com", "a.org", "b.org", "c.org", "d.org", "e.org", "f.org"]}]
-    assert sibling_roots_from_issuances(shared, "example.com") == {}
-
-def test_cert_sibling_pivot_walks_past_the_first_page(monkeypatch):
-    import urllib.request
-
-    from opfor.scenarios.attacksurface import config
-    from opfor.scenarios.attacksurface.assets.domain import sources as domains
-
-    monkeypatch.setattr(config, "certspotter_token", lambda: None)
-
-    class _Resp:
-        def __init__(self, payload):
-            self._payload = payload
-
-        def read(self, *_a):
-            return json.dumps(self._payload).encode("utf-8")
-
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *exc):
-            return False
-
-    # page one holds only the seed's own cert, the sibling rides a cert reached only once
-    # the walk follows the `after` cursor to the next page, so a single-page fetch misses it
-    pages = {
-        "": [{"id": "1", "dns_names": ["example.com"]}],
-        "1": [{"id": "2", "dns_names": ["example.com", "example.net"]}],
-    }
-
-    def fake_urlopen(request, timeout=0):
-        after = request.full_url.split("after=")[1] if "after=" in request.full_url else ""
-        return _Resp(pages.get(after, []))
-
-    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
-    assert domains.cert_sibling_roots("example.com") == {
-        "example.net": "shares a certificate with example.com, 2 roots on the cert"
-    }
-
 def test_virustotal_enumeration_flags_truncation_at_the_page_cap(monkeypatch):
     import urllib.request
 
@@ -272,16 +200,6 @@ def test_certspotter_token_error_that_is_not_429_is_raised(monkeypatch):
     monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
     with pytest.raises(urllib.error.HTTPError):
         domains.certspotter_subdomains("example.com")
-
-def test_pivot_failure_still_closes_and_is_loud():
-    def boom(domain):
-        raise TimeoutError("certspotter slow")
-
-    scenario = _make(pivot_fn=boom)
-    world = _seed()
-    report = run(scenario, world, scope=Scope(max_tier="recon", matcher=HostScope(hosts=(ROOT,))), budget=Budget(500))
-    assert report.closed
-    assert any("failed" in n and "domain_pivot" in n for n in report.notes)
 
 def test_subdomains_drops_dns_control_record_names(monkeypatch):
     # passive DNS returns control records (_dmarc, _domainkey, _acme-challenge); these are not

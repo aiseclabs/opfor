@@ -58,9 +58,6 @@ def _enumerate(domain):
     return set(_HOSTS) if domain == ROOT else set()
 
 
-def _pivot(domain):
-    return {}
-
 
 def _resolve(name):
     return _DNS.get(name, {"resolvable": False, "addresses": ()})
@@ -110,7 +107,7 @@ def _cves(product, version, cpe=""):
 
 
 def seams() -> dict:
-    return dict(search_fn=_search, repos_fn=_repos, enumerate_fn=_enumerate, pivot_fn=_pivot,
+    return dict(search_fn=_search, repos_fn=_repos, enumerate_fn=_enumerate,
                 resolve_fn=_resolve, probe_fn=_probe, fetch_fn=_fetch, fetch_doc_fn=_fetch_doc,
                 introspect_fn=_introspect, wayback_fn=_wayback, probe_url_fn=_probe_url,
                 identify_fn=_identify, cve_fn=_cves)

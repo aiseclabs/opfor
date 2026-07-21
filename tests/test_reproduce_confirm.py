@@ -335,7 +335,6 @@ def test_regression_surface_closes_at_confirm_with_code_minted_findings():
 
     assert report.closed and report.reached == Phase.CONFIRM
     ids = {f.id for f in report.findings}
-    assert "finding:root:example.net" in ids
     assert "finding:blindspot:wildcard" in ids
     assert "finding:github_org:examplecorp" in ids
     # reproduce is read only: any receipt recorded came from a safe method, never a write

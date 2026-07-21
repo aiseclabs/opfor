@@ -7,11 +7,8 @@ from opfor.scenarios.attacksurface.assets.domain.capabilities.artifacts import (
 )
 from opfor.scenarios.attacksurface.assets.domain.capabilities.cves import CVELookup
 from opfor.scenarios.attacksurface.assets.domain.capabilities.discovery import (
-    DeclaredRoots,
     DiscoverDomains,
-    DomainPivot,
     PermuteSubdomains,
-    RedirectRoots,
     Subdomains,
 )
 from opfor.scenarios.attacksurface.assets.domain.capabilities.dns import (
@@ -38,10 +35,8 @@ __all__ = [
     "BackupScan",
     "BucketScan",
     "CVELookup",
-    "DeclaredRoots",
     "DiscoverDomains",
     "DNSEmailSecurity",
-    "DomainPivot",
     "Endpoints",
     "ExpandSpec",
     "GraphQLIntrospect",
@@ -52,7 +47,6 @@ __all__ = [
     "PortServices",
     "ProbeSpec",
     "ProfileHost",
-    "RedirectRoots",
     "ResolveDomain",
     "SecretScan",
     "SourceMapScan",

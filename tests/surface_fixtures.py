@@ -129,11 +129,6 @@ def _fetch(name, addresses, path):
 
 # Certificate-SAN sibling roots per known root. example.com and example.net are bundled
 # on one dedicated cert, evidence they share an owner. example.net pivots no further.
-SIBLINGS = {ROOT: {"example.net": "shares a certificate with example.com, 2 roots on the cert"}}
-
-
-def _pivot(domain):
-    return dict(SIBLINGS.get(domain, {}))
 
 
 
@@ -217,7 +212,7 @@ def _make(**over):
     model. A MockProvider stands in for the triage model, returning an empty result by
     default. A test overrides one seam to drive a failure or a variant, or passes its own
     provider to drive a canned model reply."""
-    seams = dict(search_fn=_search, repos_fn=_repos, enumerate_fn=_enumerate, pivot_fn=_pivot,
+    seams = dict(search_fn=_search, repos_fn=_repos, enumerate_fn=_enumerate,
                  resolve_fn=_resolve, probe_fn=_probe, fetch_fn=_fetch, fetch_doc_fn=_fetch_doc,
                  introspect_fn=_introspect, wayback_fn=_wayback, identify_fn=_identify, cve_fn=_cves,
                  probe_url_fn=_probe_url, dns_fn=_dns, tls_fn=_tls, ports_fn=_ports)
@@ -311,8 +306,6 @@ __all__ = [
     '_repos',
     'ENDPOINTS',
     '_fetch',
-    'SIBLINGS',
-    '_pivot',
     '_fetch_doc',
     '_introspect',
     '_wayback',

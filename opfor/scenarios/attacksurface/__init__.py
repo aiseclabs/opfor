@@ -93,7 +93,6 @@ def build(
     search_fn=github_src.search_orgs,
     repos_fn=github_src.org_repos,
     enumerate_fn=domain_src.subdomains,
-    pivot_fn=domain_src.cert_sibling_roots,
     resolve_fn=domain_src.resolve_host,
     probe_fn=domain_src.http_probe,
     fetch_fn=domain_src.fetch_url,
@@ -135,7 +134,7 @@ def build(
     # and rules plus the knowledge its triage reads. The scenario concatenates them and
     # names no class-internal type, so a class is swapped or added without touching this loop.
     bundles = [
-        domain.assemble(enumerate_fn=enumerate_fn, pivot_fn=pivot_fn, resolve_fn=resolve_fn,
+        domain.assemble(enumerate_fn=enumerate_fn, resolve_fn=resolve_fn,
                         probe_fn=probe_fn, fetch_fn=fetch_fn, fetch_doc_fn=fetch_doc_fn,
                         introspect_fn=introspect_fn, wayback_fn=wayback_fn,
                         probe_url_fn=probe_url_fn, dns_fn=dns_fn, tls_fn=tls_fn,

@@ -23,10 +23,8 @@ from opfor.scenarios.attacksurface.assets.domain.capabilities import (
     BackupScan,
     BucketScan,
     CVELookup,
-    DeclaredRoots,
     DiscoverDomains,
     DNSEmailSecurity,
-    DomainPivot,
     Endpoints,
     PermuteSubdomains,
     PortServices,
@@ -37,7 +35,6 @@ from opfor.scenarios.attacksurface.assets.domain.capabilities import (
     HarvestPaths,
     HTTPDomain,
     PermutePaths,
-    RedirectRoots,
     ResolveDomain,
     SecretScan,
     SourceMapScan,
@@ -48,18 +45,15 @@ from opfor.scenarios.attacksurface.assets.domain.capabilities import (
 KNOWLEDGE = Path(__file__).resolve().parent / "knowledge"
 
 
-def assemble(*, enumerate_fn, pivot_fn, resolve_fn, probe_fn, fetch_fn, fetch_doc_fn,
+def assemble(*, enumerate_fn, resolve_fn, probe_fn, fetch_fn, fetch_doc_fn,
              introspect_fn, wayback_fn, probe_url_fn, dns_fn, tls_fn, ports_fn,
              identify_fn=None, cve_fn=None) -> ClassBundle:
-    """The domain class's contribution. The seams are the passive and active sources,
-    injected so a test drives the class with fixtures. Root discovery is evidence-driven from
-    the seed, cert-SAN co-tenancy and the DMARC and redirect self-declarations, with no
-    name-based registrant search. The CVE lookup rides only when its lookup seam is wired."""
+    """The domain class's contribution. The seams are the passive and active sources, injected so
+    a test drives the class with fixtures. The run maps exactly the operator's seed roots and
+    expands each to its subdomains, no root discovery beyond the seed. The CVE lookup rides only
+    when its lookup seam is wired."""
     capabilities = [
         DiscoverDomains(),
-        DomainPivot(pivot_fn),
-        DeclaredRoots(dns_fn),
-        RedirectRoots(resolve_fn, probe_fn),
         Subdomains(enumerate_fn),
         PermuteSubdomains(resolve_fn),
         ResolveDomain(resolve_fn),

@@ -15,24 +15,6 @@ from __future__ import annotations
 from opfor.core import Finding, World
 
 
-def roots(world: World) -> list[Finding]:
-    """Report each associated root the run discovered beyond the operator's hints, an INFO
-    inventory line carrying the evidence that attributes it to the target. This is a fact about
-    what the run found, not a semantic judgment, so it stays in code."""
-    out: list[Finding] = []
-    for node in world.nodes("domain"):
-        data = node.payload
-        if data.name != data.root or data.source == "hint":
-            continue
-        out.append(Finding(
-            id=f"finding:root:{data.root}",
-            title=f"Associated root domain {data.root}",
-            severity="INFO",
-            where=data.root,
-            evidence=data.evidence or "discovered as an associated root",
-            data={"kind": "root", "source": data.source, "confidence": data.confidence},
-        ))
-    return out
 
 
 def wildcards(world: World) -> list[Finding]:
@@ -171,4 +153,4 @@ def resolution_caveat(world: World) -> Finding | None:
 
 # The inventory and coverage rules the judge runs unconditionally. Named here so the set of
 # what triage mints outside the model is auditable in one place.
-STRUCTURAL = (roots, wildcards, truncated, coverage_gaps, github)
+STRUCTURAL = (wildcards, truncated, coverage_gaps, github)

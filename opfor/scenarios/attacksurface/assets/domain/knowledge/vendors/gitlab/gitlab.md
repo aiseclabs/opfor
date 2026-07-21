@@ -1,9 +1,14 @@
 ---
 markers:
-  - gon.gitlab
+  - "x-gitlab-meta:"
+  - gitlab-org/gitlab
 ---
 
 # GitLab
 
-The page sets the `gon.gitlab` JS global, a string a page merely mentioning GitLab does not carry.
-No unauthenticated version source is wired. Not yet verified against a captured real instance.
+Verified against GitLab 16.11. It sets an `X-Gitlab-Meta` response header on every response
+including the unauthenticated `/` that redirects to `/users/sign_in`, a high-signal header marker
+no other product sends. Its `/robots.txt` also references the `gitlab-org/gitlab` source repo, a
+second body marker that survives a proxy stripping the header. No product version is exposed
+unauthenticated, the header carries only a meta-schema version, so GitLab is identified without a
+version.

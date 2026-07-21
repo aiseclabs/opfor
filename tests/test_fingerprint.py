@@ -40,7 +40,7 @@ def test_kibana_identifies_by_name_header_and_versions_from_status():
 
 
 def test_marker_match_without_a_version_is_product_only():
-    got = fingerprint('body head: <script>window.gon={};gon.gitlab_url="https://x"</script>', _TABLE)
+    got = fingerprint('header x-gitlab-meta: {"correlation_id":"abc","version":"1"}', _TABLE)
     assert got["product"] == "GitLab"
     assert got["version"] == ""
 

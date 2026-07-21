@@ -89,11 +89,15 @@ def capture(product: str, version: str, url: str) -> dict:
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(prog="evals.capture.capture")
     parser.add_argument("--product", required=True)
-    parser.add_argument("--version", required=True)
+    parser.add_argument("--version", required=True,
+                        help="the version the scan is expected to extract, empty for a service that "
+                             "exposes none unauthenticated, which then needs an explicit --out")
     parser.add_argument("--url", required=True, help="base URL of the running instance, e.g. http://localhost:3104")
     parser.add_argument("--out", default="", help="output path, default evals/corpus/<product>/<version>.json")
     args = parser.parse_args(argv)
 
+    if not args.version and not args.out:
+        parser.error("a version-less capture records no scored version, so name the cassette with --out")
     cassette = capture(args.product, args.version, args.url)
     out = Path(args.out) if args.out else (
         Path(__file__).resolve().parent.parent / "corpus" / args.product.lower() / f"{args.version}.json")

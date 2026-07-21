@@ -93,7 +93,7 @@ def assemble(*, enumerate_fn, resolve_fn, probe_fn, fetch_fn, fetch_doc_fn,
     # with no CVE seam wired. Frameworks and fronting are deterministic, so it runs with or without
     # a model identify seam.
     frameworks_table = load_frameworks(KNOWLEDGE / "fingerprints")
-    fronting_table = load_fronting(KNOWLEDGE / "fronting.yaml")
+    fronting_table = load_fronting(KNOWLEDGE / "fingerprints")
 
     def framework_fn(http):
         return classify_frameworks(http, frameworks_table)

@@ -16,21 +16,25 @@ import re
 from pathlib import Path
 from urllib.parse import urlparse
 
-import yaml
-
 from opfor.core import iter_md_docs
 from opfor.scenarios.attacksurface.assets.domain.sources.parsers import info_from_openapi
 
 
-def load_fronting(path: Path) -> dict:
-    """The fronting signatures, category to its CNAME suffixes, server tokens, and marker headers,
-    lowercased for matching. A missing file is an empty table."""
-    data = yaml.safe_load(path.read_text(encoding="utf-8")) if path.exists() else {}
-    return {
-        str(category): {key: [str(s).lower() for s in (sig.get(key) or [])]
-                        for key in ("cnames", "servers", "headers")}
-        for category, sig in (data or {}).items()
-    }
+def load_fronting(directory: Path) -> dict:
+    """The fronting signatures, one `fingerprints/<category>.md` unit of kind `fronting` each, its
+    `category` frontmatter the fronting class and its CNAME suffixes, server tokens, and marker
+    headers lowercased for matching. A unit of another kind is skipped, so fronting shares the
+    fingerprints tree. A missing directory is an empty table."""
+    out: dict = {}
+    for _path, meta, _body in iter_md_docs(Path(directory)):
+        if str(meta.get("kind", "")).strip() != "fronting":
+            continue
+        category = str(meta.get("category", "")).strip()
+        if not category:
+            continue
+        out[category] = {key: [str(s).lower() for s in (meta.get(key) or [])]
+                         for key in ("cnames", "servers", "headers")}
+    return out
 
 
 _TITLE = re.compile(r"^#\s+(.+)$", re.MULTILINE)

@@ -2,7 +2,7 @@
 
 The profiling capability records how a host is fronted in its host_profile fact and the report
 renders that, so the judge reads a finding as the edge or the origin and tells the org's own
-server from a third-party's. This exercises the classifier over the real fronting.yaml.
+server from a third-party's. This exercises the classifier over the real fingerprints/ tree.
 
 A CNAME to a known suffix or a marker header tags a host cdn, cloud, or vendor. A bare IP is
 direct. A host that matches nothing is left untagged rather than guessed direct, since an
@@ -18,7 +18,7 @@ from opfor.scenarios.attacksurface.assets.domain.sources.profile import (
 )
 from opfor.scenarios.attacksurface.assets.domain.types import HTTP, Resolved
 
-_FRONTING = load_fronting(KNOWLEDGE / "fronting.yaml")
+_FRONTING = load_fronting(KNOWLEDGE / "fingerprints")
 
 
 def _classify(name, *, cnames=(), server="", headers=()):

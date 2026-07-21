@@ -104,6 +104,10 @@ ENDPOINTS = {
     "https://www.example.com/legacy": {"status": 200, "body": "legacy console"},
     "https://example.com/secret-panel": {"status": 200, "body": "hidden panel"},
     "https://example.com/robots.txt": {"status": 200, "body": "user-agent: *\ndisallow: /secret-panel"},
+    # admin's robots discloses its sensitive paths, so they surface through evidence rather than a
+    # blind probe, the only way a leak is reached now that the global probe list is gone.
+    "https://admin.example.com/robots.txt": {"status": 200, "body":
+        "user-agent: *\ndisallow: /.git/config\ndisallow: /.env\ndisallow: /metrics\ndisallow: /admin"},
 }
 
 

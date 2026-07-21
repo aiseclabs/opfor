@@ -13,31 +13,16 @@ def test_endpoints_enumerated_and_auth_classified():
     assert eps["endpoint:admin.example.com/metrics"].auth_required is True
     assert eps["endpoint:admin.example.com/.env"].auth_required is False
 
-def test_probe_list_includes_product_identity_and_version_paths():
+def test_exposure_clues_and_judgment_classes_are_loaded():
+    # The blind fixed-path probe list is gone, a leak is reached only when evidence surfaces its
+    # path, but the deterministic clues that direct the model and the judgment classes it reaches
+    # for still ship in the finding units.
     from opfor.scenarios.attacksurface.assets import domain as domain_class
-    from opfor.scenarios.attacksurface.assets.domain import planner
-
-    # the product identity and version endpoints are data in paths.yaml, probed by the
-    # existing endpoint capability, so a later step can read the version for a cve match
-    probe_paths = planner.load_plan_config(domain_class.KNOWLEDGE).probe_paths
-    for path in ("/actuator/info", "/version", "/.well-known/openid-configuration", "/nacos/"):
-        assert path in probe_paths
-
-def test_batch_one_exposure_coverage_is_loaded():
-    from opfor.scenarios.attacksurface.assets import domain as domain_class
-    from opfor.scenarios.attacksurface.assets.domain import planner
     from opfor.scenarios.attacksurface.lifecycle.triage import _load_classes, _load_clues
 
-    # new fixed-path leaks are probed, pure data in paths.yaml, no code
-    probe_paths = planner.load_plan_config(domain_class.KNOWLEDGE).probe_paths
-    for path in ("/.ssh/id_rsa", "/web.config", "/backup.sql", "/.git/index", "/.npmrc"):
-        assert path in probe_paths
-
     knowledge = domain_class.KNOWLEDGE
-    # new deterministic clues direct the model at the buried signals
     clue_ids = {c["id"] for c in _load_clues(knowledge / "findings")}
     assert {"exposed-private-key", "exposed-htpasswd", "exposed-sql-dump"} <= clue_ids
-    # new judgment families the model can reach for
     class_ids = {c["id"] for c in _load_classes(knowledge / "findings")}
     assert {"cors-misconfiguration", "verbose-error-disclosure"} <= class_ids
 

@@ -685,13 +685,31 @@ def test_confidence_is_coerced_to_a_float_or_none():
     assert _confidence(0.7) == 0.7
 
 
-def test_dedup_keeps_two_distinct_titles_at_one_location():
+def test_dedup_merges_same_class_and_location_taking_max_severity_and_union_evidence():
     from opfor.core.result import Finding
     from opfor.scenarios.attacksurface.lifecycle.triage import SurfaceTriage
-    a = Finding(id="finding:known-vulnerability:h", title="CVE-1", severity="HIGH", where="h")
-    b = Finding(id="finding:known-vulnerability:h", title="CVE-2", severity="HIGH", where="h")
-    dup = Finding(id="finding:known-vulnerability:h", title="CVE-1", severity="HIGH", where="h")
-    out = SurfaceTriage._dedup([a, b, dup])
-    # two genuinely distinct issues of one class at one location both survive, the exact
-    # duplicate is dropped
-    assert len(out) == 2 and {f.title for f in out} == {"CVE-1", "CVE-2"}
+    a = Finding(id="finding:known-vulnerability:h", title="known vulns", severity="MEDIUM",
+                where="h", evidence="CVE-1 affects the running version")
+    b = Finding(id="finding:known-vulnerability:h", title="known vulns", severity="HIGH",
+                where="h", evidence="CVE-2 affects the running version")
+    out = SurfaceTriage._dedup([a, b])
+    # one finding at this class and location, at the higher severity, carrying both evidences
+    assert len(out) == 1
+    assert out[0].severity == "HIGH"
+    assert "CVE-1" in out[0].evidence and "CVE-2" in out[0].evidence
+
+
+def test_dedup_collapses_title_and_scheme_variance_but_keeps_distinct_paths():
+    from opfor.core.result import Finding
+    from opfor.scenarios.attacksurface.lifecycle.triage import SurfaceTriage
+    # same class + location worded two ways, plus a scheme/slash variant, collapse to one
+    v1 = Finding(id="finding:missing-security-headers:https://h/a",
+                 title="no HSTS", severity="LOW", where="https://h/a")
+    v2 = Finding(id="finding:missing-security-headers:https://h/a/",
+                 title="missing strict-transport-security", severity="LOW", where="https://h/a/")
+    # a genuinely different path stays a separate finding
+    other = Finding(id="finding:missing-security-headers:https://h/b",
+                    title="no HSTS", severity="LOW", where="https://h/b")
+    out = SurfaceTriage._dedup([v1, v2, other])
+    assert len(out) == 2
+    assert {f.where for f in out} == {"https://h/a", "https://h/b"}

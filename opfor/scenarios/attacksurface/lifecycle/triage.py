@@ -23,6 +23,7 @@ judgments, so they stay in code.
 from __future__ import annotations
 
 import re
+from dataclasses import replace
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -356,19 +357,22 @@ class SurfaceTriage(Triage):
 
     @staticmethod
     def _dedup(findings: list[Finding]) -> list[Finding]:
-        """Drop findings that repeat an id and title, keeping the first. A finding's id is
-        finding:<category>:<where>, so the same asset judged in two chunks or by two rounds
-        collapses to one. The title is part of the key so two genuinely distinct issues of one
-        class at one location, two separate CVEs on a host, are both kept rather than the
-        second silently dropped."""
-        seen: set[tuple[str, str]] = set()
+        """Collapse findings that name the same class at the same location into one, merging the
+        rest into it rather than dropping them. The key is the class and the normalized location,
+        the title is not, so the same issue worded or graded differently across two chunks or two
+        rounds becomes one finding, carrying the union of its evidence at the highest severity
+        given. Two genuinely distinct locations stay separate, since the normalized location keeps
+        the path, so an issue at one path is not merged with one at another. Merging rather than
+        dropping means a second finding at the same location never loses its evidence, invariant 5."""
+        index: dict[tuple[str, str], int] = {}
         out: list[Finding] = []
         for f in findings:
-            key = (f.id, f.title)
-            if key in seen:
-                continue
-            seen.add(key)
-            out.append(f)
+            key = _dedup_key(f)
+            if key not in index:
+                index[key] = len(out)
+                out.append(f)
+            else:
+                out[index[key]] = _merge_findings(out[index[key]], f)
         return out
 
 
@@ -393,6 +397,39 @@ def _pack(blocks: list[str], max_chars: int) -> list[str]:
 
 def _slug(category: str) -> str:
     return category.strip().lower().replace("_", "-").replace(" ", "-")
+
+
+def _dedup_key(finding: Finding) -> tuple[str, str]:
+    """The class and normalized location a finding is deduped on. The id is
+    finding:<category>:<where>, so the category is its second colon field, and the location is
+    normalized so a cosmetic difference does not split one issue in two."""
+    parts = finding.id.split(":", 2)
+    category = parts[1] if len(parts) == 3 else finding.id
+    return category, _norm_where(finding.where)
+
+
+def _norm_where(where: str) -> str:
+    """A location reduced to a comparable form, host and path lowercased without scheme, query, or
+    trailing slash, so a scheme or slash difference does not read as a different location. The path
+    is kept, so two distinct paths on a host stay distinct."""
+    text = (where or "").strip().lower()
+    if not text:
+        return ""
+    if "://" in text:
+        parts = urlparse(text)
+        return f"{parts.hostname or ''}{parts.path.rstrip('/')}"
+    return text.split("?", 1)[0].rstrip("/")
+
+
+def _merge_findings(a: Finding, b: Finding) -> Finding:
+    """Merge two findings sharing a class and location, keeping the higher-severity framing and
+    folding in the other's evidence, so consolidating never drops what the second one found."""
+    strong, weak = (a, b) if SEVERITIES.index(a.severity) >= SEVERITIES.index(b.severity) else (b, a)
+    evidence = strong.evidence
+    extra = weak.evidence.strip()
+    if extra and extra not in evidence:
+        evidence = f"{evidence}\n{extra}".strip()
+    return replace(strong, evidence=evidence, poc=strong.poc or weak.poc)
 
 
 def _finding_from_dict(data: object, *, known_ids: frozenset[str] = frozenset(),

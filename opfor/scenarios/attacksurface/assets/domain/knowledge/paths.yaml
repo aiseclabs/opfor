@@ -43,8 +43,6 @@ paths:
   - "/graphql"
   - "/api"
   - "/admin"
-  - "/login"
-  - "/login/"
   - "/backup.zip"
   - "/backup.tar.gz"
   - "/.aws/credentials"

@@ -16,7 +16,7 @@ from opfor.scenarios.attacksurface.assets.domain import planner
 from opfor.scenarios.attacksurface.assets.domain.sources import (
     fingerprint,
     load_services,
-    service_version_paths,
+    service_probe_paths,
 )
 from opfor.scenarios.attacksurface.assets.domain.sources.profile import (
     classify_frameworks,
@@ -109,7 +109,7 @@ def assemble(*, enumerate_fn, resolve_fn, probe_fn, fetch_fn, fetch_doc_fn,
     # endpoints join the generic probe paths, so a service versioned only at an endpoint is probed
     # there without that endpoint being a global path, its knowledge stays in the service's unit.
     config = planner.load_plan_config(KNOWLEDGE)
-    extra_paths = tuple(p for p in service_version_paths(fingerprints) if p not in config.probe_paths)
+    extra_paths = tuple(p for p in service_probe_paths(fingerprints) if p not in config.probe_paths)
     if extra_paths:
         config = replace(config, probe_paths=config.probe_paths + extra_paths)
     return ClassBundle(

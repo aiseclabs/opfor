@@ -4,7 +4,7 @@ cpe: elastic:kibana
 markers:
   - "kbn-name:"
   - "kbn-version:"
-version_paths:
+probe_paths:
   - /api/status
 version: '"number"\s*:\s*"([0-9]+\.[0-9]+\.[0-9]+)"'
 ---

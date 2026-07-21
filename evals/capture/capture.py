@@ -25,7 +25,7 @@ from urllib.parse import urlsplit
 import yaml
 
 from opfor.scenarios.attacksurface.assets.domain import KNOWLEDGE
-from opfor.scenarios.attacksurface.assets.domain.sources import load_services, service_version_paths
+from opfor.scenarios.attacksurface.assets.domain.sources import load_services, service_probe_paths
 
 _TITLE = re.compile(r"<title[^>]*>(.*?)</title>", re.I | re.S)
 _UA = "Mozilla/5.0 (compatible; opfor-eval-capture)"
@@ -59,7 +59,7 @@ def _paths() -> list[str]:
     capture that read only `paths.yaml` would silently miss those endpoints, invariant 5."""
     data = yaml.safe_load((KNOWLEDGE / "paths.yaml").read_text(encoding="utf-8")) or {}
     paths = [str(p) for p in (data.get("paths") or []) if str(p).startswith("/")]
-    for endpoint in service_version_paths(load_services(KNOWLEDGE / "fingerprints")):
+    for endpoint in service_probe_paths(load_services(KNOWLEDGE / "fingerprints")):
         if endpoint not in paths:
             paths.append(endpoint)
     return paths

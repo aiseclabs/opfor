@@ -28,7 +28,7 @@ from opfor.scenarios.attacksurface.assets.domain.sources.http import (
 from opfor.scenarios.attacksurface.assets.domain.sources.fingerprint import (
     fingerprint,
     load_services,
-    service_version_paths,
+    service_probe_paths,
 )
 from opfor.scenarios.attacksurface.assets.domain.sources.tls import tls_probe
 from opfor.scenarios.attacksurface.assets.domain.sources.passive import (
@@ -93,7 +93,7 @@ __all__ = [
     "http_probe",
     "info_from_openapi",
     "load_services",
-    "service_version_paths",
+    "service_probe_paths",
     "nvd_cves",
     "operations_from_introspection",
     "otx_subdomains",

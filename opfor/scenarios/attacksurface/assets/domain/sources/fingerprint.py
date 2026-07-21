@@ -27,15 +27,16 @@ class Fingerprint:
     """One service's identification rule. `name` is the human service name from the unit's title.
     `cpe` is the NVD CPE `vendor:product`, the CVE-lookup key. `markers` are lowercased high-signal
     substrings, any one present is a match. `version` is a compiled pattern with one capture group,
-    or None when the service publishes no plain version. `version_paths` are the service's own
-    version endpoints the probe adds to its generic paths, so a service that serves its version
-    only at an endpoint is still versioned, and that endpoint knowledge lives with the service."""
+    or None when the service publishes no plain version. `probe_paths` are the service's own paths
+    the probe adds to the generic set, so a marker or version that appears only at a specific path,
+    a login page or a health endpoint, is still reached, and that path knowledge lives with the
+    service rather than in a global list."""
 
     name: str
     cpe: str
     markers: tuple[str, ...]
     version: re.Pattern[str] | None = None
-    version_paths: tuple[str, ...] = ()
+    probe_paths: tuple[str, ...] = ()
 
 
 def load_services(directory: Path) -> tuple[Fingerprint, ...]:
@@ -60,18 +61,18 @@ def load_services(directory: Path) -> tuple[Fingerprint, ...]:
             version = re.compile(pattern, re.IGNORECASE) if pattern else None
         except re.error as exc:
             raise RuntimeError(f"invalid version regex for {name!r}: {exc}") from exc
-        version_paths = tuple(str(p).strip() for p in (meta.get("version_paths") or []) if str(p).strip())
+        probe_paths = tuple(str(p).strip() for p in (meta.get("probe_paths") or []) if str(p).strip())
         table.append(Fingerprint(name=name, cpe=cpe,
-                                 markers=markers, version=version, version_paths=version_paths))
+                                 markers=markers, version=version, probe_paths=probe_paths))
     return tuple(table)
 
 
-def service_version_paths(table: tuple[Fingerprint, ...]) -> tuple[str, ...]:
-    """The union of the version endpoints the services declare, so the probe adds them to its
-    generic paths and a service's version endpoint is probed without being a global path."""
+def service_probe_paths(table: tuple[Fingerprint, ...]) -> tuple[str, ...]:
+    """The union of the paths the services declare, so the probe adds them to its generic set and a
+    service's own identification or version endpoint is probed without being a global path."""
     seen: list[str] = []
     for fp in table:
-        for path in fp.version_paths:
+        for path in fp.probe_paths:
             if path not in seen:
                 seen.append(path)
     return tuple(seen)

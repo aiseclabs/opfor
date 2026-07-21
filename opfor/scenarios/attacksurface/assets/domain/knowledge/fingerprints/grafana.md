@@ -3,7 +3,8 @@ kind: service
 cpe: grafana:grafana
 markers:
   - public/build/grafana
-version_paths:
+probe_paths:
+  - /login
   - /api/health
 version: '"database"\s*:\s*"ok"\s*,\s*"version"\s*:\s*"([0-9]+\.[0-9]+\.[0-9]+)"'
 ---

@@ -276,11 +276,10 @@ def test_backup_scan_records_a_coverage_gap_when_a_twin_errors():
         "a backup twin probe error must record a coverage_gap rather than vanish"
 
 def test_sql_dump_clue_covers_every_probed_sql_path():
-    import yaml
-
     from opfor.scenarios.attacksurface.assets import domain as domain_class
-    data = yaml.safe_load((domain_class.KNOWLEDGE / "exposures.yaml").read_text(encoding="utf-8"))
-    sql = [c for c in data["clues"] if c.get("id") == "exposed-sql-dump"]
+    from opfor.scenarios.attacksurface.lifecycle.triage import _load_clues
+    clues = _load_clues(domain_class.KNOWLEDGE / "findings")
+    sql = [c for c in clues if c.get("id") == "exposed-sql-dump"]
     # a suffix path so /dump.sql, /db.sql, /database.sql all match, not only /backup.sql
     assert sql and sql[0]["path"] == ".sql"
 

@@ -35,7 +35,7 @@ def test_batch_one_exposure_coverage_is_loaded():
 
     knowledge = domain_class.KNOWLEDGE
     # new deterministic clues direct the model at the buried signals
-    clue_ids = {c["id"] for c in _load_clues(knowledge / "exposures.yaml")}
+    clue_ids = {c["id"] for c in _load_clues(knowledge / "findings")}
     assert {"exposed-private-key", "exposed-htpasswd", "exposed-sql-dump"} <= clue_ids
     # new judgment families the model can reach for
     class_ids = {c["id"] for c in _load_classes(knowledge / "findings")}

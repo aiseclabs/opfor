@@ -27,8 +27,6 @@ from dataclasses import replace
 from pathlib import Path
 from urllib.parse import urlparse
 
-import yaml
-
 from opfor.core import Finding, Message, Provider, SEVERITIES, Triage, World, iter_md_docs
 from opfor.core.json_parse import require_json_object
 from opfor.scenarios.attacksurface.lifecycle import structural
@@ -132,23 +130,28 @@ def _load_classes(directory: Path) -> list[dict]:
     return out
 
 
-def _load_clues(path: Path) -> list[dict]:
-    """The deterministic exposure clues, with any body regex precompiled."""
-    data = yaml.safe_load(path.read_text(encoding="utf-8")) if path.exists() else {}
-    clues = list((data or {}).get("clues") or [])
-    for clue in clues:
-        if clue.get("body_regex"):
-            clue["_body_re"] = re.compile(str(clue["body_regex"]), re.IGNORECASE)
+def _load_clues(directory: Path) -> list[dict]:
+    """The deterministic exposure clues, unioned from the `clues` frontmatter of the finding units
+    that declare them, with any body regex precompiled. Which finding a clue lives in is an
+    organizing choice, the union the renderer sees is the same either way."""
+    clues: list[dict] = []
+    for _path, meta, _body in iter_md_docs(Path(directory)):
+        for clue in (meta.get("clues") or []):
+            clue = dict(clue)
+            if clue.get("body_regex"):
+                clue["_body_re"] = re.compile(str(clue["body_regex"]), re.IGNORECASE)
+            clues.append(clue)
     return clues
 
 
-def _load_takeover(path: Path) -> list[tuple[str, str]]:
-    """The deterministic takeover signatures, a service name and its unclaimed-page text."""
-    data = yaml.safe_load(path.read_text(encoding="utf-8")) if path.exists() else {}
-    return [
-        (str(e["service"]), str(e["signature"]).lower())
-        for e in ((data or {}).get("services") or [])
-    ]
+def _load_takeover(directory: Path) -> list[tuple[str, str]]:
+    """The deterministic takeover signatures, a service name and its unclaimed-page text, read from
+    the `signatures` frontmatter of the finding units that declare them, one per findings unit."""
+    out: list[tuple[str, str]] = []
+    for _path, meta, _body in iter_md_docs(Path(directory)):
+        for e in (meta.get("signatures") or []):
+            out.append((str(e["service"]), str(e["signature"]).lower()))
+    return out
 
 
 class TriageError(RuntimeError):
@@ -188,8 +191,8 @@ class SurfaceTriage(Triage):
         for directory in knowledge_dirs:
             directory = Path(directory)
             self._classes.extend(_load_classes(directory / "findings"))
-            self._clues.extend(_load_clues(directory / "exposures.yaml"))
-            self._takeover.extend(_load_takeover(directory / "takeover.yaml"))
+            self._clues.extend(_load_clues(directory / "findings"))
+            self._takeover.extend(_load_takeover(directory / "findings"))
         self._class_ids = frozenset(c["id"] for c in self._classes)
         self._class_impact = {c["id"]: c["impact"] for c in self._classes}
         self._renderer = SurfaceRenderer(self._clues, self._takeover)

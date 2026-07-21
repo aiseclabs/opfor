@@ -89,11 +89,12 @@ class ProbeSpec(Capability):
     """ENRICH: verify the operations an exposed specification declares by a safe read.
 
     ExpandSpec records what a specification declares, this checks whether the declaration is
-    reachable. Each declared GET with a concrete path is fetched once, so an operation is
-    never reported reachable on the strength of the document alone. A write method, POST,
-    PUT, PATCH, or DELETE, and a templated path are recorded declared but not probed, since
-    sending them could change state, so that verdict is deferred to an authorized
-    confirmation. Probing is a scoped GET recon act, so it carries the host for scope.
+    reachable. Each declared GET with a concrete path is fetched once, up to a cap of
+    `_MAX_OPERATIONS`, beyond which the unprobed tail is recorded as a coverage_gap rather than
+    dropped silently. An operation is never reported reachable on the strength of the document
+    alone. A write method, POST, PUT, PATCH, or DELETE, and a templated path are recorded declared
+    but not probed, since sending them could change state, so that verdict is deferred to an
+    authorized confirmation. Probing is a scoped GET recon act, so it carries the host for scope.
     """
 
     name = "endpoint_probe_spec"
@@ -151,6 +152,15 @@ class ProbeSpec(Capability):
             # same guard the endpoint probe applies, invariant 5.
             gap = _coverage_gap("spec_probe", host, len(operations),
                                 ["baseline could not be established, operation distinctness is unreliable"])
+            if gap is not None:
+                facts.append(Fact(kind="coverage_gap", about=task.node, payload=gap))
+        total = len(spec.payload.paths)
+        if total > self._MAX_OPERATIONS:
+            # The audit is capped, so the tail of a large spec is unprobed. Record why rather than
+            # let a run close with declared operations silently unverified, the same capped-scan
+            # disclosure ExpandSpec and Endpoints make, invariant 5.
+            gap = _coverage_gap("spec_probe", host, total - self._MAX_OPERATIONS,
+                                [f"only the first {self._MAX_OPERATIONS} of {total} declared operations were probed"])
             if gap is not None:
                 facts.append(Fact(kind="coverage_gap", about=task.node, payload=gap))
         return Done(facts=tuple(facts))

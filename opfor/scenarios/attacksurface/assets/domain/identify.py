@@ -4,8 +4,9 @@ This is the seam the CVE scan calls to turn raw signals, headers, titles, and ve
 endpoints, into a product, a version, and a CPE the vulnerability lookup can query. It is
 model-backed so it recognizes a novel or obscure product rather than matching a fixed
 table, and it stays a seam so the capability that calls it holds no model and no knowledge.
-Identifying nothing is a valid answer, an empty product, not an error, so a reply without a
-clear product returns empty rather than raising.
+Identifying nothing is a valid answer, a JSON object with empty fields, not an error. A reply
+that carries no JSON object at all is a model failure, not a clean negative, so it raises,
+invariant 5.
 """
 
 from __future__ import annotations
@@ -30,8 +31,9 @@ def identify_service(provider: Provider, model: str, evidence: str) -> dict:
     """Ask the model to name the product, version, and CPE for one host's evidence.
 
     Returns a dict with `product`, `version`, and `cpe`, each empty when unknown. A model
-    call that fails raises, the caller reports that loud, but a reply that identifies
-    nothing is a clean empty answer, since not every host is a recognizable product.
+    call that fails raises, the caller reports that loud. A reply that carries no JSON object
+    raises too, since that is the model failing the contract, not a host that is unrecognizable.
+    A JSON object with empty fields is the clean empty answer, not every host is a product.
     """
     result = provider.complete(
         system=SYSTEM,
@@ -40,7 +42,9 @@ def identify_service(provider: Provider, model: str, evidence: str) -> dict:
         max_tokens=512,
         cache=False,
     )
-    obj = extract_json_object(result.text) or {}
+    obj = extract_json_object(result.text)
+    if obj is None:
+        raise RuntimeError("the identify model reply carried no JSON object")
     return {
         "product": str(obj.get("product", "")).strip(),
         "version": str(obj.get("version", "")).strip(),

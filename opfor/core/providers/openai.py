@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from opfor.core.providers.base import CompletionResult, Message, Provider
+from opfor.core.providers.base import CompletionResult, Message, Provider, require_completion_text
 
 
 class OpenAIProvider(Provider):
@@ -65,7 +65,7 @@ class OpenAIProvider(Provider):
             temperature=0,
             timeout=self._timeout,
         )
-        return CompletionResult(text=_choice_text(response))
+        return CompletionResult(text=require_completion_text(_choice_text(response), provider="openai"))
 
     def _complete_responses(
         self, *, system: str, messages: list[Message], model: str, max_tokens: int
@@ -81,7 +81,7 @@ class OpenAIProvider(Provider):
             max_output_tokens=max(max_tokens, 8000),
             timeout=self._timeout,
         )
-        return CompletionResult(text=getattr(response, "output_text", "") or "")
+        return CompletionResult(text=require_completion_text(getattr(response, "output_text", "") or "", provider="openai"))
 
 
 def _choice_text(response: Any) -> str:

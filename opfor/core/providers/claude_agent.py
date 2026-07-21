@@ -21,7 +21,7 @@ import subprocess
 import time
 from typing import Callable
 
-from opfor.core.providers.base import CompletionResult, Message, Provider
+from opfor.core.providers.base import CompletionResult, Message, Provider, require_completion_text
 
 _OUTPUT_ARGS = ("--output-format", "json")
 # The nested `claude -p` must authenticate with the operator's subscription, not an API
@@ -133,7 +133,8 @@ class ClaudeAgentProvider(Provider):
         max_tokens: int,
         cache: bool = False,
     ) -> CompletionResult:
-        return CompletionResult(text=_result_text(self._ask(_fold_prompt(system, messages))))
+        text = _result_text(self._ask(_fold_prompt(system, messages)))
+        return CompletionResult(text=require_completion_text(text, provider="claude"))
 
     def _ask(self, prompt: str) -> str:
         """Run the agent, retrying with backoff since a rate limit is usually transient.

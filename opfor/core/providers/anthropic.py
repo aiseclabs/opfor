@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from opfor.core.providers.base import CompletionResult, Message, Provider
+from opfor.core.providers.base import CompletionResult, Message, Provider, require_completion_text
 
 
 class AnthropicProvider(Provider):
@@ -70,7 +70,7 @@ class AnthropicProvider(Provider):
             "messages": [{"role": m.role, "content": m.content} for m in messages],
         }
         response = self._create(request)
-        return CompletionResult(text=_extract_text(response))
+        return CompletionResult(text=require_completion_text(_extract_text(response), provider="anthropic"))
 
     def _create(self, request: dict[str, Any]) -> Any:
         client = self._get_client()

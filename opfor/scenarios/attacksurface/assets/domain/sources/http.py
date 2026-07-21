@@ -260,7 +260,7 @@ def graphql_introspect(name: str, path: str = "/graphql") -> dict | None:
                 status, _, _, text, _location, _hdrs = _connect(
                     name, ip, scheme, path, read_limit=_DOCUMENT_LIMIT,
                     method="POST", payload=body, content_type="application/json")
-            except Exception:
+            except (OSError, http.client.HTTPException):
                 continue
             if status is None:
                 continue

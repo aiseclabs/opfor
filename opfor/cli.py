@@ -24,19 +24,28 @@ _SEVERITY_ORDER = ("CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO")
 
 
 def _env_int(name: str, default: int) -> int:
-    """An integer environment override, the default when the variable is unset or unparsable."""
-    try:
-        return int(os.environ[name])
-    except (KeyError, ValueError):
+    """An integer environment override, the default when unset. A set-but-unparsable value fails
+    loud rather than silently falling back, so an operator never believes a rail is set while the
+    run uses a different limit, invariant 5."""
+    raw = os.environ.get(name)
+    if raw is None:
         return default
+    try:
+        return int(raw)
+    except ValueError:
+        raise SystemExit(f"{name} must be an integer, got {raw!r}")
 
 
 def _env_float(name: str, default: float) -> float:
-    """A float environment override, the default when the variable is unset or unparsable."""
-    try:
-        return float(os.environ[name])
-    except (KeyError, ValueError):
+    """A float environment override, the default when unset. A set-but-unparsable value fails loud
+    rather than silently falling back, invariant 5."""
+    raw = os.environ.get(name)
+    if raw is None:
         return default
+    try:
+        return float(raw)
+    except ValueError:
+        raise SystemExit(f"{name} must be a number, got {raw!r}")
 
 
 def _resolve_seed(args) -> tuple[str, tuple[str, ...], tuple[str, ...], tuple[str, ...]]:

@@ -27,6 +27,15 @@ class CompletionResult:
     text: str
 
 
+def require_completion_text(text: str, *, provider: str) -> str:
+    """Guard the provider contract at its boundary. A blank model reply is a failed call, not a
+    clean empty result, so it raises here rather than reaching triage dressed as a successful but
+    empty answer, invariant 5."""
+    if not text.strip():
+        raise RuntimeError(f"the {provider} provider returned a blank completion")
+    return text
+
+
 class Provider(ABC):
     @abstractmethod
     def complete(

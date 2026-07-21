@@ -38,7 +38,9 @@ def search_orgs(name: str, token: str = "", *, limit: int = 10) -> list[dict]:
     """
     query = urllib.parse.urlencode({"q": f"{name} type:org", "per_page": str(limit)})
     body = _get(f"/search/users?{query}", token)
-    items = body.get("items", []) if isinstance(body, dict) else []
+    if not isinstance(body, dict):
+        raise RuntimeError(f"github user search returned {type(body).__name__}, expected an object")
+    items = body.get("items", [])
     out: list[dict] = []
     for item in items:
         login = str(item.get("login", ""))
@@ -71,7 +73,9 @@ def org_repos(login: str, token: str = "", *, limit: int = 100) -> list[dict]:
     """Public repositories under an org, most recently pushed first."""
     query = urllib.parse.urlencode({"per_page": str(limit), "sort": "pushed"})
     body = _get(f"/orgs/{urllib.parse.quote(login)}/repos?{query}", token)
-    rows = body if isinstance(body, list) else []
+    if not isinstance(body, list):
+        raise RuntimeError(f"github repos returned {type(body).__name__}, expected a list")
+    rows = body
     return [
         {
             "full_name": str(r.get("full_name", "")),

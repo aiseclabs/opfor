@@ -371,8 +371,15 @@ def _run_batch(scenario, world, ready, budget, done, pending, ledger, notes, max
             ledger.append("failed", task=task.id, reason=outcome.reason)
             notes.append(f"failed {task.id}: {outcome.reason}")
         elif isinstance(outcome, Later):
-            pending[outcome.handle] = task
-            ledger.append("later", task=task.id, handle=outcome.handle)
+            if outcome.handle in pending:
+                # Handles are the resume contract, so a reused one would silently drop the task it
+                # already parked. Reject the collision loudly rather than overwrite it, invariant 5.
+                ledger.append("task_error", task=task.id, error="duplicate_later_handle")
+                notes.append(f"error {task.id}: Later reused a pending handle {outcome.handle!r}")
+                done.add(task.id)
+            else:
+                pending[outcome.handle] = task
+                ledger.append("later", task=task.id, handle=outcome.handle)
         else:
             raise TypeError(f"capability {task.capability} returned a non-outcome: {type(outcome).__name__}")
 

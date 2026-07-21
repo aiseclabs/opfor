@@ -27,7 +27,6 @@ from opfor.scenarios.attacksurface.assets.domain.capabilities import (
     DiscoverDomains,
     DNSEmailSecurity,
     DomainPivot,
-    DomainRegistrant,
     Endpoints,
     PermuteSubdomains,
     PortServices,
@@ -51,11 +50,11 @@ KNOWLEDGE = Path(__file__).resolve().parent / "knowledge"
 
 def assemble(*, enumerate_fn, pivot_fn, resolve_fn, probe_fn, fetch_fn, fetch_doc_fn,
              introspect_fn, wayback_fn, probe_url_fn, dns_fn, tls_fn, ports_fn,
-             reverse_whois_fn=None, identify_fn=None, cve_fn=None) -> ClassBundle:
+             identify_fn=None, cve_fn=None) -> ClassBundle:
     """The domain class's contribution. The seams are the passive and active sources,
-    injected so a test drives the class with fixtures. The registrant pivot rides only when
-    its keyed source is wired, so a keyless run omits it rather than failing per root. The
-    CVE scan rides only when both its identify and lookup seams are wired."""
+    injected so a test drives the class with fixtures. Root discovery is evidence-driven from
+    the seed, cert-SAN co-tenancy and the DMARC and redirect self-declarations, with no
+    name-based registrant search. The CVE lookup rides only when its lookup seam is wired."""
     capabilities = [
         DiscoverDomains(),
         DomainPivot(pivot_fn),
@@ -79,8 +78,6 @@ def assemble(*, enumerate_fn, pivot_fn, resolve_fn, probe_fn, fetch_fn, fetch_do
         BackupScan(fetch_fn),
         BucketScan(probe_url_fn),
     ]
-    if reverse_whois_fn is not None:
-        capabilities.append(DomainRegistrant(reverse_whois_fn))
     # A deterministic fingerprint table identifies a known product without a model call, with
     # the exact version a version header carries. It wraps the injected model identify seam, so
     # the seam tries the table first and falls to the model on a miss, and a thin or stale table
@@ -116,7 +113,7 @@ def assemble(*, enumerate_fn, pivot_fn, resolve_fn, probe_fn, fetch_fn, fetch_do
     return ClassBundle(
         name="domain",
         capabilities=tuple(capabilities),
-        map_rules=tuple(planner.map_rules(with_registrant=reverse_whois_fn is not None)),
+        map_rules=tuple(planner.map_rules()),
         enrich_rules=tuple(planner.enrich_rules(
             config, with_profile=True, with_cve=cve_fn is not None)),
         knowledge_dir=KNOWLEDGE,

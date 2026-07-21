@@ -21,7 +21,6 @@ from pathlib import Path
 
 from opfor.core import Node, Phase, Provider, RuleSet, Scenario, World, make_provider
 from opfor.core.providers.factory import default_model, role_model, triage_mode
-from opfor.scenarios.attacksurface import config
 from opfor.scenarios.attacksurface.assets import domain, github
 from opfor.scenarios.attacksurface.hostnames import HostScope
 from opfor.scenarios.attacksurface.assets.domain import identify
@@ -53,10 +52,6 @@ def _payloads() -> dict[str, type]:
             if isinstance(obj, type) and is_dataclass(obj):
                 registry[name] = obj
     return registry
-
-# Sentinel so build can tell an unset reverse-WHOIS seam from one a caller passed, even
-# a fake in a test, and default the real seam to on only when a provider key is set.
-_DEFAULT = object()
 
 
 def _resolve_provider(provider, model):
@@ -99,7 +94,6 @@ def build(
     repos_fn=github_src.org_repos,
     enumerate_fn=domain_src.subdomains,
     pivot_fn=domain_src.cert_sibling_roots,
-    reverse_whois_fn=_DEFAULT,
     resolve_fn=domain_src.resolve_host,
     probe_fn=domain_src.http_probe,
     fetch_fn=domain_src.fetch_url,
@@ -122,12 +116,6 @@ def build(
     confirm: bool = False,
     reproduce_fetch_fn=domain_src.fetch_readonly,
 ) -> Scenario:
-    # The registrant pivot is the reliable core, but its provider has no keyless mode, so
-    # the real seam turns on only when a key is set. A test passes its own fake to wire it
-    # without a key.
-    if reverse_whois_fn is _DEFAULT:
-        reverse_whois_fn = domain_src.reverse_whois if config.reverse_whois_key() else None
-
     # Triage is model-backed. Build the provider and model the environment selects, keyless on
     # the operator's Claude Code subscription by default, and let a test inject its own.
     provider, model = _resolve_provider(provider, model)
@@ -151,7 +139,7 @@ def build(
                         probe_fn=probe_fn, fetch_fn=fetch_fn, fetch_doc_fn=fetch_doc_fn,
                         introspect_fn=introspect_fn, wayback_fn=wayback_fn,
                         probe_url_fn=probe_url_fn, dns_fn=dns_fn, tls_fn=tls_fn,
-                        ports_fn=ports_fn, reverse_whois_fn=reverse_whois_fn,
+                        ports_fn=ports_fn,
                         identify_fn=identify_fn, cve_fn=cve_fn),
         github.assemble(search_fn=search_fn, repos_fn=repos_fn),
     ]

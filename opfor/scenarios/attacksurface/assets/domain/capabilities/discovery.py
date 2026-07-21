@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from opfor.core import Capability, Done, Fact, Node, Outcome, Phase, Task, World
-from opfor.scenarios.attacksurface import config
 from opfor.scenarios.attacksurface.hostnames import looks_like_host, registrable_root
 from opfor.scenarios.attacksurface.assets.domain.capabilities.helpers import _coverage_gap, net_failed
 from opfor.scenarios.attacksurface.assets.domain.sources.roots import (
@@ -163,50 +162,6 @@ class DomainPivot(Capability):
             for root, evidence in sorted(siblings.items())
         )
         return Done(facts=(Fact(kind="pivoted", about=task.node, yields=found),))
-
-
-class DomainRegistrant(Capability):
-    """MAP: sibling root domains that share a registrant with the org, via reverse-WHOIS.
-
-    Ownership by registration is the definitional signal of who a domain belongs to, so a
-    root whose registration record names the same registrant is owned by the same party.
-    The search terms are a registrant identity tied to the org, an organization name or a
-    known registrant email, handed in by the planner from `Org.whois_terms`, and the org
-    name is the fallback term. It reads a public registration index through a keyed
-    provider, so it is osint. Wired only when a key is set.
-    """
-
-    name = "domain_registrant"
-    phase = Phase.MAP
-    osint = True
-
-    def __init__(self, reverse_fn) -> None:
-        self._reverse = reverse_fn
-
-    def run(self, task: Task, world: World) -> Outcome:
-        org = world.node(task.node).payload
-        # A curated whois term is a precise registrant identity the operator supplied, so a match
-        # is confirmed ownership. The bare org name is a fallback that matches any registrant whose
-        # organization field merely contains that name, a namesake, so a match on it is only an
-        # associated candidate, not confirmed. Recording it weaker keeps a same-name company's
-        # domain from being claimed as owned, and scope still never scans a discovered root.
-        curated = bool(org.whois_terms)
-        terms = org.whois_terms or (org.name,)
-        confidence = "confirmed" if curated else "associated"
-        key = config.reverse_whois_key()
-        roots: dict[str, str] = {}
-        for term in terms:
-            try:
-                roots.update(self._reverse(term, key))
-            except Exception as exc:
-                return net_failed("reverse-whois", exc)
-        found = tuple(
-            Node(id=f"domain:{root}", type="domain",
-                 payload=DomainData(name=root, root=root, source="reverse-whois",
-                                    confidence=confidence, evidence=evidence))
-            for root, evidence in sorted(roots.items())
-        )
-        return Done(facts=(Fact(kind="registrant", about=task.node, yields=found),))
 
 
 class Subdomains(Capability):

@@ -70,18 +70,6 @@ def dnsdumpster_key() -> str:
     return os.environ.get("OPFOR_DNSDUMPSTER_API_KEY", "")
 
 
-def reverse_whois_key() -> str:
-    """The WhoisXML API key for the reverse-WHOIS pivot, empty when unset.
-
-    Reverse-WHOIS has no keyless mode, the provider bills for the bulk registration index,
-    so without a key the registrant pivot is left out of the run rather than failing per
-    root. Ownership by registration is the definitional signal of who a domain belongs
-    to, so this pivot is the reliable core, wired only when the operator supplies a key.
-    The variable is named for the provider, like the other source keys, not the pivot.
-    """
-    return os.environ.get("OPFOR_WHOISXML_API_KEY", "")
-
-
 def roots_file() -> str:
     """Path to a newline-delimited root-domain seed file, empty when unset."""
     return os.environ.get("OPFOR_ROOTS_FILE", "")

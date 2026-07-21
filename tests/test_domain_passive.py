@@ -283,12 +283,6 @@ def test_pivot_failure_still_closes_and_is_loud():
     assert report.closed
     assert any("failed" in n and "domain_pivot" in n for n in report.notes)
 
-def test_registrant_pivot_is_off_without_a_key():
-    # the default seam stays off when no key is set, so the run has no registrant fact
-    world = _seed()
-    _run(world)
-    assert not world.has_fact("org:ExampleCorp", "registrant")
-
 def test_subdomains_drops_dns_control_record_names(monkeypatch):
     # passive DNS returns control records (_dmarc, _domainkey, _acme-challenge); these are not
     # hosts and must not be admitted as probeable subdomains, a validation label unwraps to its host
@@ -303,66 +297,6 @@ def test_subdomains_drops_dns_control_record_names(monkeypatch):
     assert "_domainkey.example.com" not in result
     assert "www.example.com" in result  # the acme-challenge validation label unwraps to its host
 
-
-def test_registrant_confirms_a_curated_term_but_only_associates_a_bare_name():
-    # a curated whois term is a precise registrant identity, so a match is confirmed ownership; a
-    # match on the bare org name could be a namesake, so it is only an associated candidate
-    from opfor.core import Node, Task, World
-    from opfor.scenarios.attacksurface.assets.domain.capabilities.discovery import DomainRegistrant
-    from opfor.scenarios.attacksurface.types import Org
-
-    def reverse(term, key):
-        return {"acquired-brand.com": f"registration record names {term}"}
-
-    def _run(org):
-        world = World()
-        world.add(Node(id="org:x", type="org", payload=org))
-        out = DomainRegistrant(reverse).run(Task(capability="domain_registrant", node="org:x"), world)
-        return out.facts[0].yields[0].payload.confidence
-
-    assert _run(Org(name="ExampleCorp", whois_terms=("ExampleCorp Inc",))) == "confirmed"
-    assert _run(Org(name="ExampleCorp")) == "associated"
-
-
-def test_registrant_pivot_discovers_a_root_when_wired():
-    world = _seed()
-    run(_with_reverse(), world, scope=Scope(max_tier="recon", matcher=HostScope(hosts=(ROOT,))), budget=Budget(500))
-    org = world.node("domain:example.org")
-    assert org is not None
-    assert org.payload.source == "reverse-whois"
-    # searched on the bare org name, which matches any same-name registrant, so it is an
-    # associated candidate rather than confirmed ownership, a namesake is not claimed as owned
-    assert org.payload.confidence == "associated"
-    assert "registration record names ExampleCorp" in org.payload.evidence
-
-def test_registrant_root_is_an_info_finding():
-    world = _seed()
-    report = run(_with_reverse(), world, scope=Scope(max_tier="recon", matcher=HostScope(hosts=(ROOT,))), budget=Budget(500))
-    roots = {f.where: f for f in report.findings if f.data.get("kind") == "root"}
-    assert "example.org" in roots
-    assert roots["example.org"].data["source"] == "reverse-whois"
-
-def test_registrant_pivot_failure_still_closes_and_is_loud():
-    def boom(term, api_key=""):
-        raise TimeoutError("provider slow")
-
-    world = _seed()
-    report = run(_with_reverse(boom), world, scope=Scope(max_tier="recon", matcher=HostScope(hosts=(ROOT,))), budget=Budget(500))
-    assert report.closed
-    assert any("failed" in n and "domain_registrant" in n for n in report.notes)
-
-def test_roots_from_reverse_whois_reads_both_shapes():
-    from opfor.scenarios.attacksurface.assets.domain.sources import roots_from_reverse_whois
-
-    as_strings = {"domainsList": ["a.example.org", "b.example.net"]}
-    assert roots_from_reverse_whois(as_strings, "Acme") == {
-        "example.org": "registration record names Acme",
-        "example.net": "registration record names Acme",
-    }
-    as_records = {"domainsList": [{"domainName": "c.example.io"}]}
-    assert roots_from_reverse_whois(as_records, "Acme") == {
-        "example.io": "registration record names Acme"
-    }
 
 def test_subdomains_from_vt_reads_relationship_ids():
     from opfor.scenarios.attacksurface.assets.domain.sources import subdomains_from_vt

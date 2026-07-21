@@ -500,50 +500,6 @@ def sibling_roots_from_issuances(issuances, domain: str) -> dict[str, str]:
     return siblings
 
 
-# --- reverse-WHOIS: sibling roots that share a registrant -------------------
-
-
-def reverse_whois(term: str, api_key: str) -> dict[str, str]:
-    """Registrable roots whose registration record names `term`, each with its evidence.
-
-    Ownership by registration is the definitional signal of who a domain belongs to, so a
-    root whose registrant matches a known registrant is owned by the same party, the most
-    direct evidence there is. `term` is a registrant identity tied to the target, an
-    organization name or an email. This calls one provider, the seam is injected so a
-    different provider or a test fixture slots in. It has no keyless mode.
-    """
-    endpoint = "https://reverse-whois.whoisxmlapi.com/api/v2"
-    body = json.dumps({
-        "apiKey": api_key,
-        "searchType": "current",
-        "mode": "purchase",
-        "basicSearchTerms": {"include": [term]},
-    }).encode("utf-8")
-    request = urllib.request.Request(
-        endpoint, data=body,
-        headers={"User-Agent": _UA, "Content-Type": "application/json", "Accept": "application/json"})
-    with urllib.request.urlopen(request, timeout=_TIMEOUT) as resp:
-        data = json.loads(resp.read(_JSON_LIMIT).decode("utf-8", "replace"))
-    return roots_from_reverse_whois(data, term)
-
-
-def roots_from_reverse_whois(data, term: str) -> dict[str, str]:
-    """Registrable roots from a reverse-WHOIS response body, keyed by root with evidence.
-
-    The parse lives apart from the network call, so a test drives it with a fixture. A
-    provider returns either a list of domains or a list of records naming a domain, so
-    both shapes are read.
-    """
-    roots: dict[str, str] = {}
-    for entry in data.get("domainsList", []) or []:
-        name = entry if isinstance(entry, str) else str(entry.get("domainName", ""))
-        name = name.strip().lower().lstrip("*.")
-        if name and looks_like_host(name):
-            roots.setdefault(registrable_root(name),
-                             f"registration record names {term}")
-    return roots
-
-
 def wayback_paths(host: str) -> set[str]:
     """Historical url paths for a host from the Wayback Machine CDX index, a passive read.
 

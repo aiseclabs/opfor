@@ -20,8 +20,10 @@ Ranked by how hard the evidence is:
 
 1. Reverse-WHOIS registrant match. The registration record names the same registrant as a
    known root. Ownership by registration is the definition of who a domain belongs to, so
-   this is the most direct evidence. It needs a keyed provider, the bulk index is not
-   free, and a redacted record yields nothing.
+   this is the most direct evidence in principle. It needs a paid bulk index and a redacted
+   record yields nothing, so opfor does not implement it. It is listed so that when a clean
+   stack leaves roots unreachable, the run knows the signal that would reach them is one it
+   deliberately does not carry, not a gap to paper over.
 2. Certificate SAN co-occurrence. A root is bundled on the same certificate as a known
    root. The certificate authority validated control of every name on the certificate, so
    a dedicated certificate is strong proof. A certificate spanning many distinct roots is
@@ -43,13 +45,14 @@ No single signal wins everywhere, so read the target's own setup first, then pic
 - The target uses OV or EV certificates, common for a bank or a regulated entity. The
   Organization field pivot is the best free move.
 - The target bundles several roots on one certificate, common with a multi-domain or
-  wildcard certificate. The SAN pivot finds them for free.
-- The target's registrant is public, or a key is funded. Reverse-WHOIS finds the most and
-  is the reliable core.
+  wildcard certificate. The SAN pivot finds them for free, and it is the implemented core.
+- The target names another owned root itself, in a DMARC report address or a redirect
+  target. The self-declaration reads it outward from an owned root, also implemented.
 - The target runs a clean managed stack, a DV certificate from a cloud issuer, a privacy
-  proxy on WHOIS, and a public cloud nameserver. Every free public pivot returns nothing,
-  which is a true result, not a gap in the tool. Only reverse-WHOIS or self-declaration
-  reaches the rest, so the run says so rather than implying the surface is complete.
+  proxy on WHOIS, and a public cloud nameserver. Every implemented pivot returns nothing,
+  which is a true result, not a gap in the tool. Only a signal opfor does not implement,
+  such as reverse-WHOIS, would reach the rest, so the run says so rather than implying the
+  surface is complete.
 
 ## The Practice
 
@@ -65,7 +68,8 @@ and the scenario grows the set by strong evidence: the certificate SAN pivot, ru
 bundled on the owned root's certificate, and self-declaration, rung 5, a root the owned root itself
 names through its DMARC report address or its redirect target. Third-party DMARC processors and
 shared hosts are dropped, so a processor or a shared platform is never taken for the org's own
-root. Reverse-WHOIS by registrant, rung 1, rides when its keyed source is wired. A name search from
-the bare company name is deliberately not a discovery path: with an owned root always seeded, its
-candidates would only re-confirm what the certificate pivot already finds, while adding namesake
-noise, so it is left out rather than kept for the marginal case.
+root. Reverse-WHOIS by registrant, rung 1, is deliberately not implemented, and a name search from
+the bare company name is not a discovery path: with an owned root always seeded, a name search's
+candidates would only re-confirm what the certificate pivot already finds while adding namesake
+noise, and reverse-WHOIS proper needs a paid index, so both are left out rather than kept for the
+marginal case.

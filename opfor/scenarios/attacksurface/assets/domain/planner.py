@@ -367,10 +367,11 @@ def _permute_rule(world: World) -> list[Task]:
     return tasks
 
 
-def map_rules(*, with_registrant: bool):
-    """The domain MAP rules, discovery and the evidence pivots. The registrant pivot rides
-    only when its keyed source is wired, so a keyless run omits it rather than failing."""
-    rules = [
+def map_rules():
+    """The domain MAP rules, discovery and the evidence pivots. Root discovery grows only along
+    signals that prove common ownership from the seed, cert-SAN co-tenancy and the DMARC and
+    redirect self-declarations, so a namesake cannot enter."""
+    return [
         each("org", run="discover_domains", unless_fact="domains_discovered",
              where=lambda p: class_enabled(p, "domain")),
         each("domain", run="domain_pivot", unless_fact="pivoted",
@@ -386,10 +387,6 @@ def map_rules(*, with_registrant: bool):
              where=lambda p: p.name == p.root),
         _permute_rule,
     ]
-    if with_registrant:
-        rules.append(each("org", run="domain_registrant", unless_fact="registrant",
-                          where=lambda p: class_enabled(p, "domain")))
-    return rules
 
 
 def enrich_rules(config: DomainPlanConfig, *, with_profile: bool = False, with_cve: bool = False):

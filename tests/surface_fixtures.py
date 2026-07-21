@@ -136,14 +136,6 @@ def _pivot(domain):
     return dict(SIBLINGS.get(domain, {}))
 
 
-# Reverse-WHOIS results keyed by search term. The org name resolves to a root registered
-# to the same registrant, the definitional ownership signal.
-WHOIS = {"ExampleCorp": {"example.org": "registration record names ExampleCorp"}}
-
-
-def _reverse(term, api_key=""):
-    return dict(WHOIS.get(term, {}))
-
 
 # A full document fetch, the app declaring itself. spa serves an OpenAPI spec, admin serves
 # a home page linking a JavaScript bundle that hardcodes an API path only readable from it.
@@ -303,9 +295,6 @@ def _two_findings():
          "where": "https://a/portal", "evidence": "302 to /login"},
     ]})
 
-def _with_reverse(reverse_fn=_reverse):
-    return _make(reverse_whois_fn=reverse_fn)
-
 def _read_only(url):
     return {"status": 200, "url": url, "content_type": "text/html", "body": "<html></html>"}
 
@@ -324,8 +313,6 @@ __all__ = [
     '_fetch',
     'SIBLINGS',
     '_pivot',
-    'WHOIS',
-    '_reverse',
     '_fetch_doc',
     '_introspect',
     '_wayback',
@@ -348,6 +335,5 @@ __all__ = [
     '_claim',
     '_receipt',
     '_two_findings',
-    '_with_reverse',
     '_read_only',
 ]

@@ -15,8 +15,8 @@ from opfor.scenarios.attacksurface.assets import ClassBundle
 from opfor.scenarios.attacksurface.assets.domain import planner
 from opfor.scenarios.attacksurface.assets.domain.sources import (
     fingerprint,
-    load_products,
-    product_version_paths,
+    load_services,
+    service_version_paths,
 )
 from opfor.scenarios.attacksurface.assets.domain.sources.profile import (
     classify_frameworks,
@@ -80,7 +80,7 @@ def assemble(*, enumerate_fn, resolve_fn, probe_fn, fetch_fn, fetch_doc_fn,
     # seam, so the seam tries the products first and falls to the model on a miss, and a thin or
     # stale set identifies less rather than wrong. They are the class's own knowledge, loaded here
     # at assemble time. An empty set leaves the seam pure model, so a missing tree is no regression.
-    fingerprints = load_products(KNOWLEDGE / "products")
+    fingerprints = load_services(KNOWLEDGE / "services")
     if identify_fn is not None and fingerprints:
         model_identify = identify_fn
 
@@ -109,7 +109,7 @@ def assemble(*, enumerate_fn, resolve_fn, probe_fn, fetch_fn, fetch_doc_fn,
     # endpoints join the generic probe paths, so a product versioned only at an endpoint is probed
     # there without that endpoint being a global path, its knowledge stays in the product's unit.
     config = planner.load_plan_config(KNOWLEDGE)
-    extra_paths = tuple(p for p in product_version_paths(fingerprints) if p not in config.probe_paths)
+    extra_paths = tuple(p for p in service_version_paths(fingerprints) if p not in config.probe_paths)
     if extra_paths:
         config = replace(config, probe_paths=config.probe_paths + extra_paths)
     return ClassBundle(

@@ -1,12 +1,12 @@
-"""Deterministic product fingerprinting, the identify seam's first pass before the model.
+"""Deterministic service fingerprinting, the identify seam's first pass before the model.
 
 It matches a host's gathered evidence against a curated set of high-signal markers, so a known
-product such as a Jenkins or a Kibana is identified without a model call, with the exact version a
-version header or endpoint carries. Each product is one self-contained knowledge unit under
-`knowledge/products/<name>.md`, its structured identity in the frontmatter and prose for the model
-in the body, so a product's identification and version knowledge lives in one place. A product the
-markers miss returns empty, which the caller falls to the model, so a thin or stale set identifies
-less, never wrong.
+service such as a Jenkins or a Kibana is identified without a model call, with the exact version a
+version header or endpoint carries. Each service is one self-contained knowledge unit under
+`knowledge/services/<name>.md`, its structured identity in the frontmatter and prose for the model
+in the body, so a service's identification and version knowledge lives in one place. `product` on a
+match is the NVD CPE product the lookup queries. A service the markers miss returns empty, which
+the caller falls to the model, so a thin or stale set identifies less, never wrong.
 """
 
 from __future__ import annotations
@@ -35,11 +35,11 @@ class Fingerprint:
     version_paths: tuple[str, ...] = ()
 
 
-def load_products(directory: Path) -> tuple[Fingerprint, ...]:
-    """Load the per-product knowledge units at build time, one `products/<name>.md` each. The
+def load_services(directory: Path) -> tuple[Fingerprint, ...]:
+    """Load the per-service knowledge units at build time, one `services/<name>.md` each. The
     structured identity is the frontmatter, the body is prose for the model. A missing directory
     is an empty set, so the identify seam stays pure model. A malformed version regex fails the run
-    loudly here rather than silently skipping a product during a scan, invariant 5."""
+    loudly here rather than silently skipping a service during a scan, invariant 5."""
     table: list[Fingerprint] = []
     for _path, meta, _body in iter_md_docs(directory):
         product = str(meta.get("product", "")).strip()
@@ -57,9 +57,9 @@ def load_products(directory: Path) -> tuple[Fingerprint, ...]:
     return tuple(table)
 
 
-def product_version_paths(table: tuple[Fingerprint, ...]) -> tuple[str, ...]:
-    """The union of the version endpoints the products declare, so the probe adds them to its
-    generic paths and a product's version endpoint is probed without being a global path."""
+def service_version_paths(table: tuple[Fingerprint, ...]) -> tuple[str, ...]:
+    """The union of the version endpoints the services declare, so the probe adds them to its
+    generic paths and a service's version endpoint is probed without being a global path."""
     seen: list[str] = []
     for fp in table:
         for path in fp.version_paths:

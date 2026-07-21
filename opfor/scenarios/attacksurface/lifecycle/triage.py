@@ -456,7 +456,9 @@ def _finding_from_dict(data: object, *, known_ids: frozenset[str] = frozenset(),
         return None
     if report_text is not None:
         host = urlparse(where).hostname or where.split("/", 1)[0].split(":", 1)[0].strip()
-        if host and host not in report_text:
+        # Match the host as a whole dotted name, not a substring, so a model that invents
+        # `example.com` is not accepted just because the report mentions `notexample.com`.
+        if host and not re.search(rf"(?<![\w.-]){re.escape(host)}(?![\w.-])", report_text):
             return None
     slug = _slug(str(data.get("category", "")))
     category = slug if slug in known_ids else "other"

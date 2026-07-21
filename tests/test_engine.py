@@ -153,6 +153,28 @@ def test_resume_with_an_unknown_handle_is_loud_not_silent():
     assert again.pending == ("h1",)
 
 
+def test_resume_with_no_facts_is_a_loud_failure_not_a_clean_completion():
+    world = World()
+    world.add(Node(id="root:1", type="root"))
+    report = run(_async_scenario(), world, scope=Scope(max_tier="recon"), budget=Budget(100))
+    # an async callback that returns no facts is a failed completion, so it is recorded loud
+    # rather than absorbed as clean: the callback fact never lands and the failure is in the notes
+    done = resume(report.state, {"h1": ()})
+    assert not world.has_fact("root:1", "callback")
+    assert any("no facts" in n and "async_probe" in n for n in done.notes)
+
+
+def test_task_id_distinguishes_params_but_keeps_a_plain_id_when_there_are_none():
+    a = Task(capability="c", node="n", params={"path": "/a"})
+    b = Task(capability="c", node="n", params={"path": "/b"})
+    plain = Task(capability="c", node="n")
+    # two tasks with the same capability and node but different params are distinct work
+    assert a.id != b.id
+    assert a.id.startswith("c:n:") and b.id.startswith("c:n:")
+    # a param-less task keeps the plain capability:node id, so existing ids are unchanged
+    assert plain.id == "c:n"
+
+
 # --- budget suspension resumes, and error suspension says why --------------------------
 
 

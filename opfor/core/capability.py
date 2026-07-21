@@ -15,6 +15,8 @@ the phishing "hours later" path.
 
 from __future__ import annotations
 
+import hashlib
+import json
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Mapping
@@ -47,7 +49,14 @@ class Task:
 
     @property
     def id(self) -> str:
-        return f"{self.capability}:{self.node}"
+        # Params are part of task identity, so two tasks with the same capability and node but
+        # different params are distinct work and neither dedups the other away. A param-less task
+        # keeps its plain `capability:node` id, so existing ids and checkpoints are unchanged.
+        if not self.params:
+            return f"{self.capability}:{self.node}"
+        digest = hashlib.sha1(
+            json.dumps(self.params, sort_keys=True, default=str).encode("utf-8")).hexdigest()[:12]
+        return f"{self.capability}:{self.node}:{digest}"
 
 
 @dataclass(frozen=True, kw_only=True)

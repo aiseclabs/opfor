@@ -23,6 +23,14 @@ def test_a_page_that_only_mentions_a_product_is_not_identified_as_it():
     assert prof is None or prof.product == ""
 
 
+def test_gate_blocks_an_empty_corpus():
+    # an empty corpus scores a vacuous 100% recall and version accuracy, so the gate must not
+    # let it pass as clean, it has to fail for want of a real sample
+    result = backtest.score([])
+    fails = backtest.gate(result)
+    assert fails and any("empty corpus" in f for f in fails)
+
+
 def test_the_seed_corpus_passes_the_gate():
     cases = backtest.run()
     result = backtest.score(cases)

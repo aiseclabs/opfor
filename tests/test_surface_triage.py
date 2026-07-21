@@ -172,6 +172,15 @@ def test_finding_without_a_location_is_dropped():
     assert _finding_from_dict({"severity": "HIGH", "title": "no where"}) is None
 
 
+def test_a_finding_host_that_is_only_a_substring_of_a_report_host_is_dropped():
+    data = {"category": "sensitive-file-exposure", "title": "x", "severity": "HIGH",
+            "where": "https://example.com/admin"}
+    # the report only mentions notexample.com, so example.com must not be accepted as a substring
+    assert _finding_from_dict(data, report_text="server notexample.com only") is None
+    # the host genuinely present as a whole name is kept
+    assert _finding_from_dict(data, report_text="host example.com admin panel") is not None
+
+
 def test_category_is_normalized_onto_the_known_class_ids():
     ids = frozenset({"sensitive-file-exposure"})
     f = _finding_from_dict({"where": "u", "category": "Sensitive-File-Exposure", "severity": "medium"},

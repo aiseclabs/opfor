@@ -77,6 +77,12 @@ def gate(result: dict, *, recall_floor: float = 1.0, version_floor: float = 1.0)
     floors are 100%: a real cassette that stops being identified, or a version that stops being
     extracted, or any wrong or negative fire, is a regression, not noise."""
     fails: list[str] = []
+    # An empty corpus scores a vacuous 100%, so require a real sample rather than let a missing
+    # or unbuilt corpus pass the gate as if it were clean, invariant 5.
+    if result["positives"] == 0:
+        fails.append("no positive cassettes, an empty corpus cannot gate identification")
+    if result["negatives"] == 0:
+        fails.append("no negative cassettes, an empty corpus cannot gate precision")
     if result["recall"] < recall_floor:
         fails.append(f"recall {result['recall']:.0%} below floor {recall_floor:.0%}, "
                      f"missed: {', '.join(result['missed'])}")

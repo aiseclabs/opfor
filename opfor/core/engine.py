@@ -148,6 +148,13 @@ def resume(state: RunState, results: dict[str, Iterable[Fact]]) -> Report:
             state.notes.append(f"resume: no parked task for handle {handle!r}")
             state.ledger.append("resume_unknown", handle=handle)
             continue
+        if not facts:
+            # An async completion with no facts is a failed callback, not a clean result, so it is
+            # recorded loud and retired as a failure rather than silently marked done, invariant 5.
+            state.notes.append(f"failed {task.id}: async resume for handle {handle!r} returned no facts")
+            state.ledger.append("resume_failed", handle=handle, task=task.id)
+            state.done.add(task.id)
+            continue
         state.world.absorb(facts)
         state.done.add(task.id)
         state.ledger.append("resume", handle=handle, task=task.id, facts=len(facts))
@@ -277,6 +284,10 @@ def _authorize(scenario, scope, world, phase, done, pending, ledger, notes) -> l
             notes.append(f"denied {task.id}: {decision.reason}")
             done.add(task.id)
             continue
+        # Author the allow, not only the deny, so the ledger alone proves how each executed act was
+        # authorized, its tier, target, and whether it rode the osint carve-out, invariant 4.
+        ledger.append("scope_allowed", task=task.id, capability=cap.name, tier=cap.tier,
+                      target=task.scope_target or "", osint=cap.osint)
         ready.append(task)
     return ready
 

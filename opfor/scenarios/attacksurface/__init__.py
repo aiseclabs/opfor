@@ -177,3 +177,38 @@ def seed(name: str, *, domains=(), hosts=()) -> World:
     world.add(Node(id=f"org:{name}", type="org",
                    payload=Org(name=name, domains=tuple(domains), hosts=tuple(hosts))))
     return world
+
+
+def prepare_run(*, name="", roots=(), roots_file="", hosts=(), hosts_file="",
+                tier="recon", authorized=False, reproduce=False, confirm=False):
+    """Adapt a CLI run request into this scenario's seeded world, scope, and built scenario, so
+    the generic CLI holds no attack-surface specifics and a new scenario becomes runnable by
+    registering its own adapter, not by editing the CLI. Returns the resolved target name, the
+    seed world, the scope, and the scenario. A flag wins over the environment, roots and hosts
+    fold to registrable roots the same way a seed file does, and the scope hosts are the roots
+    plus each host's registrable root so a subdomain is authorized by its root. It raises on an
+    empty seed, an empty run is an operator error not a result."""
+    from opfor.core import Scope
+    from opfor.scenarios.attacksurface import config
+    from opfor.scenarios.attacksurface.hostnames import HostScope, registrable_root
+    from opfor.scenarios.attacksurface.assets.domain.sources import hosts_from_file, roots_from_file
+
+    rts = list(roots)
+    roots_path = roots_file or config.roots_file()
+    if roots_path:
+        rts += roots_from_file(roots_path)
+    hst = list(hosts)
+    hosts_path = hosts_file or config.hosts_file()
+    if hosts_path:
+        hst += hosts_from_file(hosts_path)
+    rts = tuple(dict.fromkeys(rts))
+    hst = tuple(dict.fromkeys(hst))
+    if not rts and not hst:
+        raise ValueError("no seed given, pass --root or --roots, or --host or --hosts, "
+                         "or set OPFOR_ROOTS_FILE or OPFOR_HOSTS_FILE")
+    target = name or config.target_name() or (rts[0] if rts else registrable_root(hst[0]))
+    scope_hosts = tuple(dict.fromkeys(list(rts) + [registrable_root(h) for h in hst]))
+    world = seed(target, domains=rts, hosts=hst)
+    scope = Scope(max_tier=tier, matcher=HostScope(hosts=scope_hosts), authorized=authorized)
+    scenario = build(reproduce=reproduce, confirm=confirm) if (reproduce or confirm) else build()
+    return target, world, scope, scenario

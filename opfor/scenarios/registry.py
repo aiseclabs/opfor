@@ -31,12 +31,29 @@ _BUILDERS: dict[str, Callable[[], Scenario]] = {
     attacksurface.NAME: attacksurface.build,
 }
 
+# A run adapter turns a CLI run request into a scenario's seeded world, scope, and built
+# scenario, so the generic CLI holds no scenario specifics. Only scenarios with an adapter are
+# runnable from the CLI, the mock is a kernel fixture with no CLI seed, so it has none.
+_RUN_ADAPTERS: dict[str, Callable[..., tuple]] = {
+    attacksurface.NAME: attacksurface.prepare_run,
+}
+
 
 def get_scenario(name: str) -> Scenario:
     if name not in _BUILDERS:
         known = ", ".join(sorted(_BUILDERS))
         raise KeyError(f"unknown scenario {name!r}, known: {known}")
     return _BUILDERS[name]()
+
+
+def run_adapter(name: str) -> Callable[..., tuple]:
+    """The scenario's CLI run adapter, or a loud error naming the runnable scenarios. A scenario
+    without one is not runnable from the CLI, so a typo or a fixture-only scenario fails here
+    rather than falling through to a scenario-specific code path in the CLI."""
+    if name not in _RUN_ADAPTERS:
+        runnable = ", ".join(sorted(_RUN_ADAPTERS))
+        raise KeyError(f"scenario {name!r} is not runnable from the CLI, runnable: {runnable}")
+    return _RUN_ADAPTERS[name]
 
 
 def known_scenarios() -> tuple[str, ...]:

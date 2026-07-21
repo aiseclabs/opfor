@@ -48,67 +48,23 @@ def _env_float(name: str, default: float) -> float:
         raise SystemExit(f"{name} must be a number, got {raw!r}")
 
 
-def _resolve_seed(args) -> tuple[str, tuple[str, ...], tuple[str, ...], tuple[str, ...]]:
-    """Resolve command input into a target name, seed roots, seed hosts, and scope hosts.
-
-    A flag wins over the environment. Roots and hosts fold to registrable roots and
-    probeable hosts through the same normalization a seed file uses. The scope hosts are
-    the roots plus the registrable root of every host, so a subdomain is authorized by its
-    root. Fails loud when no seed is given, an empty run is an operator error not a result.
-    """
-    from opfor.scenarios.attacksurface import config
-    from opfor.scenarios.attacksurface.hostnames import registrable_root
-    from opfor.scenarios.attacksurface.assets.domain.sources import (
-        hosts_from_file,
-        roots_from_file,
-    )
-
-    roots = list(args.root or [])
-    roots_path = args.roots or config.roots_file()
-    if roots_path:
-        roots += roots_from_file(roots_path)
-    hosts = list(args.host or [])
-    hosts_path = args.hosts or config.hosts_file()
-    if hosts_path:
-        hosts += hosts_from_file(hosts_path)
-
-    roots = tuple(dict.fromkeys(roots))
-    hosts = tuple(dict.fromkeys(hosts))
-    if not roots and not hosts:
-        raise SystemExit(
-            "no seed given, pass --root or --roots, or --host or --hosts, "
-            "or set OPFOR_ROOTS_FILE or OPFOR_HOSTS_FILE")
-
-    name = args.name or config.target_name() or (roots[0] if roots else registrable_root(hosts[0]))
-    scope_hosts = tuple(dict.fromkeys(list(roots) + [registrable_root(h) for h in hosts]))
-    return name, roots, hosts, scope_hosts
-
-
 def _run(args) -> int:
-    from opfor.core import Budget, Checkpoint, Scope, restore, resume_run
+    from opfor.core import Budget, Checkpoint, restore, resume_run
     from opfor.core.engine import run as engine_run
-    from opfor.scenarios.attacksurface import seed as attacksurface_seed
-    from opfor.scenarios.attacksurface.hostnames import HostScope
-    from opfor.scenarios.registry import get_scenario
+    from opfor.scenarios.registry import run_adapter
 
-    seed_builders = {"attacksurface": attacksurface_seed}
-    if args.scenario not in seed_builders:
-        raise SystemExit(f"scenario {args.scenario!r} has no run seed builder, "
-                         f"runnable: {', '.join(sorted(seed_builders))}")
-
-    name, roots, hosts, scope_hosts = _resolve_seed(args)
-    scope = Scope(max_tier=args.tier, matcher=HostScope(hosts=scope_hosts),
-                  authorized=args.authorize)
-    if getattr(args, "confirm", False) or getattr(args, "reproduce", False):
-        # The reproduce and confirm phases are opt-in and intrusive, so they need both a
-        # raised terminal and the recorded intrusive authorization, a fresh build carries the
-        # first and scope the second, so a run without --tier intrusive --authorize denies
-        # loud. Confirm implies reproduce, since it regrades the reproduction receipts.
-        from opfor.scenarios.attacksurface import build as build_attacksurface
-        scenario = build_attacksurface(
-            reproduce=getattr(args, "reproduce", False), confirm=getattr(args, "confirm", False))
-    else:
-        scenario = get_scenario(args.scenario)
+    # The scenario owns how a CLI request becomes its seeded world, scope, and built scenario,
+    # exposed through the registry, so the CLI holds no scenario specifics. An unknown or
+    # fixture-only scenario fails loud here rather than in a scenario-specific branch.
+    try:
+        adapter = run_adapter(args.scenario)
+        name, world, scope, scenario = adapter(
+            name=args.name, roots=tuple(args.root or []), roots_file=args.roots or "",
+            hosts=tuple(args.host or []), hosts_file=args.hosts or "", tier=args.tier,
+            authorized=args.authorize, reproduce=getattr(args, "reproduce", False),
+            confirm=getattr(args, "confirm", False))
+    except (KeyError, ValueError) as exc:
+        raise SystemExit(str(exc))
 
     outdir = Path(args.output) if args.output else _default_output(name)
     ckpt = outdir / "checkpoint.json"
@@ -136,7 +92,6 @@ def _run(args) -> int:
             outdir.mkdir(parents=True, exist_ok=True, mode=0o700)
         except OSError:
             ckpt = None
-        world = seed_builders[args.scenario](name, domains=roots, hosts=hosts)
         report = engine_run(scenario, world, scope=scope, budget=Budget(args.budget),
                             max_retries=retries, task_timeout=timeout, checkpoint_path=ckpt)
     _print_report(report, world)

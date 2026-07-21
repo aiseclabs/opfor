@@ -10,7 +10,7 @@ from opfor.scenarios.attacksurface.assets.domain.sources.parsers import same_hos
 
 _SCRIPT_SRC = re.compile(r'<script[^>]+src\s*=\s*["\']([^"\']+)', re.IGNORECASE)
 _JS_PATH = re.compile(r"""["'`](/[A-Za-z0-9_.\-/]{1,160})["'`]""")
-_JS_URL = re.compile(r"""["'`](https?://[A-Za-z0-9.\-]+(?::\d+)?(?:/[A-Za-z0-9_.\-/]{0,200})?)["'`]""")
+QUOTED_URL = re.compile(r"""["'`](https?://[A-Za-z0-9.\-]+(?::\d+)?(?:/[A-Za-z0-9_.\-/]{0,200})?)["'`]""")
 
 _MAX_SECRET_MATCHES = 20
 # A ceiling on how much of a body the secret patterns scan. A hostile bundle can arrive at the
@@ -80,7 +80,7 @@ def urls_in_javascript(text: str) -> list[str]:
     """
     out: list[str] = []
     seen: set[str] = set()
-    for m in _JS_URL.finditer(text or ""):
+    for m in QUOTED_URL.finditer(text or ""):
         match = m.group(1)
         if match in seen:
             continue

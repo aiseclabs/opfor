@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 import urllib.parse
 
-from opfor.scenarios.attacksurface.assets.domain.sources.javascript import _JS_URL
+from opfor.scenarios.attacksurface.assets.domain.sources.javascript import QUOTED_URL
 
 _BUCKET_NAME = re.compile(r"^[a-z0-9][a-z0-9.\-]{1,61}[a-z0-9]$")
 # XML listing roots each provider returns for a public, listable bucket, so a 200 that is an
@@ -83,7 +83,7 @@ def cloud_refs_in_text(text: str) -> list[str]:
     target's own page loads rather than a guessed name. Only hosts that hint at object storage
     are kept, the parser decides which are real buckets."""
     out: list[str] = []
-    for url in _JS_URL.findall(text or ""):
+    for url in QUOTED_URL.findall(text or ""):
         low = url.lower()
         if any(hint in low for hint in _CLOUD_HOST_HINTS) and url not in out:
             out.append(url)

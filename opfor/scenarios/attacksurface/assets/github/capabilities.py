@@ -54,7 +54,9 @@ class DiscoverGitHub(Capability):
         # domain its profile links to. Linking to an in-scope root confirms it. Linking to a
         # different registrable root is positive counter-evidence that it belongs to someone
         # else, so it is dropped. No link leaves it a name match, kept but marked unattributed.
-        targets = set(org.domains) | {registrable_root(h) for h in org.hosts}
+        # site_root is lowercased by registrable_root, so the domains are lowercased here too, or a
+        # mixed-case operator root such as Example.COM would never match its own GitHub profile.
+        targets = {d.strip().lower() for d in org.domains} | {registrable_root(h) for h in org.hosts}
         found = []
         for o in orgs:
             site = _site_domain(o.get("blog") or o.get("email") or "")

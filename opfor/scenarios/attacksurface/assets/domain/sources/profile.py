@@ -79,7 +79,10 @@ def host_evidence(world, host) -> str:
         if endpoint.content_type:
             bit += f" {endpoint.content_type}"
         if endpoint.body:
-            bit += f"\n  body: {endpoint.body[:1024]}"
+            # A page's head carries a block of framework CSS before its app-specific bundle, so a
+            # high-signal marker such as an app theme path sits a kilobyte or two in, past a tighter
+            # window, as a real Airflow login page showed. This covers a realistic head, still bounded.
+            bit += f"\n  body: {endpoint.body[:2048]}"
         lines.append(bit)
         title, version = _spec_info(world, node, endpoint)
         if title or version:

@@ -29,10 +29,14 @@ def test_jenkins_header_gives_product_and_version():
     assert got["version"] == "2.426.1"
 
 
-def test_kibana_header_gives_version():
-    got = fingerprint("header kbn-version: 8.11.0\nheader kbn-name: node-1\n", _TABLE)
+def test_kibana_identifies_by_name_header_and_versions_from_status():
+    # Kibana 8.x dropped the kbn-version response header, so it is identified by the kbn-name
+    # header and versioned from the /api/status JSON its version_path probes, as captured real.
+    got = fingerprint('header kbn-name: node-1\nheader kbn-license-sig: abc\n'
+                      'path /api/status body: {"version":{"number":"8.15.0","build_number":76360}}', _TABLE)
     assert got["product"] == "Kibana"
-    assert got["version"] == "8.11.0"
+    assert got["cpe"] == "elastic:kibana"
+    assert got["version"] == "8.15.0"
 
 
 def test_marker_match_without_a_version_is_product_only():

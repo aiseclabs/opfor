@@ -1,0 +1,289 @@
+{
+  "product": "Elasticsearch",
+  "version": "8.15.0",
+  "host": "localhost",
+  "resolved": {
+    "resolvable": true,
+    "addresses": [
+      "127.0.0.1"
+    ],
+    "cnames": []
+  },
+  "root": {
+    "alive": true,
+    "status": 200,
+    "url": "http://localhost:9215/",
+    "server": "",
+    "title": "",
+    "body": "{\n  \"name\" : \"5c4b20f5cd37\",\n  \"cluster_name\" : \"docker-cluster\",\n  \"cluster_uuid\" : \"ddqjbod2ty2nbdxykg1leq\",\n  \"version\" : {\n    \"number\" : \"8.15.0\",\n    \"build_flavor\" : \"default\",\n    \"build_type\" : \"docker\",\n    \"build_hash\" : \"1a77947f34deddb41af25e6f0ddb8e830159c179\",\n    \"build_date\" : \"2024-08-05t10:05:34.233336849z\",\n    \"build_snapshot\" : false,\n    \"lucene_version\" : \"9.11.1\",\n    \"minimum_wire_compatibility_version\" : \"7.17.0\",\n    \"minimum_index_compatibility_version\" : \"7.0.0\"\n  },\n  \"tagline\" : \"you know, for search\"\n}\n",
+    "location": "",
+    "headers": [
+      [
+        "X-elastic-product",
+        "Elasticsearch"
+      ],
+      [
+        "content-type",
+        "application/json"
+      ],
+      [
+        "content-length",
+        "541"
+      ]
+    ],
+    "reason": ""
+  },
+  "fetch": {
+    "/.well-known/security.txt": {
+      "status": 405,
+      "url": "http://localhost:9215/.well-known/security.txt",
+      "content_type": "application/json",
+      "server": "",
+      "title": "",
+      "body": "{\"error\":\"incorrect http method for uri [/.well-known/security.txt] and method [get], allowed: [post]\",\"status\":405}",
+      "location": "",
+      "reason": ""
+    },
+    "/.git/config": {
+      "status": 405,
+      "url": "http://localhost:9215/.git/config",
+      "content_type": "application/json",
+      "server": "",
+      "title": "",
+      "body": "{\"error\":\"incorrect http method for uri [/.git/config] and method [get], allowed: [post]\",\"status\":405}",
+      "location": "",
+      "reason": ""
+    },
+    "/.git/HEAD": {
+      "status": 405,
+      "url": "http://localhost:9215/.git/HEAD",
+      "content_type": "application/json",
+      "server": "",
+      "title": "",
+      "body": "{\"error\":\"incorrect http method for uri [/.git/head] and method [get], allowed: [post]\",\"status\":405}",
+      "location": "",
+      "reason": ""
+    },
+    "/.svn/entries": {
+      "status": 405,
+      "url": "http://localhost:9215/.svn/entries",
+      "content_type": "application/json",
+      "server": "",
+      "title": "",
+      "body": "{\"error\":\"incorrect http method for uri [/.svn/entries] and method [get], allowed: [post]\",\"status\":405}",
+      "location": "",
+      "reason": ""
+    },
+    "/actuator/health": {
+      "status": 405,
+      "url": "http://localhost:9215/actuator/health",
+      "content_type": "application/json",
+      "server": "",
+      "title": "",
+      "body": "{\"error\":\"incorrect http method for uri [/actuator/health] and method [get], allowed: [post]\",\"status\":405}",
+      "location": "",
+      "reason": ""
+    },
+    "/actuator/env": {
+      "status": 405,
+      "url": "http://localhost:9215/actuator/env",
+      "content_type": "application/json",
+      "server": "",
+      "title": "",
+      "body": "{\"error\":\"incorrect http method for uri [/actuator/env] and method [get], allowed: [post]\",\"status\":405}",
+      "location": "",
+      "reason": ""
+    },
+    "/actuator/info": {
+      "status": 405,
+      "url": "http://localhost:9215/actuator/info",
+      "content_type": "application/json",
+      "server": "",
+      "title": "",
+      "body": "{\"error\":\"incorrect http method for uri [/actuator/info] and method [get], allowed: [post]\",\"status\":405}",
+      "location": "",
+      "reason": ""
+    },
+    "/api/version": {
+      "status": 405,
+      "url": "http://localhost:9215/api/version",
+      "content_type": "application/json",
+      "server": "",
+      "title": "",
+      "body": "{\"error\":\"incorrect http method for uri [/api/version] and method [get], allowed: [post]\",\"status\":405}",
+      "location": "",
+      "reason": ""
+    },
+    "/.well-known/openid-configuration": {
+      "status": 405,
+      "url": "http://localhost:9215/.well-known/openid-configuration",
+      "content_type": "application/json",
+      "server": "",
+      "title": "",
+      "body": "{\"error\":\"incorrect http method for uri [/.well-known/openid-configuration] and method [get], allowed: [post]\",\"status\":405}",
+      "location": "",
+      "reason": ""
+    },
+    "/v1/agent/self": {
+      "status": 400,
+      "url": "http://localhost:9215/v1/agent/self",
+      "content_type": "application/json",
+      "server": "",
+      "title": "",
+      "body": "{\"error\":\"no handler found for uri [/v1/agent/self] and method [get]\"}",
+      "location": "",
+      "reason": ""
+    },
+    "/manager/html": {
+      "status": 405,
+      "url": "http://localhost:9215/manager/html",
+      "content_type": "application/json",
+      "server": "",
+      "title": "",
+      "body": "{\"error\":\"incorrect http method for uri [/manager/html] and method [get], allowed: [post]\",\"status\":405}",
+      "location": "",
+      "reason": ""
+    },
+    "/debug/pprof/": {
+      "status": 405,
+      "url": "http://localhost:9215/debug/pprof/",
+      "content_type": "application/json",
+      "server": "",
+      "title": "",
+      "body": "{\"error\":\"incorrect http method for uri [/debug/pprof/] and method [get], allowed: [post]\",\"status\":405}",
+      "location": "",
+      "reason": ""
+    },
+    "/_cluster/health": {
+      "status": 200,
+      "url": "http://localhost:9215/_cluster/health",
+      "content_type": "application/json",
+      "server": "",
+      "title": "",
+      "body": "{\"cluster_name\":\"docker-cluster\",\"status\":\"green\",\"timed_out\":false,\"number_of_nodes\":1,\"number_of_data_nodes\":1,\"active_primary_shards\":28,\"active_shards\":28,\"relocating_shards\":0,\"initializing_shards\":0,\"unassigned_shards\":0,\"delayed_unassigned_shards\":0,\"number_of_pending_tasks\":0,\"number_of_in_flight_fetch\":0,\"task_max_waiting_in_queue_millis\":0,\"active_shards_percent_as_number\":100.0}",
+      "location": "",
+      "reason": ""
+    },
+    "/v2/api-docs": {
+      "status": 405,
+      "url": "http://localhost:9215/v2/api-docs",
+      "content_type": "application/json",
+      "server": "",
+      "title": "",
+      "body": "{\"error\":\"incorrect http method for uri [/v2/api-docs] and method [get], allowed: [post]\",\"status\":405}",
+      "location": "",
+      "reason": ""
+    },
+    "/.aws/credentials": {
+      "status": 405,
+      "url": "http://localhost:9215/.aws/credentials",
+      "content_type": "application/json",
+      "server": "",
+      "title": "",
+      "body": "{\"error\":\"incorrect http method for uri [/.aws/credentials] and method [get], allowed: [post]\",\"status\":405}",
+      "location": "",
+      "reason": ""
+    },
+    "/.ssh/id_rsa": {
+      "status": 405,
+      "url": "http://localhost:9215/.ssh/id_rsa",
+      "content_type": "application/json",
+      "server": "",
+      "title": "",
+      "body": "{\"error\":\"incorrect http method for uri [/.ssh/id_rsa] and method [get], allowed: [post]\",\"status\":405}",
+      "location": "",
+      "reason": ""
+    },
+    "/.git/index": {
+      "status": 405,
+      "url": "http://localhost:9215/.git/index",
+      "content_type": "application/json",
+      "server": "",
+      "title": "",
+      "body": "{\"error\":\"incorrect http method for uri [/.git/index] and method [get], allowed: [post]\",\"status\":405}",
+      "location": "",
+      "reason": ""
+    },
+    "/.git/logs/HEAD": {
+      "status": 400,
+      "url": "http://localhost:9215/.git/logs/HEAD",
+      "content_type": "application/json",
+      "server": "",
+      "title": "",
+      "body": "{\"error\":\"no handler found for uri [/.git/logs/head] and method [get]\"}",
+      "location": "",
+      "reason": ""
+    },
+    "/.hg/requires": {
+      "status": 405,
+      "url": "http://localhost:9215/.hg/requires",
+      "content_type": "application/json",
+      "server": "",
+      "title": "",
+      "body": "{\"error\":\"incorrect http method for uri [/.hg/requires] and method [get], allowed: [post]\",\"status\":405}",
+      "location": "",
+      "reason": ""
+    },
+    "/actuator/mappings": {
+      "status": 405,
+      "url": "http://localhost:9215/actuator/mappings",
+      "content_type": "application/json",
+      "server": "",
+      "title": "",
+      "body": "{\"error\":\"incorrect http method for uri [/actuator/mappings] and method [get], allowed: [post]\",\"status\":405}",
+      "location": "",
+      "reason": ""
+    },
+    "/rails/info/routes": {
+      "status": 400,
+      "url": "http://localhost:9215/rails/info/routes",
+      "content_type": "application/json",
+      "server": "",
+      "title": "",
+      "body": "{\"error\":\"no handler found for uri [/rails/info/routes] and method [get]\"}",
+      "location": "",
+      "reason": ""
+    },
+    "/v3/api-docs": {
+      "status": 405,
+      "url": "http://localhost:9215/v3/api-docs",
+      "content_type": "application/json",
+      "server": "",
+      "title": "",
+      "body": "{\"error\":\"incorrect http method for uri [/v3/api-docs] and method [get], allowed: [post]\",\"status\":405}",
+      "location": "",
+      "reason": ""
+    },
+    "/swagger/v1/swagger.json": {
+      "status": 400,
+      "url": "http://localhost:9215/swagger/v1/swagger.json",
+      "content_type": "application/json",
+      "server": "",
+      "title": "",
+      "body": "{\"error\":\"no handler found for uri [/swagger/v1/swagger.json] and method [get]\"}",
+      "location": "",
+      "reason": ""
+    },
+    "/api/status": {
+      "status": 405,
+      "url": "http://localhost:9215/api/status",
+      "content_type": "application/json",
+      "server": "",
+      "title": "",
+      "body": "{\"error\":\"incorrect http method for uri [/api/status] and method [get], allowed: [post]\",\"status\":405}",
+      "location": "",
+      "reason": ""
+    },
+    "/api/health": {
+      "status": 405,
+      "url": "http://localhost:9215/api/health",
+      "content_type": "application/json",
+      "server": "",
+      "title": "",
+      "body": "{\"error\":\"incorrect http method for uri [/api/health] and method [get], allowed: [post]\",\"status\":405}",
+      "location": "",
+      "reason": ""
+    }
+  },
+  "docs": {}
+}

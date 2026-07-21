@@ -1,0 +1,30 @@
+# Elastic-stack instances at pinned versions, for capturing fingerprint backtest cassettes.
+#
+# Kibana needs an Elasticsearch to talk to, so the vendor's two products come up together. Security
+# is disabled to model the classic unauthenticated exposure opfor probes, where the identity leaks
+# to an unauthenticated reader. A secured instance answers the root with 401 and leaks nothing, a
+# limitation the service prose records.
+#
+# Run on a machine with Docker, not in CI. Bring the versions up, capture each, tear down:
+#
+#   docker compose -f evals/capture/elastic/docker-compose.yml up -d
+#   python -m evals.capture.capture --product Elasticsearch --version 8.15.0 --url http://localhost:9215
+#   python -m evals.capture.capture --product Kibana        --version 8.15.0 --url http://localhost:5615
+#   docker compose -f evals/capture/elastic/docker-compose.yml down -v
+#
+# Each capture probes the instance exactly as opfor would and writes evals/corpus/<product>/<version>.json.
+
+services:
+  elasticsearch-8-15:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.15.0
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - ES_JAVA_OPTS=-Xms512m -Xmx512m
+    ports: ["9215:9200"]
+  kibana-8-15:
+    image: docker.elastic.co/kibana/kibana:8.15.0
+    environment:
+      - ELASTICSEARCH_HOSTS=http://elasticsearch-8-15:9200
+    ports: ["5615:5601"]
+    depends_on: [elasticsearch-8-15]

@@ -18,6 +18,7 @@ from urllib.parse import urlparse
 
 import yaml
 
+from opfor.core import iter_md_docs
 from opfor.scenarios.attacksurface.assets.domain.sources.parsers import info_from_openapi
 
 
@@ -32,20 +33,29 @@ def load_fronting(path: Path) -> dict:
     }
 
 
-def load_frameworks(path: Path) -> dict:
-    """The front-end framework signatures, name to its lowercased body and header markers and a
-    compiled version pattern. A malformed version regex fails the run loudly here, invariant 5."""
-    data = yaml.safe_load(path.read_text(encoding="utf-8")) if path.exists() else {}
+_TITLE = re.compile(r"^#\s+(.+)$", re.MULTILINE)
+
+
+def load_frameworks(directory: Path) -> dict:
+    """The front-end framework signatures, one `fingerprints/<name>.md` unit of kind `framework`
+    each. The unit's title is the framework name, and its frontmatter carries the lowercased body
+    and header markers and an optional compiled version pattern. A unit of another kind is skipped,
+    so services and other fingerprints share the tree. A malformed version regex fails the run
+    loudly here, invariant 5."""
     out: dict = {}
-    for name, sig in ((data or {}).get("frameworks") or {}).items():
-        pattern = str(sig.get("version") or "").strip()
+    for path, meta, body in iter_md_docs(Path(directory)):
+        if str(meta.get("kind", "")).strip() != "framework":
+            continue
+        title = _TITLE.search(body)
+        name = title.group(1).strip() if title else path.stem
+        pattern = str(meta.get("version") or "").strip()
         try:
             version = re.compile(pattern, re.IGNORECASE) if pattern else None
         except re.error as exc:
             raise RuntimeError(f"invalid framework version regex for {name!r}: {exc}") from exc
-        out[str(name)] = {
-            "body": [str(m).lower() for m in (sig.get("body") or [])],
-            "headers": [str(m).lower() for m in (sig.get("headers") or [])],
+        out[name] = {
+            "body": [str(m).lower() for m in (meta.get("body") or [])],
+            "headers": [str(m).lower() for m in (meta.get("headers") or [])],
             "version": version,
         }
     return out

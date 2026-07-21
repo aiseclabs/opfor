@@ -1,7 +1,7 @@
 """Front-end framework classification against the shipped table.
 
 The profiling capability records a host's frameworks in its host_profile fact and the report
-renders that. This exercises the classifier over the real frameworks.yaml, so a marker or a
+renders that. This exercises the classifier over the real fingerprints/ tree, so a marker or a
 version regex that regresses is caught. Detection is deterministic from the HTTP body and
 headers, no browser, and a version is read only where the framework publishes it plainly.
 """
@@ -17,7 +17,7 @@ from opfor.scenarios.attacksurface.assets.domain.sources.profile import (
 )
 from opfor.scenarios.attacksurface.assets.domain.types import HTTP
 
-_FRAMEWORKS = load_frameworks(KNOWLEDGE / "frameworks.yaml")
+_FRAMEWORKS = load_frameworks(KNOWLEDGE / "fingerprints")
 
 
 def _classify(*, server="", headers=(), body=""):
@@ -27,7 +27,7 @@ def _classify(*, server="", headers=(), body=""):
 
 
 def test_shipped_framework_table_loads():
-    assert _FRAMEWORKS, "the shipped frameworks.yaml should load a non-empty table"
+    assert _FRAMEWORKS, "the shipped fingerprints/ tree should load a non-empty framework table"
 
 
 def test_a_next_js_body_marker_tags_next():

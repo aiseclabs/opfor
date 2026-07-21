@@ -24,6 +24,11 @@ from opfor.scenarios.attacksurface.assets.domain.sources.profile import (
     load_frameworks,
     load_fronting,
 )
+from opfor.scenarios.attacksurface.assets.domain.capabilities.specs import (
+    SPEC_PROBE_PATHS,
+    GRAPHQL_PROBE_PATHS,
+)
+from opfor.scenarios.attacksurface.assets.domain.capabilities.http import DISCLOSURE_PROBE_PATHS
 from opfor.scenarios.attacksurface.assets.domain.capabilities import (
     BackupScan,
     BucketScan,
@@ -104,12 +109,15 @@ def assemble(*, enumerate_fn, resolve_fn, probe_fn, fetch_fn, fetch_doc_fn,
     capabilities.append(ProfileHost(identify_fn, framework_fn, fronting_fn))
     if cve_fn is not None:
         capabilities.append(CVELookup(cve_fn))
-    # The plan config is loaded here, at assemble time, not at planner import, so the content
-    # root stays swappable and importing the class triggers no file IO. The services' own version
-    # endpoints join the generic probe paths, so a service versioned only at an endpoint is probed
-    # there without that endpoint being a global path, its knowledge stays in the service's unit.
+    # The plan config is loaded here, at assemble time, not at planner import, so the content root
+    # stays swappable and importing the class triggers no file IO. The probe set is composed from
+    # the owners of each path rather than one global list: the services' own identification and
+    # version endpoints, the spec-discovery locations owned by ExpandSpec, and the GraphQL endpoint
+    # owned by the introspector, all joining the remaining generic paths.
     config = planner.load_plan_config(KNOWLEDGE)
-    extra_paths = tuple(p for p in service_probe_paths(fingerprints) if p not in config.probe_paths)
+    owned = (service_probe_paths(fingerprints) + SPEC_PROBE_PATHS
+             + GRAPHQL_PROBE_PATHS + DISCLOSURE_PROBE_PATHS)
+    extra_paths = tuple(p for p in owned if p not in config.probe_paths)
     if extra_paths:
         config = replace(config, probe_paths=config.probe_paths + extra_paths)
     return ClassBundle(

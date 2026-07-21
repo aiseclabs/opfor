@@ -1,15 +1,12 @@
-# Interface paths to probe on a live host, to enumerate the reachable surface. Each is
-# a plain GET, no payload, so probing is recon, not an attack. The list is high signal
-# on purpose, config and version-control leaks, API specs, admin and monitoring
-# interfaces, and product identity and version endpoints, so a wide run stays small and
-# respectful. A product identity path answers with the product and often its exact
-# version, which is what a later step matches against known vulnerabilities. The planner
+# Interface paths to probe on a live host, to enumerate the reachable surface. Each is a plain
+# GET, no payload, so probing is recon, not an attack. This is the remainder that no other owner
+# holds yet, config and version-control leaks, management and debug surfaces, and a few generic
+# probes. Paths that belong to an owner live with it, not here: a service's own identification and
+# version endpoints in its fingerprints unit, the spec-discovery locations in ExpandSpec, the
+# GraphQL endpoint in the introspector, and the robots and sitemap in the harvester. The planner
 # reads this and hands it to the endpoint capability, no capability reads the file.
-# Adding a path is a data change here.
 
 paths:
-  - "/robots.txt"
-  - "/sitemap.xml"
   - "/.well-known/security.txt"
   - "/.git/config"
   - "/.git/HEAD"
@@ -35,12 +32,6 @@ paths:
   - "/manager/html"
   - "/debug/pprof/"
   - "/_cluster/health"
-  - "/swagger.json"
-  - "/swagger-ui.html"
-  - "/openapi.json"
-  - "/api-docs"
-  - "/v2/api-docs"
-  - "/graphql"
   - "/api"
   - "/admin"
   - "/backup.zip"
@@ -72,6 +63,3 @@ paths:
   - "/database.sql"
   - "/db.sql"
   - "/www.zip"
-  # further API specification locations
-  - "/v3/api-docs"
-  - "/swagger/v1/swagger.json"

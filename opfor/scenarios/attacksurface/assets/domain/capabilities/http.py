@@ -75,6 +75,12 @@ class HTTPDomain(Capability):
         return Done(facts=tuple(facts))
 
 
+# The disclosure files the probe surfaces, robots and sitemap, owned here with the harvester that
+# also reads them to learn paths. They stay in the probe set so a reachable one is presented to the
+# model as an endpoint to judge, public by design or not, not only mined for paths.
+DISCLOSURE_PROBE_PATHS = ("/robots.txt", "/sitemap.xml")
+
+
 class HarvestPaths(Capability):
     """ENRICH: gather candidate interface paths for a live host from what it reveals.
 

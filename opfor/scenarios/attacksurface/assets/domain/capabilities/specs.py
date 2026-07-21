@@ -26,6 +26,14 @@ from opfor.scenarios.attacksurface.assets.domain.types import (
     SpecOperation,
 )
 
+# The well-known locations the probe checks to discover an API specification, owned here with the
+# capability that recognizes and parses one, so a spec location is not a loose entry in a global
+# path list. The recognizer keys on a path carrying openapi, swagger, or api-docs, so these match.
+SPEC_PROBE_PATHS = ("/swagger.json", "/swagger-ui.html", "/openapi.json", "/api-docs",
+                    "/v2/api-docs", "/v3/api-docs", "/swagger/v1/swagger.json")
+# The well-known location the probe checks to find a GraphQL endpoint, owned with the introspector.
+GRAPHQL_PROBE_PATHS = ("/graphql",)
+
 
 class ExpandSpec(Capability):
     """ENRICH: parse an exposed API specification into the operations it declares.

@@ -1,4 +1,6 @@
 ---
+kind: service
+cpe: jenkins:jenkins
 markers:
   - "x-jenkins:"
 version: 'x-jenkins:\s*([0-9]+\.[0-9]+(?:\.[0-9]+)?)'

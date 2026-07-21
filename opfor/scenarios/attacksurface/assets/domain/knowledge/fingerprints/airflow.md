@@ -1,4 +1,6 @@
 ---
+kind: service
+cpe: apache:airflow
 markers:
   - static/dist/airflowdefaulttheme
 ---

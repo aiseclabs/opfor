@@ -15,11 +15,11 @@ from opfor.scenarios.attacksurface.assets.domain.sources import fingerprint, loa
 from opfor.scenarios.attacksurface.assets.domain.sources.fingerprint import Fingerprint
 import re
 
-_TABLE = load_services(KNOWLEDGE / "vendors")
+_TABLE = load_services(KNOWLEDGE / "fingerprints")
 
 
 def test_shipped_table_loads():
-    assert _TABLE, "the shipped vendors/ tree should load a non-empty table"
+    assert _TABLE, "the shipped fingerprints/ tree should load a non-empty service table"
 
 
 def test_jenkins_header_gives_product_and_version():
@@ -70,7 +70,7 @@ def test_a_version_capture_that_is_not_a_version_is_dropped():
 
 
 def test_a_missing_file_is_an_empty_table():
-    assert load_services(Path("/no/such/vendors")) == ()
+    assert load_services(Path("/no/such/fingerprints")) == ()
 
 
 def test_first_match_wins_by_table_order():

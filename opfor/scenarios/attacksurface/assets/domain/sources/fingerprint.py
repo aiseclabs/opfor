@@ -2,11 +2,10 @@
 
 It matches a host's gathered evidence against a curated set of high-signal markers, so a known
 service such as a Jenkins or a Kibana is identified without a model call, with the exact version a
-version header or endpoint carries. Each service is one self-contained knowledge unit under
-`knowledge/vendors/<vendor>/<product>.md`, so its path is its NVD CPE `vendor:product` key, the
-frontmatter carries only the detection markers and version, and the title is the human name. A
-service the markers miss returns empty, which the caller falls to the model, so a thin or stale
-set identifies less, never wrong.
+version header or endpoint carries. Each service is one `fingerprints/<name>.md` knowledge unit of
+kind `service`, its `cpe` frontmatter field the NVD `vendor:product` key, its markers and version
+the detection knowledge, and its title the human name. A service the markers miss returns empty,
+which the caller falls to the model, so a thin or stale set identifies less, never wrong.
 """
 
 from __future__ import annotations
@@ -40,32 +39,29 @@ class Fingerprint:
 
 
 def load_services(directory: Path) -> tuple[Fingerprint, ...]:
-    """Load the per-service knowledge units at build time, one `vendors/<vendor>/<product>.md` each.
-    The unit's path is its CPE, the vendor directory and the product filename compose the NVD
-    `vendor:product` key, so the canonical identity cannot drift from a duplicated field. The
-    frontmatter carries only the detection knowledge, the markers and the version, and the title is
-    the human name. A missing directory is an empty set, so the identify seam stays pure model. A
-    malformed version regex fails the run loudly here rather than silently skipping a service during
-    a scan, invariant 5."""
-    root = Path(directory)
+    """Load the service fingerprints at build time, one `fingerprints/<name>.md` unit of kind
+    `service` each. The `cpe` frontmatter field is the NVD `vendor:product` lookup key, the title is
+    the human name, and the markers and version are the detection knowledge. A unit of another kind
+    is skipped, so frameworks and other fingerprints share the tree. A missing directory is an empty
+    set, so the identify seam stays pure model. A malformed version regex fails the run loudly here
+    rather than silently skipping a service during a scan, invariant 5."""
     table: list[Fingerprint] = []
-    for path, meta, body in iter_md_docs(root):
-        if path.parent.parent != root:
+    for path, meta, body in iter_md_docs(Path(directory)):
+        if str(meta.get("kind", "")).strip() != "service":
             continue
-        vendor = path.parent.name
-        product = path.stem
+        cpe = str(meta.get("cpe", "")).strip()
         markers = tuple(str(m).strip().lower() for m in (meta.get("markers") or []) if str(m).strip())
-        if not markers:
+        if not (cpe and markers):
             continue
         title = _TITLE.search(body)
-        name = title.group(1).strip() if title else product
+        name = title.group(1).strip() if title else path.stem
         pattern = str(meta.get("version") or "").strip()
         try:
             version = re.compile(pattern, re.IGNORECASE) if pattern else None
         except re.error as exc:
             raise RuntimeError(f"invalid version regex for {name!r}: {exc}") from exc
         version_paths = tuple(str(p).strip() for p in (meta.get("version_paths") or []) if str(p).strip())
-        table.append(Fingerprint(name=name, cpe=f"{vendor}:{product}",
+        table.append(Fingerprint(name=name, cpe=cpe,
                                  markers=markers, version=version, version_paths=version_paths))
     return tuple(table)
 

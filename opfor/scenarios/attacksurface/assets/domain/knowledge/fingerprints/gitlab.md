@@ -1,4 +1,6 @@
 ---
+kind: service
+cpe: gitlab:gitlab
 markers:
   - "x-gitlab-meta:"
   - gitlab-org/gitlab

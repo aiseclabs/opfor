@@ -80,7 +80,7 @@ def assemble(*, enumerate_fn, resolve_fn, probe_fn, fetch_fn, fetch_doc_fn,
     # seam, so the seam tries the services first and falls to the model on a miss, and a thin or
     # stale set identifies less rather than wrong. They are the class's own knowledge, loaded here
     # at assemble time. An empty set leaves the seam pure model, so a missing tree is no regression.
-    fingerprints = load_services(KNOWLEDGE / "vendors")
+    fingerprints = load_services(KNOWLEDGE / "fingerprints")
     if identify_fn is not None and fingerprints:
         model_identify = identify_fn
 

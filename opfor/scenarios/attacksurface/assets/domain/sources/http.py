@@ -233,7 +233,8 @@ def fetch_document(name: str, path: str) -> dict:
     for ip in public:
         for scheme in ("https", "http"):
             try:
-                status, _, content_type, body, _location, _hdrs = _connect(name, ip, scheme, path, read_limit=_DOCUMENT_LIMIT)
+                status, _, content_type, body, _location, _hdrs = _connect(
+                    name, ip, scheme, path, read_limit=_DOCUMENT_LIMIT)
             except (OSError, http.client.HTTPException):
                 continue
             return {"status": status, "content_type": content_type, "text": body, "reason": ""}

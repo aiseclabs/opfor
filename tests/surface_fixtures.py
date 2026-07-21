@@ -74,7 +74,8 @@ GH_ORGS = {"ExampleCorp": [
 GH_REPOS = {
     "examplecorp": [
         {"full_name": "examplecorp/web", "url": "u1", "language": "Go", "pushed_at": "2026-06-01", "archived": False},
-        {"full_name": "examplecorp/infra", "url": "u2", "language": "HCL", "pushed_at": "2026-05-01", "archived": False},
+        {"full_name": "examplecorp/infra", "url": "u2", "language": "HCL",
+         "pushed_at": "2026-05-01", "archived": False},
     ]
 }
 

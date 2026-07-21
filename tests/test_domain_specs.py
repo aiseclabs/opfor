@@ -236,7 +236,8 @@ def test_nvd_cves_parses_id_score_severity_and_summary():
                 "metrics": {"cvssMetricV31": [{"cvssData": {"baseScore": 9.8, "baseSeverity": "CRITICAL"}}],
                             "cvssMetricV2": [{"cvssData": {"baseScore": 5.0}, "baseSeverity": "MEDIUM"}]},
                 "descriptions": [{"lang": "es", "value": "ignore"}, {"lang": "en", "value": "auth bypass"}],
-                "references": [{"url": "https://advisory.example/GHSA-1"}, {"url": "https://nvd.example/CVE-2021-39226"}],
+                "references": [{"url": "https://advisory.example/GHSA-1"},
+                               {"url": "https://nvd.example/CVE-2021-39226"}],
             }},
             {"cve": {"id": "", "metrics": {}, "descriptions": []}},
         ]

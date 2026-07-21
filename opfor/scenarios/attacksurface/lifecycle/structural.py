@@ -15,8 +15,6 @@ from __future__ import annotations
 from opfor.core import Finding, World
 
 
-
-
 def wildcards(world: World) -> list[Finding]:
     """Report the wildcard certificates the run saw as a named blind spot. A wildcard such as
     *.dev.example.com covers every host under it, so certificate transparency never names the

@@ -15,7 +15,7 @@ import sys
 from evals import backtest
 
 
-def main(argv=None) -> int:
+def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="evals", description="fingerprint backtest over recorded cassettes")
     sub = parser.add_subparsers(dest="cmd", required=True)
     r = sub.add_parser("run", help="replay the corpus and score")

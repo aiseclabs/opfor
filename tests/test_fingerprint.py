@@ -8,12 +8,12 @@ less, never wrong.
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 from opfor.scenarios.attacksurface.assets.domain import KNOWLEDGE
 from opfor.scenarios.attacksurface.assets.domain.sources import fingerprint, load_services
 from opfor.scenarios.attacksurface.assets.domain.sources.fingerprint import Fingerprint
-import re
 
 _TABLE = load_services(KNOWLEDGE / "technologies" / "services")
 

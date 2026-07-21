@@ -1,4 +1,5 @@
-"""JavaScript URL, source map, and secret extraction for the domain class, apart from the network so a test drives each one."""
+"""JavaScript URL, source map, and secret extraction for the domain class, apart from the network
+so a test drives each one."""
 
 from __future__ import annotations
 

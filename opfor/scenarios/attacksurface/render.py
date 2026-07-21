@@ -78,13 +78,10 @@ class SurfaceRenderer:
         # a dangling one. The resolver failure is surfaced by its own coverage gap instead.
         dangling = (resolved_data is not None and not resolved_data.resolvable
                     and not resolved_data.errored and data.source == "passive")
-        # A root's email and DNS posture, and a host's open service ports, are judged even when
-        # the host serves no web content, since a spoofable domain or an exposed database with
-        # no website is still a finding, so a host carrying either fact is rendered on its own.
+        # A root's email and DNS posture is judged even when the host serves no web content, since
+        # a spoofable domain with no website is still a finding, so a host carrying it is rendered.
         dns_email = world.latest("dns_email", node.id)
-        ports = world.latest("ports", node.id)
-        has_ports = ports is not None and ports.payload.open_ports
-        if not alive and not dangling and dns_email is None and not has_ports:
+        if not alive and not dangling and dns_email is None:
             return None
         bits = [f"host {data.name}", f"source {data.source}"]
         if alive:
@@ -178,11 +175,6 @@ class SurfaceRenderer:
                 status = f"INVALID, {t.validity_error or 'certificate did not verify'}"
             protocol = f"; protocol {t.protocol}" if t.protocol else ""
             line += f"\n  TLS certificate: {status}{protocol}"
-        if has_ports:
-            shown = "; ".join(
-                f"{op.port} {op.service}" + (f" (banner: {op.banner})" if op.banner else "")
-                for op in ports.payload.open_ports)
-            line += f"\n  exposed service ports: {shown}"
         if dns_email is not None:
             p = dns_email.payload
             spf = "; ".join(p.spf) if p.spf else "absent"

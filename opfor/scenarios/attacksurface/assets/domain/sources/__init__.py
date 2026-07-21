@@ -29,7 +29,6 @@ from opfor.scenarios.attacksurface.assets.domain.sources.fingerprint import (
     fingerprint,
     load_fingerprints,
 )
-from opfor.scenarios.attacksurface.assets.domain.sources.ports import port_scan
 from opfor.scenarios.attacksurface.assets.domain.sources.tls import tls_probe
 from opfor.scenarios.attacksurface.assets.domain.sources.passive import (
     Enumeration,
@@ -98,7 +97,6 @@ __all__ = [
     "otx_subdomains",
     "paths_from_openapi",
     "paths_in_javascript",
-    "port_scan",
     "resolve_host",
     "robots_entries",
     "roots_from_file",

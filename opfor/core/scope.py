@@ -19,7 +19,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Mapping, Protocol, runtime_checkable
 
-TIERS = ("recon", "probe", "intrusive")
+TIERS = ("recon", "intrusive")
 _INTRUSIVE = TIERS.index("intrusive")
 
 

@@ -53,7 +53,7 @@ def test_the_matcher_decides_scope_the_kernel_only_delegates():
 
 def test_a_tier_above_the_ceiling_is_denied():
     scope = Scope(max_tier="recon", matcher=ExactScope(("example.com",)))
-    assert not scope.authorize("probe", osint=False, target="example.com").allowed
+    assert not scope.authorize("intrusive", osint=False, target="example.com").allowed
 
 
 def test_intrusive_tier_requires_explicit_authorization():

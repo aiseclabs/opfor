@@ -486,52 +486,6 @@ def test_path_permutation_runs_between_harvest_and_endpoints_without_deadlock():
     assert report.status == CLOSED
 
 
-def test_port_scan_is_gated_behind_the_probe_tier():
-    from opfor.core import Scope
-
-    # recon tier: the scan is a probe-tier act, so scope retires it unauthorized and no host
-    # carries a ports fact, a default run never port-scans
-    _, _, recon = _run_capturing(scope=Scope(max_tier="recon", matcher=HostScope(hosts=(ROOT,))))
-    assert all(recon.latest("ports", n.id) is None for n in recon.nodes("domain"))
-
-    # probe tier: the operator opted in, so each resolvable host is scanned and carries the fact
-    _, _, probe = _run_capturing(scope=Scope(max_tier="probe", matcher=HostScope(hosts=(ROOT,))))
-    resolvable = [n for n in probe.nodes("domain")
-                  if (r := probe.latest("resolved", n.id)) is not None and r.payload.resolvable]
-    assert resolvable and any(probe.latest("ports", n.id) is not None for n in resolvable)
-
-
-def test_exposed_service_ports_are_surfaced_and_the_class_is_selected():
-    from opfor.core import Scope
-
-    def ports(name, addresses=()):
-        return {"reachable": True, "scanned": 24,
-                "open": [{"port": 6379, "service": "redis", "banner": ""}]}
-
-    _, sc, _ = _run_capturing(scope=Scope(max_tier="probe", matcher=HostScope(hosts=(ROOT,))), ports_fn=ports)
-    prompt = _prompt(sc)
-    assert "exposed service ports: 6379 redis" in prompt
-    assert "Exposed Backend Or Management Service" in _knowledge(sc)
-
-
-def test_render_shows_exposed_ports_even_on_a_host_without_a_website():
-    from opfor.core import Fact
-    from opfor.scenarios.attacksurface.assets.domain.types import DomainData, OpenPort, PortScan
-    from opfor.scenarios.attacksurface.render import SurfaceRenderer
-
-    # no http fact, so this backend host serves no website, yet its open ports must be judged
-    world = World()
-    world.add(Node(id="domain:db.example.com", type="domain",
-                   payload=DomainData(name="db.example.com", root="example.com", source="permuted")))
-    world.absorb((Fact(kind="ports", about="domain:db.example.com",
-                       payload=PortScan(host="db.example.com", reachable=True, scanned=24,
-                                        open_ports=(OpenPort(port=22, service="ssh",
-                                                             banner="SSH-2.0-OpenSSH_8.9"),
-                                                    OpenPort(port=6379, service="redis")))),))
-    text = "\n".join(SurfaceRenderer([], []).units(world))
-    assert "exposed service ports: 22 ssh (banner: SSH-2.0-OpenSSH_8.9); 6379 redis" in text
-
-
 def test_tls_posture_is_probed_on_live_hosts_and_surfaced_for_the_judge():
     _, sc, world = _run_capturing()
     live = [n for n in world.nodes("domain")

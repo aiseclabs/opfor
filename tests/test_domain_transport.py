@@ -570,69 +570,6 @@ def test_tls_capability_reports_posture_and_fails_loud_on_error():
 
     assert isinstance(TLSSecurity(boom).run(task, world), Failed)
 
-def test_port_scan_reports_open_service_ports_with_banners(monkeypatch):
-    from opfor.scenarios.attacksurface.assets.domain.sources import ports as domains
-
-    opened = {22: "SSH-2.0-OpenSSH_8.9", 6379: ""}  # ssh answers a banner, redis is open silently
-    filtered = {3389}  # rdp is filtered, its state undetermined
-
-    def probe(ip, port):
-        # _probe_port returns (banner_or_None, timed_out)
-        if port in opened:
-            return opened[port], False
-        if port in filtered:
-            return None, True
-        return None, False  # a refused, proven-closed port
-
-    monkeypatch.setattr(domains, "_probe_port", probe)
-    out = domains.port_scan("h.example.com", ("1.2.3.4",))
-    assert out["reachable"] and out["scanned"] == len(domains._SERVICE_PORTS)
-    ports = {p["port"]: p for p in out["open"]}
-    assert ports[22]["service"] == "ssh" and "OpenSSH" in ports[22]["banner"]
-    assert 6379 in ports and ports[6379]["service"] == "redis"
-    # a proven-closed port is not reported as open
-    assert 3389 not in ports
-    # a filtered port is counted as undetermined, never folded into the closed set
-    assert out["filtered"] == 1
-
-def test_port_scan_is_not_reachable_without_a_public_address():
-    from opfor.scenarios.attacksurface.assets.domain.sources import ports as domains
-
-    out = domains.port_scan("h.example.com", ("10.0.0.1",))
-    assert out["reachable"] is False and out["reason"] == "no-public-address"
-
-def test_port_scan_capability_is_probe_tier_and_packs_facts_and_fails_loud():
-    from opfor.core import Done, Failed, Node, Task, World
-    from opfor.scenarios.attacksurface.assets.domain.capabilities.ports import PortServices
-    from opfor.scenarios.attacksurface.assets.domain.types import DomainData
-
-    # the scan touches the target's ports, above recon, so it is a probe-tier act scope gates
-    assert PortServices(lambda n, a: {}).tier == "probe"
-
-    world = World()
-    world.add(Node(id="domain:h.example.com", type="domain",
-                   payload=DomainData(name="h.example.com", root="example.com", source="hint")))
-    task = Task(capability="port_scan", node="domain:h.example.com", scope_target="h.example.com")
-
-    ok = PortServices(lambda n, a: {"reachable": True, "scanned": 24,
-                                    "open": [{"port": 6379, "service": "redis", "banner": ""}]})
-    out = ok.run(task, world)
-    assert isinstance(out, Done)
-    assert out.facts[0].payload.open_ports[0].port == 6379
-
-    # a scan where ports timed out records the filtered count and a coverage gap, so a firewalled
-    # host with an empty open set is not read as a clean no-exposure negative
-    filtered_scan = PortServices(lambda n, a: {"reachable": True, "scanned": 24, "open": [],
-                                               "filtered": 24})
-    fout = filtered_scan.run(task, world)
-    assert fout.facts[0].payload.filtered == 24
-    assert any(f.kind == "coverage_gap" for f in fout.facts)
-
-    def boom(name, addresses):
-        raise RuntimeError("scan down")
-
-    assert isinstance(PortServices(boom).run(task, world), Failed)
-
 def test_registrable_root_keeps_multi_label_suffixes():
     from opfor.scenarios.attacksurface.hostnames import registrable_root
 

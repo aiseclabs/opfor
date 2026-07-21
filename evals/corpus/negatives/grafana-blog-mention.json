@@ -1,0 +1,20 @@
+{
+  "product": "",
+  "version": "",
+  "host": "blog.test",
+  "note": "a blog that merely mentions Grafana in prose, it is not a Grafana instance; guards against the loose-marker false identification (C1)",
+  "resolved": {"resolvable": true, "addresses": ["127.0.0.1"], "cnames": []},
+  "root": {
+    "alive": true,
+    "status": 200,
+    "url": "https://blog.test/",
+    "server": "nginx",
+    "title": "our monitoring stack",
+    "body": "<html><head><title>our monitoring stack</title></head><body><article>we run prometheus and grafana for dashboards, and gitlab for ci. this post explains how we deploy grafana behind our proxy.</article></body></html>",
+    "location": "",
+    "headers": [],
+    "reason": ""
+  },
+  "fetch": {},
+  "docs": {}
+}

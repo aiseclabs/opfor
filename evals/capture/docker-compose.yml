@@ -1,0 +1,23 @@
+# Product instances at pinned versions, for capturing fingerprint backtest cassettes.
+#
+# Run on a machine with Docker (not in CI). Bring the versions up, capture each, tear down:
+#
+#   docker compose -f evals/capture/docker-compose.yml up -d
+#   python -m evals.capture.capture --product Grafana --version 9.5.0  --url http://localhost:3095
+#   python -m evals.capture.capture --product Grafana --version 10.4.0 --url http://localhost:3104
+#   python -m evals.capture.capture --product Grafana --version 11.2.0 --url http://localhost:3112
+#   docker compose -f evals/capture/docker-compose.yml down
+#
+# Each capture probes the instance exactly as opfor would and writes evals/corpus/grafana/<version>.json.
+# Add a product by adding its pinned-version services here, the same shape.
+
+services:
+  grafana-9-5:
+    image: grafana/grafana:9.5.0
+    ports: ["3095:3000"]
+  grafana-10-4:
+    image: grafana/grafana:10.4.0
+    ports: ["3104:3000"]
+  grafana-11-2:
+    image: grafana/grafana:11.2.0
+    ports: ["3112:3000"]

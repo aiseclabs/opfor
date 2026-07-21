@@ -1,0 +1,101 @@
+"""Capture a fingerprint backtest cassette from a running product instance.
+
+Run on a machine with Docker, against a container from `docker-compose.yml`. It probes the
+instance exactly as opfor would, the root over no-redirect HTTP and each interface path the
+scenario probes, and records the responses in the same shape opfor's seams return, so the
+offline backtest replays them faithfully. Only responses that answered with a status are kept,
+a path that 404s is the replay default, so a cassette stays small.
+
+    python -m evals.capture.capture --product Grafana --version 10.4.0 --url http://localhost:3104
+
+It reaches a live container, so it needs network and Docker, and is never run in CI. The offline
+backtest that consumes the cassette needs neither.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import re
+import urllib.error
+import urllib.request
+from pathlib import Path
+from urllib.parse import urlsplit
+
+import yaml
+
+from opfor.scenarios.attacksurface.assets.domain import KNOWLEDGE
+
+_TITLE = re.compile(r"<title[^>]*>(.*?)</title>", re.I | re.S)
+_UA = "Mozilla/5.0 (compatible; opfor-eval-capture)"
+_BODY = 4096
+_TIMEOUT = 15
+# Do not follow redirects, so a login redirect is recorded as opfor's probe sees it, not the page.
+_OPENER = urllib.request.build_opener(type("_NoRedirect", (urllib.request.HTTPRedirectHandler,),
+                                          {"redirect_request": lambda *a, **k: None})())
+
+
+def _get(url: str) -> dict | None:
+    request = urllib.request.Request(url, headers={"User-Agent": _UA})
+    try:
+        resp = _OPENER.open(request, timeout=_TIMEOUT)
+        status, headers, raw = resp.status, resp.headers, resp.read(_BODY)
+    except urllib.error.HTTPError as exc:
+        status, headers, raw = exc.code, exc.headers, exc.read(_BODY)
+    except Exception:
+        return None
+    body = raw.decode("utf-8", "replace")
+    title = _TITLE.search(body)
+    return {"status": status, "server": headers.get("Server", ""),
+            "content_type": headers.get("Content-Type", ""), "title": title.group(1).strip()[:200] if title else "",
+            "body": body.lower(), "location": headers.get("Location", ""),
+            "headers": [[k, v] for k, v in headers.items()]}
+
+
+def _paths() -> list[str]:
+    data = yaml.safe_load((KNOWLEDGE / "paths.yaml").read_text(encoding="utf-8")) or {}
+    return [str(p) for p in (data.get("paths") or []) if str(p).startswith("/")]
+
+
+def capture(product: str, version: str, url: str) -> dict:
+    base = url.rstrip("/")
+    host = urlsplit(url).hostname or "captured.host"
+    root_raw = _get(base + "/") or {}
+    root = {"alive": bool(root_raw), "status": root_raw.get("status"), "url": base + "/",
+            "server": root_raw.get("server", ""), "title": root_raw.get("title", ""),
+            "body": root_raw.get("body", ""), "location": root_raw.get("location", ""),
+            "headers": root_raw.get("headers", []), "reason": ""}
+    fetch: dict = {}
+    for path in _paths():
+        r = _get(base + path)
+        if r is None or r.get("status") in (None, 404):
+            continue
+        fetch[path] = {"status": r["status"], "url": base + path, "content_type": r["content_type"],
+                       "server": r["server"], "title": r["title"], "body": r["body"],
+                       "location": r["location"], "reason": ""}
+    return {"product": product, "version": version, "host": host,
+            "resolved": {"resolvable": True, "addresses": ["127.0.0.1"], "cnames": []},
+            "root": root, "fetch": fetch, "docs": {}}
+
+
+def main(argv=None) -> int:
+    parser = argparse.ArgumentParser(prog="evals.capture.capture")
+    parser.add_argument("--product", required=True)
+    parser.add_argument("--version", required=True)
+    parser.add_argument("--url", required=True, help="base URL of the running instance, e.g. http://localhost:3104")
+    parser.add_argument("--out", default="", help="output path, default evals/corpus/<product>/<version>.json")
+    args = parser.parse_args(argv)
+
+    cassette = capture(args.product, args.version, args.url)
+    out = Path(args.out) if args.out else (
+        Path(__file__).resolve().parent.parent / "corpus" / args.product.lower() / f"{args.version}.json")
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(json.dumps(cassette, indent=2) + "\n", encoding="utf-8")
+    kept = len(cassette["fetch"])
+    print(f"wrote {out} (root status {cassette['root']['status']}, {kept} answered interface paths)")
+    return 0
+
+
+if __name__ == "__main__":
+    import sys
+    sys.exit(main())

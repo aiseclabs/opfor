@@ -12,9 +12,9 @@ from evals.replay import load_cassette, profile_for
 
 
 def test_grafana_cassette_is_identified_with_its_version():
-    prof = profile_for(load_cassette(backtest.CORPUS / "grafana" / "9.5.0.json"))
+    prof = profile_for(load_cassette(backtest.CORPUS / "grafana" / "10.4.0.json"))
     assert prof is not None
-    assert prof.product == "Grafana" and prof.version == "9.5.0" and prof.cpe == "grafana:grafana"
+    assert prof.product == "Grafana" and prof.version == "10.4.0" and prof.cpe == "grafana:grafana"
 
 
 def test_a_page_that_only_mentions_a_product_is_not_identified_as_it():

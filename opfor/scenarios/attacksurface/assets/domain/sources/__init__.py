@@ -27,7 +27,8 @@ from opfor.scenarios.attacksurface.assets.domain.sources.http import (
 )
 from opfor.scenarios.attacksurface.assets.domain.sources.fingerprint import (
     fingerprint,
-    load_fingerprints,
+    load_products,
+    product_version_paths,
 )
 from opfor.scenarios.attacksurface.assets.domain.sources.tls import tls_probe
 from opfor.scenarios.attacksurface.assets.domain.sources.passive import (
@@ -91,7 +92,8 @@ __all__ = [
     "hosts_from_file",
     "http_probe",
     "info_from_openapi",
-    "load_fingerprints",
+    "load_products",
+    "product_version_paths",
     "nvd_cves",
     "operations_from_introspection",
     "otx_subdomains",

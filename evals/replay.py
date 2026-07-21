@@ -19,9 +19,9 @@ from opfor.scenarios.attacksurface import build
 from opfor.scenarios.attacksurface.hostnames import HostScope
 from opfor.scenarios.attacksurface.types import Org
 from opfor.scenarios.attacksurface.assets.domain import KNOWLEDGE
-from opfor.scenarios.attacksurface.assets.domain.sources import fingerprint, load_fingerprints
+from opfor.scenarios.attacksurface.assets.domain.sources import fingerprint, load_products
 
-_TABLE = load_fingerprints(KNOWLEDGE / "fingerprints.yaml")
+_TABLE = load_products(KNOWLEDGE / "products")
 
 
 def _fingerprint_only(evidence: str) -> dict:

@@ -79,7 +79,7 @@ def host_evidence(world, host) -> str:
         if endpoint.content_type:
             bit += f" {endpoint.content_type}"
         if endpoint.body:
-            bit += f"\n  body: {endpoint.body[:400]}"
+            bit += f"\n  body: {endpoint.body[:1024]}"
         lines.append(bit)
         title, version = _spec_info(world, node, endpoint)
         if title or version:

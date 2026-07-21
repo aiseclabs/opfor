@@ -11,15 +11,15 @@ from __future__ import annotations
 from pathlib import Path
 
 from opfor.scenarios.attacksurface.assets.domain import KNOWLEDGE
-from opfor.scenarios.attacksurface.assets.domain.sources import fingerprint, load_fingerprints
+from opfor.scenarios.attacksurface.assets.domain.sources import fingerprint, load_products
 from opfor.scenarios.attacksurface.assets.domain.sources.fingerprint import Fingerprint
 import re
 
-_TABLE = load_fingerprints(KNOWLEDGE / "fingerprints.yaml")
+_TABLE = load_products(KNOWLEDGE / "products")
 
 
 def test_shipped_table_loads():
-    assert _TABLE, "the shipped fingerprints.yaml should load a non-empty table"
+    assert _TABLE, "the shipped products/ tree should load a non-empty table"
 
 
 def test_jenkins_header_gives_product_and_version():
@@ -66,7 +66,7 @@ def test_a_version_capture_that_is_not_a_version_is_dropped():
 
 
 def test_a_missing_file_is_an_empty_table():
-    assert load_fingerprints(Path("/no/such/fingerprints.yaml")) == ()
+    assert load_products(Path("/no/such/products")) == ()
 
 
 def test_first_match_wins_by_table_order():

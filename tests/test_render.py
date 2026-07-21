@@ -1,0 +1,101 @@
+"""SurfaceRenderer unit tests: what the renderer puts in front of the model from the world,
+apart from the triage model judgment in test_surface_triage."""
+
+from __future__ import annotations
+
+
+from opfor.core import Node, World
+
+
+def test_takeover_catalogue_is_expanded_and_a_new_signature_raises_its_clue():
+    from opfor.core import Fact
+    from opfor.scenarios.attacksurface.assets.domain import KNOWLEDGE
+    from opfor.scenarios.attacksurface.assets.domain.types import DomainData, HTTP as HTTPData
+    from opfor.scenarios.attacksurface.render import SurfaceRenderer
+    from opfor.scenarios.attacksurface.lifecycle.triage import _load_takeover
+
+    takeover = _load_takeover(KNOWLEDGE / "findings")
+    services = {service for service, _ in takeover}
+    assert {"Zendesk", "Kinsta", "UserVoice"} <= services
+    # every signature is non-empty and lowercased, so the lowercased-body match is reliable
+    for service, signature in takeover:
+        assert signature and signature == signature.lower()
+
+    # a body carrying a newly added unclaimed-page signature raises its clue for the judge
+    world = World()
+    world.add(Node(id="domain:h.example.com", type="domain",
+                   payload=DomainData(name="h.example.com", root="example.com", source="hint")))
+    world.absorb((Fact(kind="http", about="domain:h.example.com",
+                       payload=HTTPData(alive=True, status=404, url="https://h.example.com/",
+                                        body="<html>help center closed</html>")),))
+    text = "\n".join(SurfaceRenderer([], takeover).units(world))
+    assert "matched Zendesk unclaimed-resource page" in text
+
+
+def test_render_lists_present_security_headers_as_set_and_omits_them_from_missing():
+    from opfor.core import Fact
+    from opfor.scenarios.attacksurface.assets.domain.types import DomainData, HTTP as HTTPData
+    from opfor.scenarios.attacksurface.render import SurfaceRenderer
+
+    world = World()
+    world.add(Node(id="domain:h.example.com", type="domain",
+                   payload=DomainData(name="h.example.com", root="example.com", source="hint")))
+    world.absorb((Fact(kind="http", about="domain:h.example.com",
+                       payload=HTTPData(alive=True, status=200, url="https://h.example.com/",
+                                        headers=(("strict-transport-security", "max-age=31536000"),
+                                                 ("x-frame-options", "DENY")))),))
+    text = "\n".join(SurfaceRenderer([], []).units(world))
+    assert "security response headers set: strict-transport-security, x-frame-options" in text
+    # a header that is set is never listed as missing
+    assert "not set: content-security-policy, x-content-type-options, referrer-policy, permissions-policy" in text
+
+
+def test_directory_listing_body_raises_the_exposure_clue():
+    from opfor.scenarios.attacksurface.assets.domain import KNOWLEDGE
+    from opfor.scenarios.attacksurface.assets.domain.types import Endpoint
+    from opfor.scenarios.attacksurface.render import SurfaceRenderer
+    from opfor.scenarios.attacksurface.lifecycle.triage import _load_clues
+
+    clues = _load_clues(KNOWLEDGE / "findings")
+    renderer = SurfaceRenderer(clues, [])
+    # a parent directory the permutation probed that answers with an autoindex listing
+    endpoint = Endpoint(url="https://h.example.com/uploads/", path="/uploads/", status=200,
+                        content_type="text/html", body="<title>index of /uploads</title>")
+    assert any("directory-listing" in clue for clue in renderer._exposure_clues(endpoint))
+
+
+def test_render_shows_an_invalid_tls_certificate_with_its_reason():
+    from opfor.core import Fact
+    from opfor.scenarios.attacksurface.assets.domain.types import DomainData, HTTP as HTTPData, TLSPosture
+    from opfor.scenarios.attacksurface.render import SurfaceRenderer
+
+    world = World()
+    world.add(Node(id="domain:h.example.com", type="domain",
+                   payload=DomainData(name="h.example.com", root="example.com", source="hint")))
+    world.absorb((
+        Fact(kind="http", about="domain:h.example.com",
+             payload=HTTPData(alive=True, status=200, url="https://h.example.com/")),
+        Fact(kind="tls", about="domain:h.example.com",
+             payload=TLSPosture(host="h.example.com", reachable=True, valid=False,
+                                validity_error="certificate has expired", protocol="TLSv1.2")),
+    ))
+    text = "\n".join(SurfaceRenderer([], []).units(world))
+    assert "TLS certificate: INVALID, certificate has expired; protocol TLSv1.2" in text
+
+
+def test_render_shows_a_configured_root_email_and_dns_posture_even_without_a_website():
+    from opfor.core import Fact
+    from opfor.scenarios.attacksurface.assets.domain.types import DNSEmailPosture, DomainData
+    from opfor.scenarios.attacksurface.render import SurfaceRenderer
+
+    # no http fact, so the root serves no website, yet the email posture must still be judged
+    world = World()
+    world.add(Node(id="domain:example.com", type="domain",
+                   payload=DomainData(name="example.com", root="example.com", source="hint")))
+    world.absorb((Fact(kind="dns_email", about="domain:example.com",
+                       payload=DNSEmailPosture(domain="example.com", spf=("v=spf1 -all",),
+                                               dmarc="v=DMARC1; p=reject",
+                                               caa=('0 issue "letsencrypt.org"',), dnssec=True)),))
+    text = "\n".join(SurfaceRenderer([], []).units(world))
+    assert ("email/DNS security: SPF v=spf1 -all; DMARC v=DMARC1; p=reject; "
+            "DNSSEC validated; CAA 1 record(s)") in text

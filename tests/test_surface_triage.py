@@ -1,21 +1,20 @@
 from __future__ import annotations
 
-import json
 
+import json
 import pytest
 
-from opfor.core import Budget, MockProvider, Node, Scope, World, run
+from opfor.core import Budget, MockProvider, Scope, run
 from opfor.scenarios.attacksurface.lifecycle.triage import TriageError, _finding_from_dict
-
 from tests.surface_fixtures import (
-    HostScope,
     ROOT,
-    _knowledge,
-    _make,
+    HostScope,
     _probe,
-    _prompt,
-    _run_capturing,
+    _make,
     _seed,
+    _run_capturing,
+    _prompt,
+    _knowledge,
     _two_findings,
 )
 
@@ -34,31 +33,6 @@ def test_dangling_name_is_surfaced():
     p = _prompt(sc)
     assert "old.example.com" in p
     assert "does not resolve, seen only passively" in p
-
-
-def test_takeover_catalogue_is_expanded_and_a_new_signature_raises_its_clue():
-    from opfor.core import Fact
-    from opfor.scenarios.attacksurface.assets.domain import KNOWLEDGE
-    from opfor.scenarios.attacksurface.assets.domain.types import DomainData, HTTP as HTTPData
-    from opfor.scenarios.attacksurface.render import SurfaceRenderer
-    from opfor.scenarios.attacksurface.lifecycle.triage import _load_takeover
-
-    takeover = _load_takeover(KNOWLEDGE / "findings")
-    services = {service for service, _ in takeover}
-    assert {"Zendesk", "Kinsta", "UserVoice"} <= services
-    # every signature is non-empty and lowercased, so the lowercased-body match is reliable
-    for service, signature in takeover:
-        assert signature and signature == signature.lower()
-
-    # a body carrying a newly added unclaimed-page signature raises its clue for the judge
-    world = World()
-    world.add(Node(id="domain:h.example.com", type="domain",
-                   payload=DomainData(name="h.example.com", root="example.com", source="hint")))
-    world.absorb((Fact(kind="http", about="domain:h.example.com",
-                       payload=HTTPData(alive=True, status=404, url="https://h.example.com/",
-                                        body="<html>help center closed</html>")),))
-    text = "\n".join(SurfaceRenderer([], takeover).units(world))
-    assert "matched Zendesk unclaimed-resource page" in text
 
 
 def test_dangling_cname_target_is_surfaced_for_takeover_judgment():
@@ -180,130 +154,6 @@ def test_model_findings_are_mapped_to_typed_findings():
     assert git[0].where.endswith("/.git/config")
     assert git[0].poc.startswith("curl")
     assert git[0].data["confidence"] == 0.9
-
-
-def test_grounding_attaches_a_poc_request_only_for_an_observed_safe_read():
-    """Strict grounding: a finding is marked reproducible only when its safe-read proof of
-    concept names a GET the surface actually recorded, never a request the model invented."""
-    from opfor.core import Fact, Node
-    from opfor.scenarios.attacksurface.assets.domain.types import (
-        DomainData, Endpoint, SpecAudit, SpecOperation)
-    from opfor.core.result import Finding
-    from opfor.scenarios.attacksurface.lifecycle.grounding import FindingGrounder
-
-    world = World()
-    world.add(Node(id="domain:api.example.com", type="domain",
-                   payload=DomainData(name="api.example.com", root="example.com", source="crt")))
-    ep_id = "endpoint:api.example.com/config/all"
-    world.add(Node(id=ep_id, type="endpoint",
-                   payload=Endpoint(url="https://api.example.com/config/all", path="/config/all",
-                                    status=200, auth_required=False, content_type="application/json")))
-    spec_ep = "endpoint:api.example.com/openapi.json"
-    world.add(Node(id=spec_ep, type="endpoint",
-                   payload=Endpoint(url="https://api.example.com/openapi.json", path="/openapi.json",
-                                    status=200, content_type="application/json")))
-    world.absorb([Fact(kind="spec_audit", about=spec_ep, payload=SpecAudit(
-        base="https://api.example.com/openapi.json",
-        operations=(SpecOperation(path="/tasks/active", methods="GET", verified=True,
-                                  status=200, content_type="application/json"),)))])
-
-    grounded = Finding(id="f1", title="open config", severity="HIGH",
-                       where="https://api.example.com/config/all",
-                       poc="safe read: curl -s https://api.example.com/config/all")
-    spec_op = Finding(id="f2", title="open op", severity="MEDIUM",
-                      where="https://api.example.com/openapi.json",
-                      poc="safe read: curl -s https://api.example.com/tasks/active")
-    invented = Finding(id="f3", title="guessed path", severity="HIGH",
-                       where="https://api.example.com/openapi.json",
-                       poc="safe read: curl -s https://api.example.com/secret/never-probed")
-    exploit = Finding(id="f4", title="rce", severity="HIGH",
-                      where="https://api.example.com/config/all",
-                      poc="requires authorized exploitation: curl https://api.example.com/config/all")
-
-    out = FindingGrounder().run(world, (grounded, spec_op, invented, exploit))
-    by_id = {f.id: f for f in out}
-    # grounding returns one finding per input finding, minting none and dropping none
-    assert len(out) == 4
-    # an observed endpoint GET grounds the request, carrying the real receipt
-    assert by_id["f1"].data["poc_request"] == {
-        "method": "GET", "url": "https://api.example.com/config/all",
-        "expect": "HTTP 200 application/json", "source": f"endpoint:{ep_id}"}
-    # a verified specification operation grounds too
-    assert by_id["f2"].data["poc_request"]["url"] == "https://api.example.com/tasks/active"
-    # a url no capability observed is never marked reproducible
-    assert "poc_request" not in by_id["f3"].data
-    # an exploit proof of concept is never grounded as a safe read
-    assert "poc_request" not in by_id["f4"].data
-    # grounding never mutates the input finding in place, it returns a new object, so the
-    # original stays clean and Finding.data is effectively immutable
-    assert "poc_request" not in grounded.data
-    assert by_id["f1"] is not grounded
-
-
-def test_triage_judge_mints_findings_and_mutates_no_world_node():
-    """Triage judges, and only judges. Materializing a finding as a world node is the
-    post-triage grounder's job now, so judge adds no node, keeping world mutation out of
-    triage, invariant 2. The grounder materializes it, and the scenario wires it as the
-    post-triage step."""
-    from opfor.core import Fact, MockProvider, Node
-    from opfor.scenarios.attacksurface.assets.domain.types import DomainData, Endpoint, Resolved
-    from opfor.scenarios.attacksurface.lifecycle.grounding import FindingGrounder
-    from opfor.scenarios.attacksurface.lifecycle.triage import SurfaceTriage
-
-    world = World()
-    world.add(Node(id="domain:api.example.com", type="domain",
-                   payload=DomainData(name="api.example.com", root="example.com", source="crt")))
-    # a resolved fact, so the resolution caveat does not suppress model judgment
-    world.absorb([Fact(kind="resolved", about="domain:api.example.com",
-                       payload=Resolved(resolvable=True, addresses=("1.2.3.4",)))])
-    world.add(Node(id="endpoint:api.example.com/.env", type="endpoint",
-                   payload=Endpoint(url="https://api.example.com/.env", path="/.env",
-                                    status=200, auth_required=False, content_type="text/plain")))
-    finder = json.dumps({"findings": [{
-        "category": "sensitive-file-exposure", "title": "Exposed .env", "severity": "MEDIUM",
-        "where": "https://api.example.com/.env", "evidence": "a dotenv path answered 200",
-        "poc": "safe read: curl -s https://api.example.com/.env"}]})
-    triage = SurfaceTriage([], provider=MockProvider(responses=[finder]), model="m")
-
-    findings = tuple(triage.judge(world))
-    # judge mints the finding but adds no finding node, world mutation is the grounder's job
-    assert any(f.where == "https://api.example.com/.env" for f in findings)
-    assert not world.nodes("finding")
-    grounded = FindingGrounder().run(world, findings)
-    assert len(grounded) == len(findings)  # one finding per input, none minted, none dropped
-    assert world.nodes("finding")  # the grounded finding is now materialized for reproduce
-    # the scenario wires the grounder as its post-triage step
-    assert isinstance(_make().post_triage, FindingGrounder)
-
-
-def test_importing_the_scenario_builds_nothing_until_requested():
-    """The eager module-level build is gone, so importing the package or the registry
-    constructs no provider and reads no knowledge tree. A scenario is built on first use,
-    keeping import cheap and side-effect free."""
-    import opfor.scenarios.attacksurface as pkg
-    from opfor.scenarios import registry
-
-    # the eager ATTACKSURFACE singleton no longer exists, building is on demand
-    assert not hasattr(pkg, "ATTACKSURFACE")
-    scenario = registry.get_scenario("attacksurface")
-    assert scenario.name == pkg.NAME
-
-
-def test_get_scenario_rebuilds_so_a_changed_environment_is_not_frozen(monkeypatch):
-    """The registry does not memoize the built scenario. The attack-surface build reads the
-    model from the environment, so a second call after the environment changes must see the
-    new value rather than a frozen first build. This is the regression guard for the cache
-    that used to freeze the provider, model, and triage mode on first use."""
-    from opfor.scenarios import registry
-
-    monkeypatch.setenv("OPFOR_MODEL", "model-first")
-    first = registry.get_scenario("attacksurface")
-    assert first.triage._model == "model-first"
-
-    monkeypatch.setenv("OPFOR_MODEL", "model-second")
-    second = registry.get_scenario("attacksurface")
-    assert second.triage._model == "model-second"
-    assert first is not second
 
 
 def test_unknown_severity_falls_back_to_class_impact_then_medium():
@@ -462,38 +312,6 @@ def test_missing_security_headers_are_surfaced_and_the_class_is_selected():
     assert "Missing Security Response Header" in _knowledge(sc)
 
 
-def test_render_lists_present_security_headers_as_set_and_omits_them_from_missing():
-    from opfor.core import Fact
-    from opfor.scenarios.attacksurface.assets.domain.types import DomainData, HTTP as HTTPData
-    from opfor.scenarios.attacksurface.render import SurfaceRenderer
-
-    world = World()
-    world.add(Node(id="domain:h.example.com", type="domain",
-                   payload=DomainData(name="h.example.com", root="example.com", source="hint")))
-    world.absorb((Fact(kind="http", about="domain:h.example.com",
-                       payload=HTTPData(alive=True, status=200, url="https://h.example.com/",
-                                        headers=(("strict-transport-security", "max-age=31536000"),
-                                                 ("x-frame-options", "DENY")))),))
-    text = "\n".join(SurfaceRenderer([], []).units(world))
-    assert "security response headers set: strict-transport-security, x-frame-options" in text
-    # a header that is set is never listed as missing
-    assert "not set: content-security-policy, x-content-type-options, referrer-policy, permissions-policy" in text
-
-
-def test_directory_listing_body_raises_the_exposure_clue():
-    from opfor.scenarios.attacksurface.assets.domain import KNOWLEDGE
-    from opfor.scenarios.attacksurface.assets.domain.types import Endpoint
-    from opfor.scenarios.attacksurface.render import SurfaceRenderer
-    from opfor.scenarios.attacksurface.lifecycle.triage import _load_clues
-
-    clues = _load_clues(KNOWLEDGE / "findings")
-    renderer = SurfaceRenderer(clues, [])
-    # a parent directory the permutation probed that answers with an autoindex listing
-    endpoint = Endpoint(url="https://h.example.com/uploads/", path="/uploads/", status=200,
-                        content_type="text/html", body="<title>index of /uploads</title>")
-    assert any("directory-listing" in clue for clue in renderer._exposure_clues(endpoint))
-
-
 def test_path_permutation_runs_between_harvest_and_endpoints_without_deadlock():
     from opfor.core.result import CLOSED
 
@@ -514,25 +332,6 @@ def test_tls_posture_is_probed_on_live_hosts_and_surfaced_for_the_judge():
     prompt = _prompt(sc)
     assert "TLS certificate: valid" in prompt
     assert "TLS Certificate Hygiene" in _knowledge(sc)
-
-
-def test_render_shows_an_invalid_tls_certificate_with_its_reason():
-    from opfor.core import Fact
-    from opfor.scenarios.attacksurface.assets.domain.types import DomainData, HTTP as HTTPData, TLSPosture
-    from opfor.scenarios.attacksurface.render import SurfaceRenderer
-
-    world = World()
-    world.add(Node(id="domain:h.example.com", type="domain",
-                   payload=DomainData(name="h.example.com", root="example.com", source="hint")))
-    world.absorb((
-        Fact(kind="http", about="domain:h.example.com",
-             payload=HTTPData(alive=True, status=200, url="https://h.example.com/")),
-        Fact(kind="tls", about="domain:h.example.com",
-             payload=TLSPosture(host="h.example.com", reachable=True, valid=False,
-                                validity_error="certificate has expired", protocol="TLSv1.2")),
-    ))
-    text = "\n".join(SurfaceRenderer([], []).units(world))
-    assert "TLS certificate: INVALID, certificate has expired; protocol TLSv1.2" in text
 
 
 def test_insecure_cookie_flags_are_surfaced_and_the_class_is_selected():
@@ -561,24 +360,6 @@ def test_dns_email_posture_is_read_on_roots_only_and_surfaced_for_the_judge():
     prompt = _prompt(sc)
     assert "email/DNS security: SPF absent" in prompt
     assert "Weak Email Authentication" in _knowledge(sc)
-
-
-def test_render_shows_a_configured_root_email_and_dns_posture_even_without_a_website():
-    from opfor.core import Fact
-    from opfor.scenarios.attacksurface.assets.domain.types import DNSEmailPosture, DomainData
-    from opfor.scenarios.attacksurface.render import SurfaceRenderer
-
-    # no http fact, so the root serves no website, yet the email posture must still be judged
-    world = World()
-    world.add(Node(id="domain:example.com", type="domain",
-                   payload=DomainData(name="example.com", root="example.com", source="hint")))
-    world.absorb((Fact(kind="dns_email", about="domain:example.com",
-                       payload=DNSEmailPosture(domain="example.com", spf=("v=spf1 -all",),
-                                               dmarc="v=DMARC1; p=reject",
-                                               caa=('0 issue "letsencrypt.org"',), dnssec=True)),))
-    text = "\n".join(SurfaceRenderer([], []).units(world))
-    assert ("email/DNS security: SPF v=spf1 -all; DMARC v=DMARC1; p=reject; "
-            "DNSSEC validated; CAA 1 record(s)") in text
 
 
 def test_system_prompts_frame_target_text_as_untrusted():

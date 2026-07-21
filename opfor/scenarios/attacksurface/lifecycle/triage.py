@@ -4,7 +4,7 @@ Judgment is the model's. Triage renders the enriched world into a surface report
 by host, selects the knowledge classes relevant to it, and asks the model which assets
 rise to a finding. The model decides what is real and how severe, so a novel phrasing or a
 non-English page is judged on meaning rather than missed by a keyword list. Triage holds no
-attack knowledge, that lives in knowledge/classes as prose the model reads.
+attack knowledge, that lives in knowledge/findings as prose the model reads.
 
 The surface is judged in char-bounded chunks rather than one call, so a large target does
 not overflow the model context and silently truncate, the same reason codejury audits a
@@ -187,7 +187,7 @@ class SurfaceTriage(Triage):
         self._takeover = []
         for directory in knowledge_dirs:
             directory = Path(directory)
-            self._classes.extend(_load_classes(directory / "classes"))
+            self._classes.extend(_load_classes(directory / "findings"))
             self._clues.extend(_load_clues(directory / "exposures.yaml"))
             self._takeover.extend(_load_takeover(directory / "takeover.yaml"))
         self._class_ids = frozenset(c["id"] for c in self._classes)

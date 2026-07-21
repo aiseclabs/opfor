@@ -1,6 +1,6 @@
 ---
-product: GitLab
-cpe: gitlab:gitlab
+vendor: gitlab
+product: gitlab
 markers:
   - gon.gitlab
 ---

@@ -4,9 +4,10 @@ It matches a host's gathered evidence against a curated set of high-signal marke
 service such as a Jenkins or a Kibana is identified without a model call, with the exact version a
 version header or endpoint carries. Each service is one self-contained knowledge unit under
 `knowledge/services/<name>.md`, its structured identity in the frontmatter and prose for the model
-in the body, so a service's identification and version knowledge lives in one place. `product` on a
-match is the NVD CPE product the lookup queries. A service the markers miss returns empty, which
-the caller falls to the model, so a thin or stale set identifies less, never wrong.
+in the body, so a service's identification and version knowledge lives in one place. Its CPE
+`vendor` and `product` compose the NVD lookup key, and its title is the human name. A service the
+markers miss returns empty, which the caller falls to the model, so a thin or stale set identifies
+less, never wrong.
 """
 
 from __future__ import annotations
@@ -20,15 +21,19 @@ from opfor.core import iter_md_docs
 _VERSION = re.compile(r"\d+(?:\.\d+)+")
 
 
+_TITLE = re.compile(r"^#\s+(.+)$", re.MULTILINE)
+
+
 @dataclass(frozen=True, kw_only=True)
 class Fingerprint:
-    """One product's identification rule. `markers` are lowercased high-signal substrings, any one
-    present is a match. `version` is a compiled pattern with one capture group, or None when the
-    product publishes no plain version. `version_paths` are the product's own version endpoints the
-    probe adds to its generic paths, so a product that serves its version only at an endpoint is
-    still versioned, and that endpoint knowledge lives with the product."""
+    """One service's identification rule. `name` is the human service name from the unit's title.
+    `cpe` is the NVD CPE `vendor:product`, the CVE-lookup key. `markers` are lowercased high-signal
+    substrings, any one present is a match. `version` is a compiled pattern with one capture group,
+    or None when the service publishes no plain version. `version_paths` are the service's own
+    version endpoints the probe adds to its generic paths, so a service that serves its version
+    only at an endpoint is still versioned, and that endpoint knowledge lives with the service."""
 
-    product: str
+    name: str
     cpe: str
     markers: tuple[str, ...]
     version: re.Pattern[str] | None = None
@@ -37,22 +42,26 @@ class Fingerprint:
 
 def load_services(directory: Path) -> tuple[Fingerprint, ...]:
     """Load the per-service knowledge units at build time, one `services/<name>.md` each. The
-    structured identity is the frontmatter, the body is prose for the model. A missing directory
-    is an empty set, so the identify seam stays pure model. A malformed version regex fails the run
+    structured identity is the frontmatter, its CPE `vendor` and `product` and its markers, the
+    human name is the unit's title, and the body is prose for the model. A missing directory is an
+    empty set, so the identify seam stays pure model. A malformed version regex fails the run
     loudly here rather than silently skipping a service during a scan, invariant 5."""
     table: list[Fingerprint] = []
-    for _path, meta, _body in iter_md_docs(directory):
+    for path, meta, body in iter_md_docs(directory):
+        vendor = str(meta.get("vendor", "")).strip()
         product = str(meta.get("product", "")).strip()
         markers = tuple(str(m).strip().lower() for m in (meta.get("markers") or []) if str(m).strip())
-        if not product or not markers:
+        if not (vendor and product) or not markers:
             continue
+        title = _TITLE.search(body)
+        name = title.group(1).strip() if title else path.stem
         pattern = str(meta.get("version") or "").strip()
         try:
             version = re.compile(pattern, re.IGNORECASE) if pattern else None
         except re.error as exc:
-            raise RuntimeError(f"invalid version regex for {product!r}: {exc}") from exc
+            raise RuntimeError(f"invalid version regex for {name!r}: {exc}") from exc
         version_paths = tuple(str(p).strip() for p in (meta.get("version_paths") or []) if str(p).strip())
-        table.append(Fingerprint(product=product, cpe=str(meta.get("cpe", "")).strip(),
+        table.append(Fingerprint(name=name, cpe=f"{vendor}:{product}",
                                  markers=markers, version=version, version_paths=version_paths))
     return tuple(table)
 
@@ -69,12 +78,13 @@ def service_version_paths(table: tuple[Fingerprint, ...]) -> tuple[str, ...]:
 
 
 def fingerprint(evidence: str, table: tuple[Fingerprint, ...]) -> dict:
-    """Identify the product behind one host's evidence from the table, deterministically.
+    """Identify the service behind one host's evidence from the table, deterministically.
 
-    Returns a dict with `product`, `version`, and `cpe` on the first product whose markers
-    match, or an empty dict when none does, so the caller reads a miss as falsy and falls to
-    the model. A version is filled only when its pattern captures a plausible version string,
-    so a stale pattern yields no version rather than a wrong one.
+    Returns a dict with `product`, the identified service's name, `version`, and `cpe`, its NVD
+    `vendor:product` lookup key, on the first service whose markers match, or an empty dict when
+    none does, so the caller reads a miss as falsy and falls to the model. A version is filled
+    only when its pattern captures a plausible version string, so a stale pattern yields no
+    version rather than a wrong one.
     """
     text = evidence.lower()
     for entry in table:
@@ -85,5 +95,5 @@ def fingerprint(evidence: str, table: tuple[Fingerprint, ...]) -> dict:
             match = entry.version.search(evidence)
             if match and _VERSION.fullmatch(match.group(1)):
                 version = match.group(1)
-        return {"product": entry.product, "version": version, "cpe": entry.cpe}
+        return {"product": entry.name, "version": version, "cpe": entry.cpe}
     return {}

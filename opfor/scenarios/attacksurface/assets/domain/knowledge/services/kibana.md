@@ -1,6 +1,6 @@
 ---
-product: Kibana
-cpe: elastic:kibana
+vendor: elastic
+product: kibana
 markers:
   - "kbn-version:"
   - "kbn-name:"

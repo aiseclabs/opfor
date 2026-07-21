@@ -75,9 +75,9 @@ def assemble(*, enumerate_fn, resolve_fn, probe_fn, fetch_fn, fetch_doc_fn,
         BackupScan(fetch_fn),
         BucketScan(probe_url_fn),
     ]
-    # The per-product knowledge units identify a known product without a model call, with the
+    # The per-service knowledge units identify a known service without a model call, with the
     # exact version a version header or endpoint carries. They wrap the injected model identify
-    # seam, so the seam tries the products first and falls to the model on a miss, and a thin or
+    # seam, so the seam tries the services first and falls to the model on a miss, and a thin or
     # stale set identifies less rather than wrong. They are the class's own knowledge, loaded here
     # at assemble time. An empty set leaves the seam pure model, so a missing tree is no regression.
     fingerprints = load_services(KNOWLEDGE / "services")
@@ -105,9 +105,9 @@ def assemble(*, enumerate_fn, resolve_fn, probe_fn, fetch_fn, fetch_doc_fn,
     if cve_fn is not None:
         capabilities.append(CVELookup(cve_fn))
     # The plan config is loaded here, at assemble time, not at planner import, so the content
-    # root stays swappable and importing the class triggers no file IO. The products' own version
-    # endpoints join the generic probe paths, so a product versioned only at an endpoint is probed
-    # there without that endpoint being a global path, its knowledge stays in the product's unit.
+    # root stays swappable and importing the class triggers no file IO. The services' own version
+    # endpoints join the generic probe paths, so a service versioned only at an endpoint is probed
+    # there without that endpoint being a global path, its knowledge stays in the service's unit.
     config = planner.load_plan_config(KNOWLEDGE)
     extra_paths = tuple(p for p in service_version_paths(fingerprints) if p not in config.probe_paths)
     if extra_paths:

@@ -1,6 +1,6 @@
 ---
-product: Apache Airflow
-cpe: apache:airflow
+vendor: apache
+product: airflow
 markers:
   - apache airflow
 ---

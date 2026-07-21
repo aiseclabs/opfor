@@ -59,7 +59,7 @@ def test_matching_is_case_insensitive():
 def test_a_version_capture_that_is_not_a_version_is_dropped():
     # A marker matches but the version pattern captures a value that no longer looks like a
     # version, so the product is reported without a version rather than with a wrong one.
-    table = (Fingerprint(product="Widget", cpe="acme:widget", markers=("widget",),
+    table = (Fingerprint(name="Widget", cpe="acme:widget", markers=("widget",),
                          version=re.compile(r"widget[- ](\d+)")),)
     got = fingerprint("server widget-7", table)
     assert got == {"product": "Widget", "version": "", "cpe": "acme:widget"}
@@ -71,8 +71,8 @@ def test_a_missing_file_is_an_empty_table():
 
 def test_first_match_wins_by_table_order():
     table = (
-        Fingerprint(product="Specific", cpe="a:specific", markers=("acme dashboard",)),
-        Fingerprint(product="General", cpe="a:general", markers=("acme",)),
+        Fingerprint(name="Specific", cpe="a:specific", markers=("acme dashboard",)),
+        Fingerprint(name="General", cpe="a:general", markers=("acme",)),
     )
     assert fingerprint("title Acme Dashboard", table)["product"] == "Specific"
 

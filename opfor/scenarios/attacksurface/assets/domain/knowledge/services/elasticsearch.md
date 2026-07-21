@@ -1,6 +1,6 @@
 ---
-product: Elasticsearch
-cpe: elastic:elasticsearch
+vendor: elastic
+product: elasticsearch
 markers:
   - "you know, for search"
   - lucene_version

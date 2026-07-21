@@ -515,7 +515,11 @@ def urlscan_subdomains(domain: str) -> Enumeration:
     reads as a blind spot.
     """
     url = f"https://urlscan.io/api/v1/search/?q=domain:{urllib.parse.quote(domain)}&size=1000"
-    request = urllib.request.Request(url, headers={"User-Agent": _UA, "Accept": "application/json"})
+    headers = {"User-Agent": _UA, "Accept": "application/json"}
+    key = config.urlscan_key()
+    if key:
+        headers["API-Key"] = key
+    request = urllib.request.Request(url, headers=headers)
     with urllib.request.urlopen(request, timeout=_TIMEOUT) as resp:
         data = json.loads(resp.read(_JSON_LIMIT).decode("utf-8", "replace"))
     suffix = "." + domain

@@ -338,6 +338,37 @@ def test_urlscan_subdomains_extracts_hosts_and_marks_truncation(monkeypatch):
     assert out.truncated is True  # has_more marks the page as a bounded, partial read
 
 
+def test_urlscan_sends_the_api_key_header_only_when_configured(monkeypatch):
+    import urllib.request
+    from opfor.scenarios.attacksurface.assets.domain.sources import passive as domains
+
+    seen = {}
+
+    class _Resp:
+        def read(self, *_a):
+            return json.dumps({"results": [], "has_more": False}).encode("utf-8")
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+    def fake_urlopen(request, timeout=0):
+        seen["key"] = request.get_header("Api-key")  # urllib title-cases header names
+        return _Resp()
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+
+    monkeypatch.setattr(domains.config, "urlscan_key", lambda: "")
+    domains.urlscan_subdomains("example.com")
+    assert seen["key"] is None  # keyless by default, no key header
+
+    monkeypatch.setattr(domains.config, "urlscan_key", lambda: "secret-key")
+    domains.urlscan_subdomains("example.com")
+    assert seen["key"] == "secret-key"  # configured key rides as the API-Key header
+
+
 def test_wayback_subdomains_extracts_hosts_under_the_domain(monkeypatch):
     import urllib.request
     from opfor.scenarios.attacksurface.assets.domain.sources import passive as domains

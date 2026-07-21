@@ -25,7 +25,7 @@ from urllib.parse import urlsplit
 import yaml
 
 from opfor.scenarios.attacksurface.assets.domain import KNOWLEDGE
-from opfor.scenarios.attacksurface.assets.domain.sources import load_services, service_probe_paths
+from opfor.scenarios.attacksurface.assets.domain.fingerprint import load_services, service_probe_paths
 
 _TITLE = re.compile(r"<title[^>]*>(.*?)</title>", re.I | re.S)
 _UA = "Mozilla/5.0 (compatible; opfor-eval-capture)"

@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import re
 
-from opfor.scenarios.attacksurface.assets.domain.sources.profile import (
+from opfor.scenarios.attacksurface.assets.domain.profile import (
     classify_frameworks,
     classify_edge,
     is_ip,

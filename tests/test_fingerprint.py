@@ -12,8 +12,8 @@ import re
 from pathlib import Path
 
 from opfor.scenarios.attacksurface.assets.domain import KNOWLEDGE
-from opfor.scenarios.attacksurface.assets.domain.sources import fingerprint, load_services
-from opfor.scenarios.attacksurface.assets.domain.sources.fingerprint import Fingerprint
+from opfor.scenarios.attacksurface.assets.domain.fingerprint import fingerprint, load_services
+from opfor.scenarios.attacksurface.assets.domain.fingerprint import Fingerprint
 
 _TABLE = load_services(KNOWLEDGE / "technologies" / "services")
 

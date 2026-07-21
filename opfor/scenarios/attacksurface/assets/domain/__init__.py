@@ -13,12 +13,12 @@ from pathlib import Path
 
 from opfor.scenarios.attacksurface.assets import ClassBundle
 from opfor.scenarios.attacksurface.assets.domain import planner
-from opfor.scenarios.attacksurface.assets.domain.sources import (
+from opfor.scenarios.attacksurface.assets.domain.fingerprint import (
     fingerprint,
     load_services,
     service_probe_paths,
 )
-from opfor.scenarios.attacksurface.assets.domain.sources.profile import (
+from opfor.scenarios.attacksurface.assets.domain.profile import (
     classify_frameworks,
     classify_edge,
     load_frameworks,

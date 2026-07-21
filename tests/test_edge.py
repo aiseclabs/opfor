@@ -12,7 +12,7 @@ unrecognized front is not proof there is none.
 from __future__ import annotations
 
 from opfor.scenarios.attacksurface.assets.domain import KNOWLEDGE
-from opfor.scenarios.attacksurface.assets.domain.sources.profile import (
+from opfor.scenarios.attacksurface.assets.domain.profile import (
     classify_edge,
     load_edge,
 )

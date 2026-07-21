@@ -1,11 +1,13 @@
-"""Domain-class sources facade, re-exporting the dns, http, tls, ports, passive, parsers,
-javascript, fingerprint, and storage modules.
+"""Domain-class sources facade, re-exporting the dns, http, tls, passive, parsers, javascript,
+and storage modules. These are the external-data adapters and low-level parsers a capability
+acts through. Identification logic that reads the knowledge tables, the service fingerprint and
+the framework and edge classifiers, lives one level up in `domain/fingerprint.py` and
+`domain/profile.py`, not here.
 
 Resolution, the shared network constants, and address filtering live in `dns`, HTTP transport
-in `http`, the TLS posture in `tls`, the port scan in `ports`, passive OSINT source clients in
-`passive`, body and document parsers in `parsers`, JavaScript extraction in `javascript`,
-deterministic product fingerprinting in `fingerprint`, and cloud object-storage URL parsing in
-`storage`. This module gathers the public names in one
+in `http`, the TLS posture in `tls`, passive OSINT source clients in `passive`, body and document
+parsers in `parsers`, JavaScript extraction in `javascript`, and cloud object-storage URL parsing
+in `storage`. This module gathers the public names in one
 place so a caller keeps a single import. It re-exports public names only, a caller that needs
 a module's private detail imports it from the owning module, so the facade does not turn
 implementation into public API.
@@ -24,11 +26,6 @@ from opfor.scenarios.attacksurface.assets.domain.sources.http import (
     fetch_url,
     graphql_introspect,
     http_probe,
-)
-from opfor.scenarios.attacksurface.assets.domain.sources.fingerprint import (
-    fingerprint,
-    load_services,
-    service_probe_paths,
 )
 from opfor.scenarios.attacksurface.assets.domain.sources.tls import tls_probe
 from opfor.scenarios.attacksurface.assets.domain.sources.passive import (
@@ -87,13 +84,10 @@ __all__ = [
     "fetch_public_url",
     "fetch_readonly",
     "fetch_url",
-    "fingerprint",
     "graphql_introspect",
     "hosts_from_file",
     "http_probe",
     "info_from_openapi",
-    "load_services",
-    "service_probe_paths",
     "nvd_cves",
     "operations_from_introspection",
     "otx_subdomains",

@@ -6,7 +6,11 @@ import pytest
 
 from opfor.core import Scope
 
-from tests.surface_fixtures import *
+from tests.surface_fixtures import (
+    HostScope,
+    _run,
+    _seed,
+)
 
 
 def test_resolve_host_keeps_cname_and_asks_both_address_families(monkeypatch):

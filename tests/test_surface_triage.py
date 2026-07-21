@@ -7,7 +7,17 @@ import pytest
 from opfor.core import Budget, MockProvider, Node, Scope, World, run
 from opfor.scenarios.attacksurface.lifecycle.triage import TriageError, _finding_from_dict
 
-from tests.surface_fixtures import *
+from tests.surface_fixtures import (
+    HostScope,
+    ROOT,
+    _knowledge,
+    _make,
+    _probe,
+    _prompt,
+    _run_capturing,
+    _seed,
+    _two_findings,
+)
 
 
 def test_takeover_clue_and_class_are_surfaced():

@@ -3,7 +3,14 @@ from __future__ import annotations
 from opfor.core import Budget, Node, Phase, Scope, World, run
 from opfor.core.result import CLOSED
 
-from tests.surface_fixtures import *
+from tests.surface_fixtures import (
+    HostScope,
+    ROOT,
+    _make,
+    _run,
+    _run_capturing,
+    _seed,
+)
 
 
 def test_run_closes():

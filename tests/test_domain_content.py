@@ -6,7 +6,12 @@ import pytest
 
 from opfor.core import Node, World
 
-from tests.surface_fixtures import *
+from tests.surface_fixtures import (
+    _resolve,
+    _run,
+    _run_capturing,
+    _seed,
+)
 
 
 def test_javascript_and_url_parsing():

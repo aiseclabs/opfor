@@ -4,7 +4,16 @@ import json
 
 from opfor.core import Budget, MockProvider, Node, Phase, Scope, run
 
-from tests.surface_fixtures import *
+from tests.surface_fixtures import (
+    HostScope,
+    ROOT,
+    _claim,
+    _make,
+    _read_only,
+    _receipt,
+    _run_capturing,
+    _seed,
+)
 
 
 def test_report_prints_the_poc_and_evidence(capsys):

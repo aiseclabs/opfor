@@ -2,7 +2,14 @@ from __future__ import annotations
 
 from opfor.core import Node, World
 
-from tests.surface_fixtures import *
+from tests.surface_fixtures import (
+    ROOT,
+    _fetch,
+    _probe,
+    _run,
+    _run_capturing,
+    _seed,
+)
 
 
 def test_endpoints_enumerated_and_auth_classified():

@@ -2,7 +2,14 @@ from __future__ import annotations
 
 from opfor.core import Budget, Node, Scope, World, run
 
-from tests.surface_fixtures import *
+from tests.surface_fixtures import (
+    HostScope,
+    ROOT,
+    _make,
+    _run,
+    _run_capturing,
+    _seed,
+)
 
 
 def test_openapi_spec_is_expanded_into_its_operations():

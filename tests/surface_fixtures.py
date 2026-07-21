@@ -131,10 +131,6 @@ def _fetch(name, addresses, path):
             "location": d.get("loc", "")}
 
 
-# Certificate-SAN sibling roots per known root. example.com and example.net are bundled
-# on one dedicated cert, evidence they share an owner. example.net pivots no further.
-
-
 
 # A full document fetch, the app declaring itself. spa serves an OpenAPI spec, admin serves
 # a home page linking a JavaScript bundle that hardcodes an API path only readable from it.

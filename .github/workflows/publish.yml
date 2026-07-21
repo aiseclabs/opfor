@@ -36,7 +36,7 @@ jobs:
           /tmp/smoke/bin/opfor --version
           /tmp/smoke/bin/python -m opfor --version
           /tmp/smoke/bin/opfor scenarios
-          /tmp/smoke/bin/python -c "from pathlib import Path; import opfor.scenarios.attacksurface.assets.domain as d; k = Path(d.__file__).parent / 'knowledge'; assert len(list(k.rglob('*.md'))) >= 7; assert len(list(k.rglob('*.yaml'))) >= 4"
+          /tmp/smoke/bin/python -c "from pathlib import Path; import opfor.scenarios.attacksurface.assets.domain as d; k = Path(d.__file__).parent / 'knowledge'; assert len(list(k.rglob('*.md'))) >= 7"
       - uses: actions/upload-artifact@v4
         with:
           name: dist

@@ -27,8 +27,9 @@ Fails with a nonzero exit on any regression, so it is a CI gate.
 
 ## Refresh the corpus (needs Docker, on-demand)
 
-    docker compose -f evals/capture/docker-compose.yml up -d
+    docker compose -f evals/capture/grafana/docker-compose.yml up -d
     python -m evals.capture.capture --product Grafana --version 10.4.0 --url http://localhost:3104
-    docker compose -f evals/capture/docker-compose.yml down
+    docker compose -f evals/capture/grafana/docker-compose.yml down
 
-Add a product by adding its pinned versions to `docker-compose.yml` and capturing each.
+Each product has its own compose file under `evals/capture/<product>/docker-compose.yml`. Add a
+product by adding its own directory with a compose file of pinned versions and capturing each.

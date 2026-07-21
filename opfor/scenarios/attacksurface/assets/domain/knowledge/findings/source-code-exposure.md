@@ -3,19 +3,6 @@ title: Source code exposure
 impact: MEDIUM
 triggers:
 - source map
-clues:
-- id: exposed-git
-  note: a git config section is present, the working tree may be reconstructable
-  path: /.git/config
-  body_contains: '[core]'
-- id: exposed-git-head
-  note: a git HEAD ref is present
-  path: /.git/HEAD
-  body_regex: ^ref:\s
-- id: exposed-git-index
-  note: a git index is present, the tree of tracked files can be listed
-  path: /.git/index
-  body_contains: dirc
 ---
 
 # Source Code Exposure

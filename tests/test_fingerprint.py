@@ -31,7 +31,7 @@ def test_jenkins_header_gives_product_and_version():
 
 def test_kibana_identifies_by_name_header_and_versions_from_status():
     # Kibana 8.x dropped the kbn-version response header, so it is identified by the kbn-name
-    # header and versioned from the /api/status JSON its version_path probes, as captured real.
+    # header and versioned from the /api/status JSON its probe_paths reach, as captured real.
     got = fingerprint('header kbn-name: node-1\nheader kbn-license-sig: abc\n'
                       'path /api/status body: {"version":{"number":"8.15.0","build_number":76360}}', _TABLE)
     assert got["product"] == "Kibana"

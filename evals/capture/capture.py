@@ -25,6 +25,7 @@ from urllib.parse import urlsplit
 import yaml
 
 from opfor.scenarios.attacksurface.assets.domain import KNOWLEDGE
+from opfor.scenarios.attacksurface.assets.domain.sources import load_services, service_version_paths
 
 _TITLE = re.compile(r"<title[^>]*>(.*?)</title>", re.I | re.S)
 _UA = "Mozilla/5.0 (compatible; opfor-eval-capture)"
@@ -53,8 +54,15 @@ def _get(url: str) -> dict | None:
 
 
 def _paths() -> list[str]:
+    """The exact path set opfor probes, the generic `paths.yaml` plus the services' own version
+    endpoints, so a service versioned only at an endpoint such as `/api/status` is captured. A
+    capture that read only `paths.yaml` would silently miss those endpoints, invariant 5."""
     data = yaml.safe_load((KNOWLEDGE / "paths.yaml").read_text(encoding="utf-8")) or {}
-    return [str(p) for p in (data.get("paths") or []) if str(p).startswith("/")]
+    paths = [str(p) for p in (data.get("paths") or []) if str(p).startswith("/")]
+    for endpoint in service_version_paths(load_services(KNOWLEDGE / "vendors")):
+        if endpoint not in paths:
+            paths.append(endpoint)
+    return paths
 
 
 def capture(product: str, version: str, url: str) -> dict:

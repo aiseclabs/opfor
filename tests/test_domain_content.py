@@ -158,12 +158,11 @@ def test_shipped_secret_patterns_do_not_backtrack_on_a_hostile_bundle():
     # a bundle of repeated 'eyJ' with no dots made the old unbounded JWT pattern backtrack
     # super-linearly and tie a worker. The possessive quantifier plus the body cap make the
     # scan linear, so this returns effectively instantly rather than hanging.
-    import yaml
-
     from opfor.scenarios.attacksurface.assets import domain as domain_class
+    from opfor.scenarios.attacksurface.assets.domain import planner
     from opfor.scenarios.attacksurface.assets.domain.sources.javascript import secrets_in_text
 
-    patterns = yaml.safe_load((domain_class.KNOWLEDGE / "secret_patterns.yaml").read_text())["patterns"]
+    patterns = [dict(p) for p in planner.load_plan_config(domain_class.KNOWLEDGE).secret_patterns]
     hostile = "eyJ" * 300_000
     assert secrets_in_text(hostile, patterns) == []
     # a real JWT is still caught
@@ -184,7 +183,7 @@ def test_secret_scan_flags_a_key_in_a_bundle_and_redacts_it():
         return {"text": ""}
 
     report, _scenario, world = _run_capturing(fetch_doc_fn=fetch_doc)
-    # the planner hands the real patterns from secret_patterns.yaml, which includes the aws
+    # the planner hands the real patterns from findings/secret-in-code.md, which includes the aws
     # key shape, so the scan matches without the test injecting patterns
     hits = [f.payload for f in world.facts("secrets_in_js") if f.payload.matches]
     assert hits, "expected a secrets_in_js fact carrying a match"
@@ -202,8 +201,10 @@ def test_secret_scan_reports_multiple_distinct_matches_not_only_the_first():
 
 def test_a_malformed_secret_pattern_fails_loud_at_load(tmp_path):
     from opfor.scenarios.attacksurface.assets.domain import planner
-    (tmp_path / "secret_patterns.yaml").write_text(
-        "patterns:\n  - id: bad\n    regex: '([unclosed'\n    note: broken\n", encoding="utf-8")
+    findings = tmp_path / "findings"
+    findings.mkdir()
+    (findings / "secret-in-code.md").write_text(
+        "---\nsecrets:\n  - id: bad\n    regex: '([unclosed'\n    note: broken\n---\n# X\n", encoding="utf-8")
     # a broken regex must fail the run at load, not silently disable the whole secret class
     with pytest.raises(RuntimeError):
         planner.load_plan_config(tmp_path)

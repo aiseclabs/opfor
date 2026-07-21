@@ -15,13 +15,16 @@ import yaml
 
 
 def parse_frontmatter(text: str) -> tuple[dict, str]:
-    """Return the frontmatter dict and the body. A doc with no `---` frontmatter yields an
-    empty dict and the whole text."""
-    if text.startswith("---"):
-        parts = text.split("---", 2)
-        if len(parts) == 3:
-            meta = yaml.safe_load(parts[1]) or {}
-            return (meta if isinstance(meta, dict) else {}), parts[2].strip()
+    """Return the frontmatter dict and the body. A doc with no `---` frontmatter yields an empty
+    dict and the whole text. The fence is a line that is exactly `---`, so a value that itself
+    carries `---`, such as a PEM `-----BEGIN PRIVATE KEY-----` regex, does not split the doc."""
+    lines = text.split("\n")
+    if lines and lines[0].strip() == "---":
+        for i in range(1, len(lines)):
+            if lines[i].strip() == "---":
+                meta = yaml.safe_load("\n".join(lines[1:i])) or {}
+                body = "\n".join(lines[i + 1:]).strip()
+                return (meta if isinstance(meta, dict) else {}), body
     return {}, text
 
 

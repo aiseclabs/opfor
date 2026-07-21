@@ -37,8 +37,15 @@ def _validate_secret_patterns(patterns) -> None:
             raise RuntimeError(
                 f"invalid secret pattern regex for {pattern.get('id', '?')!r}: {exc}") from exc
 
-from opfor.core import Task, World, each
+from opfor.core import Task, World, each, iter_md_docs
 from opfor.scenarios.attacksurface.assets import class_enabled
+
+# Static-asset denoise, the suffixes and prefixes the endpoint probe treats as assets rather than
+# interfaces, so a hashed bundle does not bury the real routes. This is mechanical probe config, not
+# attack knowledge, so it lives in code here, not the knowledge tree.
+_STATIC_SUFFIXES = (".js", ".mjs", ".css", ".map", ".ico", ".png", ".jpg", ".jpeg", ".gif", ".svg",
+                    ".webp", ".avif", ".woff", ".woff2", ".ttf", ".eot", ".otf", ".mp4", ".webm")
+_STATIC_PREFIXES = ("/_next/static/", "/static/", "/assets/", "/_nuxt/")
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -60,20 +67,18 @@ class DomainPlanConfig:
 def load_plan_config(knowledge: Path) -> DomainPlanConfig:
     """Load the domain plan config from the class's knowledge tree, once, at build time. So
     the file IO the planner needs happens when a scenario is assembled, never at import."""
-    def load(name: str) -> dict:
-        path = knowledge / name
-        return yaml.safe_load(path.read_text(encoding="utf-8")) or {} if path.exists() else {}
-
-    paths = load("paths.yaml")
-    static = load("interfaces.yaml").get("static_assets") or {}
-    secrets = load("secret_patterns.yaml")
-    backups = load("backups.yaml")
-    secret_patterns = tuple(dict(p) for p in (secrets.get("patterns") or []))
+    paths_yaml = knowledge / "paths.yaml"
+    paths = (yaml.safe_load(paths_yaml.read_text(encoding="utf-8")) or {}) if paths_yaml.exists() else {}
+    # The secret patterns and backup templates live in the frontmatter of the finding units they
+    # serve, secret-in-code and sensitive-file-exposure, so the planner reads them from there.
+    findings = {path.stem: meta for path, meta, _body in iter_md_docs(knowledge / "findings")}
+    secret_patterns = tuple(dict(p) for p in (findings.get("secret-in-code", {}).get("secrets") or []))
     _validate_secret_patterns(secret_patterns)
+    backups = findings.get("sensitive-file-exposure", {}).get("backups") or {}
     return DomainPlanConfig(
         probe_paths=tuple(str(p) for p in (paths.get("paths") or [])),
-        static_suffixes=tuple(str(s) for s in (static.get("suffixes") or [])),
-        static_prefixes=tuple(str(p) for p in (static.get("prefixes") or [])),
+        static_suffixes=_STATIC_SUFFIXES,
+        static_prefixes=_STATIC_PREFIXES,
         secret_patterns=secret_patterns,
         backup_append=tuple(str(s) for s in (backups.get("append") or [])),
         backup_rename=tuple(str(s) for s in (backups.get("rename") or [])),

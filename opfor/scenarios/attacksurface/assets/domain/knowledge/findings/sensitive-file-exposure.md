@@ -71,6 +71,20 @@ clues:
   note: a SQL dump is present, it may expose the database contents
   path: .sql
   body_regex: insert into|create table|-- mysql dump
+backups:
+  append:
+  - .bak
+  - '~'
+  - .old
+  - .orig
+  - .save
+  rename:
+  - .bak
+  - .zip
+  - .tar.gz
+  swap:
+  - .{file}.swp
+  - .{file}.swo
 ---
 
 # Sensitive File Exposure

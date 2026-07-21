@@ -1,6 +1,7 @@
 {
   "product": "Jenkins",
   "version": "2.462.3",
+  "instance_version": "2.462.3",
   "host": "localhost",
   "resolved": {
     "resolvable": true,

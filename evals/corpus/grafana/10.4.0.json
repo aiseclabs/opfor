@@ -1,6 +1,7 @@
 {
   "product": "Grafana",
   "version": "10.4.0",
+  "instance_version": "10.4.0",
   "host": "localhost",
   "resolved": {
     "resolvable": true,

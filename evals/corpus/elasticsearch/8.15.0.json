@@ -1,6 +1,7 @@
 {
   "product": "Elasticsearch",
   "version": "8.15.0",
+  "instance_version": "8.15.0",
   "host": "localhost",
   "resolved": {
     "resolvable": true,

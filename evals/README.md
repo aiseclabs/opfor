@@ -8,9 +8,12 @@ it replays what a real scan drew from a real instance.
 
 - `capture/` records a **cassette** from a running product instance: the HTTP responses opfor's
   probe draws, in the same shape opfor's seams return. Run it on a machine with Docker.
-- `corpus/<product>/<version>.json` holds one cassette per pinned version, labelled with the true
-  product and version. `corpus/negatives/` holds pages that must identify nothing, including one
-  that merely mentions a product in prose, guarding against loose markers.
+- `corpus/<product>/<version>.json` holds one cassette per pinned instance, named by its
+  `instance_version`, the real version running. Its `version` field is what the scan is expected
+  to **extract**: the same version when the service exposes it unauthenticated, or blank when it
+  does not, which makes that cassette a recall-only case that gates identification but not version
+  accuracy. `corpus/negatives/` holds pages that must identify nothing, including one that merely
+  mentions a product in prose, guarding against loose markers.
 - `replay.py` replays a cassette through opfor's **real probe pipeline** (fidelity by full-response
   replay), so the redirect handling, the paths probed, the evidence building, and the fingerprint
   all run against recorded reality. The identify seam is the deterministic table only, no model.

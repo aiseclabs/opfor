@@ -2,7 +2,7 @@
 
 It names no real target and calls no network. It exists to prove the spine end to
 end: a seed grows into discovered nodes in MAP, each is enriched in ENRICH, and
-TRIAGE mints a finding for the ones a fact marks interesting. A caller seeds one
+TRIAGE mints a finding for the ones triage judges interesting from the recorded value. A caller seeds one
 `root` node, the run reaches TRIAGE, and the report is closed. Every real scenario
 follows this shape, so the mock is both the reference and the kernel's own fixture.
 """
@@ -37,7 +37,6 @@ class WidgetData:
 
 @dataclass(frozen=True, kw_only=True)
 class Inspected:
-    interesting: bool
     value: int
 
 
@@ -57,7 +56,8 @@ class DiscoverWidgets(Capability):
 
 
 class InspectWidget(Capability):
-    """ENRICH: record whether a widget is interesting, the depth step."""
+    """ENRICH: record a widget's raw inspection value, the depth step. It reports the fact and
+    makes no judgment, whether the value rises to a finding is triage's call, invariant 2."""
 
     name = "mock_inspect"
     phase = Phase.ENRICH
@@ -65,19 +65,21 @@ class InspectWidget(Capability):
 
     def run(self, task: Task, world: World) -> Outcome:
         widget = world.node(task.node)
-        value = widget.payload.value
-        payload = Inspected(interesting=value >= 100, value=value)
+        payload = Inspected(value=widget.payload.value)
         return Done(facts=(Fact(kind="inspected", about=task.node, payload=payload),))
 
 
 class WidgetTriage(Triage):
-    """Mint a finding for each widget an `inspected` fact marks interesting."""
+    """Mint a finding for each widget whose recorded value triage judges interesting. The
+    threshold is the judgment, held here rather than precomputed by the capability, invariant 2."""
+
+    interesting_at = 100
 
     def judge(self, world: World) -> list[Finding]:
         findings: list[Finding] = []
         for widget in world.nodes("widget"):
             fact = world.latest("inspected", widget.id)
-            if fact is not None and fact.payload.interesting:
+            if fact is not None and fact.payload.value >= self.interesting_at:
                 findings.append(Finding(
                     id=f"finding:{widget.id}",
                     title=f"interesting widget {widget.payload.name}",

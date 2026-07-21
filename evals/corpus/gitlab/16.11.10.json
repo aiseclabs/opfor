@@ -1,6 +1,7 @@
 {
   "product": "GitLab",
   "version": "",
+  "instance_version": "16.11.10",
   "host": "localhost",
   "resolved": {
     "resolvable": true,

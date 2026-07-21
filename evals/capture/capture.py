@@ -81,7 +81,10 @@ def capture(product: str, version: str, url: str) -> dict:
         fetch[path] = {"status": r["status"], "url": base + path, "content_type": r["content_type"],
                        "server": r["server"], "title": r["title"], "body": r["body"],
                        "location": r["location"], "reason": ""}
-    return {"product": product, "version": version, "host": host,
+    # `version` is what the scan is expected to extract, blank for a service that exposes none
+    # unauthenticated, which makes the cassette a recall-only case. `instance_version` is the real
+    # version of the captured instance, always recorded, so the file's identity is never ambiguous.
+    return {"product": product, "version": version, "instance_version": version, "host": host,
             "resolved": {"resolvable": True, "addresses": ["127.0.0.1"], "cnames": []},
             "root": root, "fetch": fetch, "docs": {}}
 
@@ -101,6 +104,9 @@ def main(argv=None) -> int:
     cassette = capture(args.product, args.version, args.url)
     out = Path(args.out) if args.out else (
         Path(__file__).resolve().parent.parent / "corpus" / args.product.lower() / f"{args.version}.json")
+    # A version-less capture carries no scored version, so its real instance version comes from the
+    # cassette name, keeping the file's identity unambiguous even when nothing is scored.
+    cassette["instance_version"] = args.version or out.stem
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(cassette, indent=2) + "\n", encoding="utf-8")
     kept = len(cassette["fetch"])

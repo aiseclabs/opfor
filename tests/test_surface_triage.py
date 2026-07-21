@@ -432,6 +432,15 @@ def test_adversarial_mode_wires_the_roles_from_the_env(monkeypatch):
     assert sc.triage._challenger_model == "challenger-model"
 
 
+def test_an_unknown_triage_mode_fails_loud(monkeypatch):
+    import pytest
+    from opfor.core.triage import triage_mode
+    monkeypatch.setenv("OPFOR_TRIAGE_MODE", "adverserial")
+    with pytest.raises(ValueError) as exc:
+        triage_mode()
+    assert "OPFOR_TRIAGE_MODE" in str(exc.value)
+
+
 def test_missing_security_headers_are_surfaced_and_the_class_is_selected():
     # the fixture hosts set no security headers, so the posture line lists them all as not set
     # and the knowledge class is selected by the trigger the line carries, so the judge is

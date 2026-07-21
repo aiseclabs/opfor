@@ -23,13 +23,11 @@ from opfor.core.providers.openai import OpenAIProvider
 from opfor.core.providers.retry import RetryProvider
 
 PROVIDERS = ("anthropic", "openai")
-# The runtime knobs that take one of a fixed set of values, so a typo is caught at config
-# read rather than silently ignored. An unknown executor would otherwise fall through to a
-# keyless API seat, and an unknown triage mode would run the standard pass instead of the
-# adversarial one the operator asked for, a wrong result with no error.
+# The runtime knobs that take one of a fixed set of values, so a typo is caught at config read
+# rather than silently ignored. An unknown executor would otherwise fall through to a keyless API
+# seat, a wrong result with no error. Triage policy is not here, it lives in `opfor.core.triage`.
 EXECUTORS = ("auto", "api", "subscription")
 WIRE_APIS = ("chat", "responses")
-TRIAGE_MODES = ("standard", "adversarial")
 # Only anthropic has a keyless subscription backend through `claude -p`, so it is the one
 # provider `auto` can run without a key.
 _KEYLESS_PROVIDERS = ("anthropic",)
@@ -80,7 +78,6 @@ class ProviderConfig:
     wire_api: str = "chat"
     retries: int = 2
     timeout: float = 240.0
-    triage_mode: str = "standard"
 
     def __post_init__(self) -> None:
         """Validate every setting at config read, so a bad value fails here with a clear
@@ -89,7 +86,6 @@ class ProviderConfig:
         _require_one_of(self.provider, PROVIDERS, "provider", "OPFOR_PROVIDER")
         _require_one_of(self.executor, EXECUTORS, "executor", "OPFOR_EXECUTOR")
         _require_one_of(self.wire_api, WIRE_APIS, "wire API", "OPFOR_WIRE_API")
-        _require_one_of(self.triage_mode, TRIAGE_MODES, "triage mode", "OPFOR_TRIAGE_MODE")
         if self.retries < 0:
             raise ValueError(
                 f"retries must be zero or more, set OPFOR_RETRIES to a non-negative integer, "
@@ -115,27 +111,12 @@ class ProviderConfig:
             wire_api=env.get("OPFOR_WIRE_API", "chat"),
             retries=_int_env(env, "OPFOR_RETRIES", "2"),
             timeout=_float_env(env, "OPFOR_TIMEOUT", "240"),
-            triage_mode=env.get("OPFOR_TRIAGE_MODE", "standard"),
         )
 
 
 def default_model() -> str:
     """The model name a scenario uses when it names none, env-backed, read at the call."""
     return ProviderConfig.from_env().model
-
-
-def triage_mode() -> str:
-    """The triage judging mode, `standard` single-model by default or `adversarial`."""
-    return ProviderConfig.from_env().triage_mode
-
-
-def role_model(role: str, base: str) -> str:
-    """The model for an adversarial role, its own `OPFOR_<ROLE>_MODEL` or the base model.
-
-    A distinct model in the challenger or judge seat gives an uncorrelated second opinion,
-    the point of the adversarial pass. With none set the role reuses the base model, which
-    still gives an independent pass, just a correlated one."""
-    return os.environ.get(f"OPFOR_{role.upper()}_MODEL") or base
 
 
 def _has_key(provider: str, api_key: str | None) -> bool:

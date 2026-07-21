@@ -207,9 +207,9 @@ def test_provider_config_reads_the_environment_at_the_call_not_at_import(monkeyp
     # an explicit mapping is read field by field, so a test drives a backend without the
     # process environment
     cfg = ProviderConfig.from_env({"OPFOR_PROVIDER": "openai", "OPFOR_MODEL": "m-1",
-                                   "OPFOR_EXECUTOR": "api", "OPFOR_TRIAGE_MODE": "adversarial"})
+                                   "OPFOR_EXECUTOR": "api"})
     assert cfg.provider == "openai" and cfg.model == "m-1"
-    assert cfg.executor == "api" and cfg.triage_mode == "adversarial"
+    assert cfg.executor == "api"
     # the environment is read at each call, so a change between calls is seen rather than
     # frozen at import, the whole point of moving the read off the module top
     monkeypatch.setenv("OPFOR_MODEL", "first")
@@ -223,10 +223,9 @@ def test_provider_config_reads_the_environment_at_the_call_not_at_import(monkeyp
 
 def test_from_env_rejects_an_unknown_enum_naming_the_variable_to_set():
     """A typo in an enum setting fails loud at config read, so it is never silently ignored,
-    an unknown executor falling through to a keyless API seat or an unknown triage mode
-    quietly running the standard pass instead of the adversarial one asked for."""
+    an unknown executor falling through to a keyless API seat instead of the seat asked for."""
     for var, bad in (("OPFOR_PROVIDER", "gemini"), ("OPFOR_EXECUTOR", "local"),
-                     ("OPFOR_WIRE_API", "grpc"), ("OPFOR_TRIAGE_MODE", "adverserial")):
+                     ("OPFOR_WIRE_API", "grpc")):
         with pytest.raises(ValueError) as exc:
             ProviderConfig.from_env({var: bad})
         assert var in str(exc.value) and bad in str(exc.value)

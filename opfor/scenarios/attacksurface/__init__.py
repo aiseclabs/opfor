@@ -20,7 +20,8 @@ from __future__ import annotations
 from pathlib import Path
 
 from opfor.core import Node, Phase, Provider, RuleSet, Scenario, World, make_provider
-from opfor.core.providers.factory import default_model, role_model, triage_mode
+from opfor.core.providers.factory import default_model
+from opfor.core.triage import role_model, triage_mode
 from opfor.scenarios.attacksurface.assets import domain
 from opfor.scenarios.attacksurface.hostnames import HostScope
 from opfor.scenarios.attacksurface.assets.domain import identify

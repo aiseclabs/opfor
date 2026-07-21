@@ -3,12 +3,11 @@
 from __future__ import annotations
 
 from opfor.core import Capability, Done, Fact, Outcome, Phase, Task, World
-from opfor.scenarios.attacksurface.assets.domain.capabilities.helpers import (
+from opfor.scenarios.attacksurface.assets.domain.capabilities.failures import _coverage_gap, net_failed
+from opfor.scenarios.attacksurface.assets.domain.capabilities.responses import (
     _MAX_SOURCE_MAPS,
     _baseline,
-    _coverage_gap,
     _distinct,
-    net_failed,
 )
 from opfor.scenarios.attacksurface.assets.domain.candidates import backup_targets
 from opfor.scenarios.attacksurface.assets.domain.sources import (

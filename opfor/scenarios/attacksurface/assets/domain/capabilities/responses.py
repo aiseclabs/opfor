@@ -1,46 +1,19 @@
-"""Shared module-level helpers and constants for the domain capabilities."""
+"""Endpoint response comparison helpers shared across the domain capabilities.
+
+They tell a real endpoint from a host's catch-all, a single-page app that answers 200 for every
+path or a blanket login redirect, filter static assets out of the interface surface, and read the
+same-origin links a home page carries. Pure functions over an already-fetched response, so a
+capability compares what it probed without reading knowledge.
+"""
 
 from __future__ import annotations
 
 import re
 
-from opfor.core.capability import Failed
-from opfor.core.transient import is_transient
-from opfor.scenarios.attacksurface.assets.domain.types import CoverageGap
-
-
-def net_failed(prefix: str, exc: Exception) -> Failed:
-    """A `Failed` for a network error, marked transient when the error is a retryable blip.
-
-    So the engine retries a rate limit, a gateway error, or a timeout rather than dropping the
-    whole capability result, while a real error still fails terminal and loud, invariant 5.
-    """
-    return Failed(reason=f"{prefix} {type(exc).__name__}: {exc}", transient=is_transient(exc))
-
 _LINK = re.compile(r'(?:href|src)\s*=\s*["\']([^"\'#?]+)', re.IGNORECASE)
 # Same-host bundles checked for a source map per host, bounded so a bundle-heavy app stays
 # a small number of extra reads.
 _MAX_SOURCE_MAPS = 12
-
-_MAX_GAP_REASONS = 5
-
-
-def _coverage_gap(scan: str, host: str, attempted: int, skipped: list[str]) -> CoverageGap | None:
-    """A coverage gap payload when a per-item scan skipped items on errors, else None. So a
-    scan that dropped items keeps the drop loud rather than passing a partial surface off as
-    a clean negative, invariant 5. The reasons are a bounded sample so the fact stays small."""
-    if not skipped:
-        return None
-    return CoverageGap(scan=scan, host=host, attempted=attempted, failed=len(skipped),
-                       reasons=tuple(skipped[:_MAX_GAP_REASONS]))
-
-
-def _safe(thunk):
-    """Run a candidate source, returning None on any error so the union tolerates it."""
-    try:
-        return thunk()
-    except Exception:
-        return None
 
 
 def _is_static_asset(path: str, suffixes, prefixes) -> bool:

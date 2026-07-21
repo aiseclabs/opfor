@@ -5,14 +5,16 @@ from __future__ import annotations
 from urllib.parse import urlparse
 
 from opfor.core import Capability, Done, Fact, Node, Outcome, Phase, Task, World
-from opfor.scenarios.attacksurface.assets.domain.capabilities.helpers import (
-    _baseline,
+from opfor.scenarios.attacksurface.assets.domain.capabilities.failures import (
     _coverage_gap,
+    _safe,
+    net_failed,
+)
+from opfor.scenarios.attacksurface.assets.domain.capabilities.responses import (
+    _baseline,
     _distinct,
     _home_paths,
     _is_static_asset,
-    _safe,
-    net_failed,
 )
 from opfor.scenarios.attacksurface.assets.domain.sources.parsers import path_permutations
 from opfor.scenarios.attacksurface.assets.domain.sources import (

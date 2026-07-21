@@ -59,14 +59,6 @@ def nvd_api_key() -> str:
     return os.environ.get("OPFOR_NVD_API_KEY", "")
 
 
-def urlscan_key() -> str:
-    """A urlscan.io API key, empty when unset. The search endpoint runs keyless, so the source
-    always joins the subdomain union, a key only raises the anonymous rate limit so it returns
-    more before being throttled. A free account provides one. Querying urlscan is a public read
-    that never touches the target, so it needs no key to run."""
-    return os.environ.get("OPFOR_URLSCAN_API_KEY", "")
-
-
 def dnsdumpster_key() -> str:
     """A DNSDumpster API key, empty when unset.
 

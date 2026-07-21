@@ -4,10 +4,6 @@ import json
 
 import pytest
 
-from opfor.core import Budget, Scope, run
-
-from tests.surface_fixtures import *
-
 
 def test_hosts_from_file_normalizes_a_dns_export(tmp_path):
     from opfor.scenarios.attacksurface.assets.domain.sources import hosts_from_file
@@ -210,7 +206,6 @@ def test_subdomains_drops_dns_control_record_names(monkeypatch):
                         lambda d: {"api.example.com", "_dmarc.example.com",
                                    "_domainkey.example.com", "_acme-challenge.www.example.com"})
     monkeypatch.setattr(domains, "wayback_subdomains", lambda d: domains.Enumeration())
-    monkeypatch.setattr(domains, "urlscan_subdomains", lambda d: domains.Enumeration())
     result = set(domains.subdomains("example.com"))
     assert "api.example.com" in result
     assert "_dmarc.example.com" not in result
@@ -218,73 +213,14 @@ def test_subdomains_drops_dns_control_record_names(monkeypatch):
     assert "www.example.com" in result  # the acme-challenge validation label unwraps to its host
 
 
-def test_subdomains_union_merges_the_three_keyless_windows(monkeypatch):
-    # certificate logs, the archive, and urlscan each have a different window, so the union merges them
+def test_subdomains_union_merges_the_keyless_windows(monkeypatch):
+    # certificate logs and the archive have different windows, so the union is their merge
     from opfor.scenarios.attacksurface.assets.domain.sources import passive as domains
 
     monkeypatch.setattr(domains, "certspotter_subdomains", lambda d: {"cert-only.example.com"})
     monkeypatch.setattr(domains, "wayback_subdomains", lambda d: domains.Enumeration({"archived.example.com"}))
-    monkeypatch.setattr(domains, "urlscan_subdomains", lambda d: domains.Enumeration({"scanned.example.com"}))
     result = set(domains.subdomains("example.com"))
-    assert {"cert-only.example.com", "archived.example.com", "scanned.example.com"} <= result
-
-
-def test_urlscan_subdomains_extracts_hosts_and_marks_truncation(monkeypatch):
-    import urllib.request
-    from opfor.scenarios.attacksurface.assets.domain.sources import passive as domains
-
-    payload = {"results": [
-        {"page": {"domain": "api.example.com", "url": "https://api.example.com/v1"}},
-        {"page": {"domain": "example.com", "url": "https://shop.example.com/"}},   # url has a subdomain
-        {"page": {"domain": "cdn.other.com", "url": "https://cdn.other.com/x"}},   # foreign, dropped
-    ], "has_more": True}
-
-    class _Resp:
-        def read(self, *_a):
-            return json.dumps(payload).encode("utf-8")
-
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *exc):
-            return False
-
-    monkeypatch.setattr(urllib.request, "urlopen", lambda *a, **k: _Resp())
-    out = domains.urlscan_subdomains("example.com")
-    assert "api.example.com" in out and "shop.example.com" in out
-    assert "example.com" not in out and "cdn.other.com" not in out
-    assert out.truncated is True  # has_more marks the page as a bounded, partial read
-
-
-def test_urlscan_sends_the_api_key_header_only_when_configured(monkeypatch):
-    import urllib.request
-    from opfor.scenarios.attacksurface.assets.domain.sources import passive as domains
-
-    seen = {}
-
-    class _Resp:
-        def read(self, *_a):
-            return json.dumps({"results": [], "has_more": False}).encode("utf-8")
-
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *exc):
-            return False
-
-    def fake_urlopen(request, timeout=0):
-        seen["key"] = request.get_header("Api-key")  # urllib title-cases header names
-        return _Resp()
-
-    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
-
-    monkeypatch.setattr(domains.config, "urlscan_key", lambda: "")
-    domains.urlscan_subdomains("example.com")
-    assert seen["key"] is None  # keyless by default, no key header
-
-    monkeypatch.setattr(domains.config, "urlscan_key", lambda: "secret-key")
-    domains.urlscan_subdomains("example.com")
-    assert seen["key"] == "secret-key"  # configured key rides as the API-Key header
+    assert {"cert-only.example.com", "archived.example.com"} <= result
 
 
 def test_wayback_subdomains_extracts_hosts_under_the_domain(monkeypatch):

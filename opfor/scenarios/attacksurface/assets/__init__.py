@@ -2,8 +2,8 @@
 
 An asset class is to a scenario what a scenario is to the engine, a self-contained
 plugin. It owns its node and fact payloads, its capabilities, its planner rules, and its
-own knowledge, and it names no other class. The domain class knows nothing of GitHub, the
-GitHub class knows nothing of DNS, and adding a third is a new package here plus one line
+own knowledge, and it names no other class. The domain class, the one the scenario ships
+today, knows nothing of any other, and adding a class is a new package here plus one line
 in the scenario's `build`, never an edit to an existing class.
 
 Each class exposes `assemble`, which takes the injected seams a run wires and a test

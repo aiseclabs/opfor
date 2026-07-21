@@ -325,9 +325,9 @@ def test_engine_reaches_the_confirm_phase_when_opted_in_and_authorized():
 
 def test_regression_surface_closes_at_confirm_with_code_minted_findings():
     """The full spine over the synthetic surface closes at CONFIRM, and the findings that do
-    not depend on the model, an associated root, a wildcard blind spot, a github org, are
-    minted deterministically. A model-backed judgment is empty here by design, the default
-    provider returns no findings, so only the code-minted structural findings remain."""
+    not depend on the model, a wildcard blind spot, are minted deterministically. A model-backed
+    judgment is empty here by design, the default provider returns no findings, so only the
+    code-minted structural findings remain."""
     world = _seed()
     scenario = _make(confirm=True, reproduce_fetch_fn=_read_only)
     scope = Scope(max_tier="intrusive", matcher=HostScope(hosts=(ROOT,)), authorized=True)
@@ -336,7 +336,6 @@ def test_regression_surface_closes_at_confirm_with_code_minted_findings():
     assert report.closed and report.reached == Phase.CONFIRM
     ids = {f.id for f in report.findings}
     assert "finding:blindspot:wildcard" in ids
-    assert "finding:github_org:examplecorp" in ids
     # reproduce is read only: any receipt recorded came from a safe method, never a write
     for fact in world.facts("reproduction"):
         assert fact.payload.method in ("GET", "HEAD", "OPTIONS")

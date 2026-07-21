@@ -1,11 +1,9 @@
 """Shared DNS-name primitives, the seam between asset classes.
 
-The registrable root of a host and the shape check for a host name are neither the
-domain class's nor the GitHub class's alone. The domain class reads them to fold a
-subdomain to its root and to filter a certificate log, the GitHub class reads
-`registrable_root` to attribute an org by the domain its profile links to, and the CLI
-reads it to authorize a subdomain by its root. So they live here, one place both classes
-depend on, rather than one class depending on the other.
+The registrable root of a host and the shape check for a host name are not any single
+class's alone. The domain class reads them to fold a subdomain to its root and to filter a
+certificate log, and the CLI reads `registrable_root` to authorize a subdomain by its root.
+So they live here, one shared place, rather than a class or the CLI reaching into another.
 """
 
 from __future__ import annotations
@@ -88,8 +86,8 @@ def _normalize_host(name: str) -> str:
 class HostScope:
     """The attack-surface scope matcher: the scenario's DNS suffix rule for what is in scope.
 
-    A candidate is in scope if it exactly matches an in-scope resource id, such as a GitHub
-    `repo:owner/name`, or it is one of the in-scope hosts or a subdomain under one. Holding this
+    A candidate is in scope if it exactly matches an in-scope resource id, or it is one of the
+    in-scope hosts or a subdomain under one. Holding this
     here, not in the engine, is what lets the kernel name no host. The endswith test pins a dot
     boundary, so `evilexample.com` is not in scope of `example.com`.
     """

@@ -12,12 +12,10 @@ def test_run_closes():
     assert report.status == CLOSED
     assert report.reached == Phase.TRIAGE
 
-def test_expands_both_asset_classes_from_the_org():
+def test_expands_the_domain_asset_class_from_the_org():
     world = _seed()
     _run(world)
     assert {n.payload.name for n in world.nodes("domain")} >= {"www.example.com", "admin.example.com"}
-    assert {n.payload.login for n in world.nodes("github_org")} == {"examplecorp"}
-    assert len(world.nodes("github_repo")) == 2
 
 def test_wildcard_certificate_is_reported_as_a_blind_spot():
     # *.dev.example.com hides its hosts from CT, the run must say so rather than look clean
@@ -70,47 +68,6 @@ def test_wildcard_base_node_is_flagged():
     assert nodes["dev.example.com"].wildcard is True
     assert nodes["api.example.com"].wildcard is False
 
-def test_github_org_is_info_inventory():
-    report = _run(_seed())
-    gh = [f for f in report.findings if f.data["kind"] == "github_org"]
-    assert gh and gh[0].where == "examplecorp"
-    assert gh[0].severity == "INFO"
-    assert gh[0].data["repos"] == 2
-
-def test_github_attribution_keeps_the_owned_drops_the_namesake_flags_the_unproven():
-    # three candidates match the name: one links to the in-scope root, one links to a
-    # different root and is a namesake, one has no link and cannot be proven either way
-    def search(name, token=""):
-        return [
-            {"login": "examplecorp", "url": "u", "org_id": 1, "name": "Example Corp",
-             "blog": "https://example.com", "email": "", "verified": False},
-            {"login": "example-lasers", "url": "u", "org_id": 2, "name": "Example Lasers",
-             "blog": "https://example-lasers.io", "email": "", "verified": False},
-            {"login": "examplish", "url": "u", "org_id": 3, "name": "Examplish",
-             "blog": "", "email": "", "verified": False},
-        ]
-
-    report, _, world = _run_capturing(_seed(), search_fn=search)
-    logins = {n.payload.login for n in world.nodes("github_org")}
-    # the namesake proven to belong elsewhere is dropped, the other two are kept
-    assert logins == {"examplecorp", "examplish"}
-    attributed = {n.payload.login for n in world.nodes("github_org") if n.payload.attributed}
-    assert attributed == {"examplecorp"}
-    # the owned org is its own finding, the unproven one is collapsed into a caveat
-    kinds = {f.data.get("kind") for f in report.findings}
-    assert "github_org" in kinds and "github_unattributed" in kinds
-    caveat = next(f for f in report.findings if f.data.get("kind") == "github_unattributed")
-    assert caveat.data["logins"] == ["examplish"]
-
-def test_class_restriction_runs_only_that_class():
-    # github only: no domain nodes discovered, no domain findings
-    world = _seed(classes=("github",))
-    report = _run(world)
-    assert report.closed
-    assert world.nodes("domain") == ()
-    assert world.nodes("github_org")
-    assert all(f.data["kind"] == "github_org" for f in report.findings)
-
 def test_total_resolution_failure_reports_incomplete_not_dangling():
     # when not one name resolves, the resolver is the problem, so the run must say
     # incomplete rather than call every name dangling
@@ -124,24 +81,6 @@ def test_total_resolution_failure_reports_incomplete_not_dangling():
     assert "incomplete" in kinds
     assert "dangling" not in kinds
 
-def test_github_search_failure_still_closes():
-    def boom(name, token=""):
-        raise TimeoutError("github slow")
-
-    scenario = _make(search_fn=boom)
-    world = _seed()
-    report = run(scenario, world, scope=Scope(max_tier="recon", matcher=HostScope(hosts=(ROOT,))), budget=Budget(500))
-    assert report.closed
-    # the failure is loud in the report, not only in the ledger
-    assert any("failed" in n and "discover_github" in n for n in report.notes)
-
-def test_no_hint_domains_still_closes_via_github():
-    # a bare name with no hint domains and the domain class off still closes on github
-    world = _seed(domains=(), classes=("github",))
-    report = _run(world)
-    assert report.closed
-    assert world.nodes("domain") == ()
-    assert world.nodes("github_org")
 
 def test_subdomain_enumeration_partial_failure_surfaces_a_coverage_gap():
     from opfor.core import Done, Task

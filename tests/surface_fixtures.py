@@ -65,29 +65,6 @@ HTTP = {
                         "title": "api", "body": "ok"},
 }
 
-# GitHub search and repos, keyed off the org name.
-GH_ORGS = {"ExampleCorp": [
-    # its profile links to the in-scope root, so it is attributed to the target
-    {"login": "examplecorp", "url": "https://github.com/examplecorp", "org_id": 7,
-     "name": "Example Corp", "blog": "https://example.com", "email": "", "verified": False},
-]}
-GH_REPOS = {
-    "examplecorp": [
-        {"full_name": "examplecorp/web", "url": "u1", "language": "Go", "pushed_at": "2026-06-01", "archived": False},
-        {"full_name": "examplecorp/infra", "url": "u2", "language": "HCL",
-         "pushed_at": "2026-05-01", "archived": False},
-    ]
-}
-
-
-def _search(name, token=""):
-    return list(GH_ORGS.get(name, []))
-
-
-def _repos(login, token=""):
-    return list(GH_REPOS.get(login, []))
-
-
 # Interface probes per absolute url. Anything absent answers 404 and is skipped.
 # /api/secret is only reachable by reading it out of a JavaScript bundle, /legacy only by a
 # passive url source, /secret-panel only from robots.txt, so each proves one candidate source.
@@ -207,7 +184,7 @@ def _make(**over):
     model. A MockProvider stands in for the triage model, returning an empty result by
     default. A test overrides one seam to drive a failure or a variant, or passes its own
     provider to drive a canned model reply."""
-    seams = dict(search_fn=_search, repos_fn=_repos, enumerate_fn=_enumerate,
+    seams = dict(enumerate_fn=_enumerate,
                  resolve_fn=_resolve, probe_fn=_probe, fetch_fn=_fetch, fetch_doc_fn=_fetch_doc,
                  introspect_fn=_introspect, wayback_fn=_wayback, identify_fn=_identify, cve_fn=_cves,
                  probe_url_fn=_probe_url, dns_fn=_dns, tls_fn=_tls)
@@ -295,10 +272,6 @@ __all__ = [
     'CRT',
     'DNS',
     'HTTP',
-    'GH_ORGS',
-    'GH_REPOS',
-    '_search',
-    '_repos',
     'ENDPOINTS',
     '_fetch',
     '_fetch_doc',

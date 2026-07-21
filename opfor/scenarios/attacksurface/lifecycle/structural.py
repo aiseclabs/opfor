@@ -86,43 +86,6 @@ def coverage_gaps(world: World) -> list[Finding]:
     return out
 
 
-def github(world: World) -> list[Finding]:
-    """The GitHub org inventory. An attributed org, one whose profile ties it to an in-scope
-    domain, is an INFO line with its public repo count. Orgs that only match the name are
-    collapsed into one caveat line rather than passed off as the target's, so a namesake does
-    not read as reachable code surface. A fact about what the run found and how sure it is, not
-    a semantic judgment, so it stays in code."""
-    out: list[Finding] = []
-    unattributed: list[str] = []
-    for node in world.nodes("github_org"):
-        payload = node.payload
-        if not payload.attributed:
-            unattributed.append(payload.login)
-            continue
-        login = payload.login
-        repos = [r for r in world.nodes("github_repo") if r.id.startswith(f"github_repo:{login}/")]
-        out.append(Finding(
-            id=f"finding:github_org:{login}",
-            title=f"GitHub org {login}, {len(repos)} public repo(s)",
-            severity="INFO",
-            where=login,
-            evidence=payload.evidence or f"reachable code surface at {payload.url}",
-            data={"kind": "github_org", "login": login, "repos": len(repos), "url": payload.url},
-        ))
-    if unattributed:
-        out.append(Finding(
-            id="finding:github_unattributed",
-            title=f"{len(unattributed)} GitHub org(s) match the name but are unattributed",
-            severity="INFO",
-            where=", ".join(sorted(unattributed)[:10]),
-            evidence="the account name matches the target but nothing in the profile ties it to "
-                     "an in-scope domain, so ownership is unverified, confirm before treating a "
-                     "namesake as the target's code surface",
-            data={"kind": "github_unattributed", "logins": sorted(unattributed)},
-        ))
-    return out
-
-
 def resolution_caveat(world: World) -> Finding | None:
     """When almost nothing resolved the resolver is the problem, not the target, so probing and
     dangling results would be a wall of false positives. Above a high failure rate, say the run
@@ -151,4 +114,4 @@ def resolution_caveat(world: World) -> Finding | None:
 
 # The inventory and coverage rules the judge runs unconditionally. Named here so the set of
 # what triage mints outside the model is auditable in one place.
-STRUCTURAL = (wildcards, truncated, coverage_gaps, github)
+STRUCTURAL = (wildcards, truncated, coverage_gaps)

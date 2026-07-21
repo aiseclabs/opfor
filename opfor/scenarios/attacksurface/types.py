@@ -2,8 +2,8 @@
 
 The seed is an `Org`, an organization the operator names, such as a company. Every asset
 the run discovers under it is a class's own payload, defined in that class's `types`
-module, the domain node and its enrichments under the domain class, the GitHub org and its
-repositories under the GitHub class. Only the seed lives here, since every class reads it.
+module, for example the domain node and its enrichments under the domain class. Only the
+seed lives here, since every class reads it.
 """
 
 from __future__ import annotations

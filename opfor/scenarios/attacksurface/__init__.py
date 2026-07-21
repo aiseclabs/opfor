@@ -21,11 +21,10 @@ from pathlib import Path
 
 from opfor.core import Node, Phase, Provider, RuleSet, Scenario, World, make_provider
 from opfor.core.providers.factory import default_model, role_model, triage_mode
-from opfor.scenarios.attacksurface.assets import domain, github
+from opfor.scenarios.attacksurface.assets import domain
 from opfor.scenarios.attacksurface.hostnames import HostScope
 from opfor.scenarios.attacksurface.assets.domain import identify
 from opfor.scenarios.attacksurface.assets.domain import sources as domain_src
-from opfor.scenarios.attacksurface.assets.github import sources as github_src
 from opfor.scenarios.attacksurface.lifecycle.triage import SurfaceTriage
 from opfor.scenarios.attacksurface.lifecycle.confirm import ConfirmTriage
 from opfor.scenarios.attacksurface.lifecycle.grounding import FindingGrounder
@@ -44,10 +43,9 @@ def _payloads() -> dict[str, type]:
     from opfor.scenarios.attacksurface import types as surface_types
     from opfor.scenarios.attacksurface.lifecycle import reproduce
     from opfor.scenarios.attacksurface.assets.domain import types as domain_types
-    from opfor.scenarios.attacksurface.assets.github import types as github_types
 
     registry: dict[str, type] = {}
-    for module in (surface_types, domain_types, github_types, reproduce):
+    for module in (surface_types, domain_types, reproduce):
         for name, obj in vars(module).items():
             if isinstance(obj, type) and is_dataclass(obj):
                 registry[name] = obj
@@ -90,8 +88,6 @@ def _terminal_phase(*, reproduce, confirm):
 
 def build(
     *,
-    search_fn=github_src.search_orgs,
-    repos_fn=github_src.org_repos,
     enumerate_fn=domain_src.subdomains,
     resolve_fn=domain_src.resolve_host,
     probe_fn=domain_src.http_probe,
@@ -138,7 +134,6 @@ def build(
                         introspect_fn=introspect_fn, wayback_fn=wayback_fn,
                         probe_url_fn=probe_url_fn, dns_fn=dns_fn, tls_fn=tls_fn,
                         identify_fn=identify_fn, cve_fn=cve_fn),
-        github.assemble(search_fn=search_fn, repos_fn=repos_fn),
     ]
     capabilities = tuple(cap for bundle in bundles for cap in bundle.capabilities)
     map_rules = [rule for bundle in bundles for rule in bundle.map_rules]

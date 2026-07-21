@@ -291,11 +291,49 @@ def test_subdomains_drops_dns_control_record_names(monkeypatch):
     monkeypatch.setattr(domains, "certspotter_subdomains",
                         lambda d: {"api.example.com", "_dmarc.example.com",
                                    "_domainkey.example.com", "_acme-challenge.www.example.com"})
+    monkeypatch.setattr(domains, "wayback_subdomains", lambda d: domains.Enumeration())
     result = set(domains.subdomains("example.com"))
     assert "api.example.com" in result
     assert "_dmarc.example.com" not in result
     assert "_domainkey.example.com" not in result
     assert "www.example.com" in result  # the acme-challenge validation label unwraps to its host
+
+
+def test_subdomains_union_merges_wayback_with_certificate_logs(monkeypatch):
+    # the two keyless sources have different windows, so the union is their merge
+    from opfor.scenarios.attacksurface.assets.domain.sources import passive as domains
+
+    monkeypatch.setattr(domains, "certspotter_subdomains", lambda d: {"cert-only.example.com"})
+    monkeypatch.setattr(domains, "wayback_subdomains", lambda d: domains.Enumeration({"archived.example.com"}))
+    result = set(domains.subdomains("example.com"))
+    assert {"cert-only.example.com", "archived.example.com"} <= result
+
+
+def test_wayback_subdomains_extracts_hosts_under_the_domain(monkeypatch):
+    import urllib.request
+    from opfor.scenarios.attacksurface.assets.domain.sources import passive as domains
+
+    rows = [["original"],
+            ["https://api.example.com/v1"],
+            ["http://blog.example.com/post?a=1"],
+            ["https://example.com/"],            # the apex root, not a subdomain
+            ["https://cdn.other.com/x"]]         # a foreign host linked from an archived page
+
+    class _Resp:
+        def read(self, *_a):
+            return json.dumps(rows).encode("utf-8")
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+    monkeypatch.setattr(urllib.request, "urlopen", lambda *a, **k: _Resp())
+    out = domains.wayback_subdomains("example.com")
+    assert "api.example.com" in out and "blog.example.com" in out
+    assert "example.com" not in out          # apex is not a subdomain
+    assert "cdn.other.com" not in out        # foreign host is dropped
 
 
 def test_subdomains_from_vt_reads_relationship_ids():

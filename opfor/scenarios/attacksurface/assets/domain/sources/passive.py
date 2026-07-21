@@ -57,7 +57,9 @@ def subdomains(domain: str) -> Enumeration:
     data class is already covered by certspotter. A source that hit its page cap marks the
     union truncated, so a bounded fetch is reported as a blind spot rather than a full set.
     """
-    sources = [certspotter_subdomains]
+    # Two keyless sources with different windows: certificate logs name cert-holding hosts, the
+    # Wayback archive names crawled or linked hosts, so together they cover a wildcard-hidden host.
+    sources = [certspotter_subdomains, wayback_subdomains]
     if config.virustotal_key():
         sources.append(virustotal_subdomains)
     if config.otx_key():
@@ -498,6 +500,34 @@ def sibling_roots_from_issuances(issuances, domain: str) -> dict[str, str]:
             siblings.setdefault(
                 root, f"shares a certificate with {known}, {len(roots)} roots on the cert")
     return siblings
+
+
+def wayback_subdomains(domain: str) -> Enumeration:
+    """Subdomains of a domain seen in the Wayback Machine CDX index, a passive read.
+
+    Certificate logs name only hosts issued a public certificate. The archive names any host ever
+    crawled or linked under the domain, so it surfaces hosts a wildcard certificate hides from the
+    logs or that never held a certificate of their own, a different window than the logs. It reads
+    a public index and never touches the target. One source in a union, so its failure is
+    tolerated, and hitting the row cap marks the result truncated so a bounded fetch reads as a
+    blind spot rather than the full set.
+    """
+    limit = 20000
+    url = (f"http://web.archive.org/cdx/search/cdx?url={urllib.parse.quote(domain)}"
+           f"&matchType=domain&output=json&fl=original&collapse=urlkey&limit={limit}")
+    request = urllib.request.Request(url, headers={"User-Agent": _UA, "Accept": "application/json"})
+    with urllib.request.urlopen(request, timeout=_TIMEOUT) as resp:
+        rows = json.loads(resp.read(_JSON_LIMIT).decode("utf-8", "replace"))
+    data = rows[1:] if rows and isinstance(rows[0], list) else []
+    suffix = "." + domain
+    names: set[str] = set()
+    for row in data:
+        host = (urllib.parse.urlsplit(str(row[0])).hostname or "").lower()
+        if host.endswith(suffix) and looks_like_host(host):
+            names.add(host)
+    result = Enumeration(names)
+    result.truncated = len(data) >= limit
+    return result
 
 
 def wayback_paths(host: str) -> set[str]:

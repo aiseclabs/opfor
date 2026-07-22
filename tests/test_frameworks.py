@@ -17,7 +17,7 @@ from opfor.scenarios.attacksurface.assets.domain.classifiers import (
 )
 from opfor.scenarios.attacksurface.assets.domain.types import HTTP
 
-_FRAMEWORKS = load_frameworks(KNOWLEDGE / "technologies" / "frameworks")
+_FRAMEWORKS = load_frameworks(KNOWLEDGE / "fingerprints" / "frameworks")
 
 
 def _classify(*, server="", headers=(), body=""):

@@ -18,7 +18,6 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from pathlib import Path
 from urllib.parse import urlparse
 
 
@@ -36,7 +35,7 @@ def _validate_secret_patterns(patterns) -> None:
             raise RuntimeError(
                 f"invalid secret pattern regex for {pattern.get('id', '?')!r}: {exc}") from exc
 
-from opfor.core import Task, World, each, parse_frontmatter
+from opfor.core import Task, World, each, iter_md_docs
 from opfor.scenarios.attacksurface.assets import class_enabled
 
 # The asset class this planner belongs to, the single source of the class name the enable gate and
@@ -69,30 +68,32 @@ class DomainPlanConfig:
     backup_swap: tuple[str, ...] = ()
 
 
-def _frontmatter(path: Path) -> dict:
-    """The frontmatter of one knowledge file, empty when the file is absent, so a missing detection
-    unit disables its scan rather than crashing the build."""
-    if not path.exists():
-        return {}
-    return parse_frontmatter(path.read_text(encoding="utf-8"))[0]
-
-
 def load_plan_config(paths) -> DomainPlanConfig:
     """Load the domain plan config from the class's knowledge tree, once, at build time, so the
     file IO the planner needs happens when a scenario is assembled, never at import. `paths` is the
     class's `KnowledgePaths`. The secret patterns and backup templates are deterministic detection
-    payloads under `detections/`, handed to their capabilities as params so the capability reads no
-    knowledge, invariant 1."""
-    secret_patterns = tuple(dict(p) for p in (_frontmatter(paths.secret_patterns).get("secrets") or []))
+    payloads carried in the frontmatter of the finding classes they serve, unioned across
+    `findings/` and handed to their capabilities as params so the capability reads no knowledge,
+    invariant 1."""
+    secret_patterns: list[dict] = []
+    backup_append: list[str] = []
+    backup_rename: list[str] = []
+    backup_swap: list[str] = []
+    for _path, meta, _body in iter_md_docs(paths.findings):
+        secret_patterns.extend(dict(p) for p in (meta.get("secrets") or []))
+        backups = meta.get("backups") or {}
+        backup_append.extend(str(s) for s in (backups.get("append") or []))
+        backup_rename.extend(str(s) for s in (backups.get("rename") or []))
+        backup_swap.extend(str(s) for s in (backups.get("swap") or []))
+    secret_patterns = tuple(secret_patterns)
     _validate_secret_patterns(secret_patterns)
-    backups = _frontmatter(paths.backup_templates).get("backups") or {}
     return DomainPlanConfig(
         static_suffixes=_STATIC_SUFFIXES,
         static_prefixes=_STATIC_PREFIXES,
         secret_patterns=secret_patterns,
-        backup_append=tuple(str(s) for s in (backups.get("append") or [])),
-        backup_rename=tuple(str(s) for s in (backups.get("rename") or [])),
-        backup_swap=tuple(str(s) for s in (backups.get("swap") or [])),
+        backup_append=tuple(backup_append),
+        backup_rename=tuple(backup_rename),
+        backup_swap=tuple(backup_swap),
     )
 
 

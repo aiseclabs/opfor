@@ -5,7 +5,7 @@ Both are pure functions over a host's already-gathered facts and an injected ref
 a capability can profile a host without reading knowledge itself, and the report renders the
 stored result rather than recomputing it. The table shapes match the loaders in the triage layer:
 a framework table maps a name to its lowercased body and header markers and a compiled version
-pattern, a edge table maps a category to its CNAME suffixes, server tokens, and marker headers.
+pattern, a provider table maps a category to its CNAME suffixes, server tokens, and marker headers.
 """
 
 from __future__ import annotations
@@ -20,10 +20,10 @@ from opfor.core import iter_md_docs
 from opfor.scenarios.attacksurface.assets.domain.sources.parsers import info_from_openapi
 
 
-def load_edge(directory: Path) -> dict:
-    """The edge signatures, one `edge/<category>.md` unit each, its `category` frontmatter the edge
-    class and its CNAME suffixes, server tokens, and marker headers lowercased for matching. A
-    missing directory is an empty table."""
+def load_providers(directory: Path) -> dict:
+    """The provider signatures, one `fingerprints/providers/<category>.md` unit each, its
+    `category` frontmatter the fronting class and its CNAME suffixes, server tokens, and marker
+    headers lowercased for matching. A missing directory is an empty table."""
     out: dict = {}
     for _path, meta, _body in iter_md_docs(Path(directory)):
         category = str(meta.get("category", "")).strip()
@@ -38,7 +38,7 @@ _TITLE = re.compile(r"^#\s+(.+)$", re.MULTILINE)
 
 
 def load_frameworks(directory: Path) -> dict:
-    """The front-end framework signatures, one `technologies/frameworks/<name>.md` unit each. The
+    """The front-end framework signatures, one `fingerprints/frameworks/<name>.md` unit each. The
     unit's title is the framework name, and its frontmatter carries the lowercased body and header
     markers and an optional compiled version pattern. A malformed version regex fails the run loudly
     here, invariant 5."""
@@ -141,7 +141,7 @@ def classify_frameworks(http, table) -> list[str]:
     return found
 
 
-def classify_edge(name, resolved, http, table) -> tuple[str, str] | None:
+def classify_providers(name, resolved, http, table) -> tuple[str, str] | None:
     """The edge category of a host and the evidence for it, or None when nothing names it.
 
     A CNAME to a known suffix is the strongest signal, then a server token or marker header on a

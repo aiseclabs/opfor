@@ -8,7 +8,7 @@ import re
 
 from opfor.scenarios.attacksurface.assets.domain.classifiers import (
     classify_frameworks,
-    classify_edge,
+    classify_providers,
     is_ip,
 )
 from opfor.scenarios.attacksurface.assets.domain.types import HTTP, Resolved
@@ -42,13 +42,13 @@ def test_classify_frameworks_is_empty_for_no_response_or_no_match():
 
 def test_classify_edge_prefers_cname_then_marker_then_bare_ip():
     resolved = Resolved(resolvable=True, addresses=("1.2.3.4",), cnames=("x.cloudflare.net",))
-    assert classify_edge("www.h", resolved, _http(), _FRONTING) == ("cdn", "CNAME to cloudflare.net")
-    assert classify_edge("api.h", None, _http(headers=(("cf-ray", "1"),)), _FRONTING)[0] == "cdn"
-    assert classify_edge("203.0.113.5", None, _http(), _FRONTING)[0] == "direct"
+    assert classify_providers("www.h", resolved, _http(), _FRONTING) == ("cdn", "CNAME to cloudflare.net")
+    assert classify_providers("api.h", None, _http(headers=(("cf-ray", "1"),)), _FRONTING)[0] == "cdn"
+    assert classify_providers("203.0.113.5", None, _http(), _FRONTING)[0] == "direct"
 
 
 def test_classify_edge_leaves_an_unrecognized_named_host_untagged():
-    assert classify_edge("app.h", None, _http(server="nginx"), _FRONTING) is None
+    assert classify_providers("app.h", None, _http(server="nginx"), _FRONTING) is None
 
 
 def test_is_ip():

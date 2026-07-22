@@ -15,7 +15,7 @@ from opfor.scenarios.attacksurface.assets.domain import KNOWLEDGE
 from opfor.scenarios.attacksurface.assets.domain.fingerprint import fingerprint, load_services
 from opfor.scenarios.attacksurface.assets.domain.fingerprint import Fingerprint
 
-_TABLE = load_services(KNOWLEDGE / "technologies" / "services")
+_TABLE = load_services(KNOWLEDGE / "fingerprints" / "services")
 
 
 def test_shipped_table_loads():

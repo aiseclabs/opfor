@@ -29,7 +29,7 @@ def test_exposure_clues_and_judgment_classes_are_loaded():
     from opfor.scenarios.attacksurface.lifecycle.triage import _load_classes, _load_clues
 
     knowledge = domain_class.KNOWLEDGE
-    clue_ids = {c["id"] for c in _load_clues(knowledge / "detections" / "clues")}
+    clue_ids = {c["id"] for c in _load_clues(knowledge / "findings")}
     assert {"exposed-private-key", "exposed-htpasswd", "exposed-sql-dump"} <= clue_ids
     class_ids = {c["id"] for c in _load_classes(knowledge / "findings")}
     assert {"cors-misconfiguration", "verbose-error-disclosure"} <= class_ids

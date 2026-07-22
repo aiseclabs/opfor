@@ -209,8 +209,8 @@ def test_secret_scan_reports_multiple_distinct_matches_not_only_the_first():
 def test_a_malformed_secret_pattern_fails_loud_at_load(tmp_path):
     from opfor.scenarios.attacksurface.assets.domain import KnowledgePaths, planner
     paths = KnowledgePaths.under(tmp_path)
-    paths.secret_patterns.parent.mkdir(parents=True)
-    paths.secret_patterns.write_text(
+    paths.findings.mkdir(parents=True)
+    (paths.findings / "hardcoded-secret.md").write_text(
         "---\nsecrets:\n  - id: bad\n    regex: '([unclosed'\n    note: broken\n---\n# X\n", encoding="utf-8")
     # a broken regex must fail the run at load, not silently disable the whole secret class
     with pytest.raises(RuntimeError):
@@ -286,7 +286,7 @@ def test_backup_scan_records_a_coverage_gap_when_a_twin_errors():
 def test_sql_dump_clue_covers_every_probed_sql_path():
     from opfor.scenarios.attacksurface.assets import domain as domain_class
     from opfor.scenarios.attacksurface.lifecycle.triage import _load_clues
-    clues = _load_clues(domain_class.KNOWLEDGE / "detections" / "clues")
+    clues = _load_clues(domain_class.KNOWLEDGE / "findings")
     sql = [c for c in clues if c.get("id") == "exposed-sql-dump"]
     # a suffix path so /dump.sql, /db.sql, /database.sql all match, not only /backup.sql
     assert sql and sql[0]["path"] == ".sql"

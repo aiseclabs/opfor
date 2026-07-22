@@ -131,9 +131,9 @@ def _load_classes(directory: Path) -> list[dict]:
 
 
 def _load_clues(directory: Path) -> list[dict]:
-    """The deterministic exposure clues, unioned from the `clues` frontmatter of the detection units
-    under `detections/clues/`, with any body regex precompiled. Each clue is the raw signal that
-    surfaces the evidence a finding class then judges, kept apart from that judgment prose."""
+    """The deterministic exposure clues, unioned from the `clues` frontmatter of the finding
+    classes under `findings/`, with any body regex precompiled. Each clue is the raw signal that
+    surfaces the evidence its finding class then judges, carried in that class's own file."""
     clues: list[dict] = []
     for _path, meta, _body in iter_md_docs(Path(directory)):
         for clue in (meta.get("clues") or []):
@@ -146,7 +146,7 @@ def _load_clues(directory: Path) -> list[dict]:
 
 def _load_takeover(directory: Path) -> list[tuple[str, str]]:
     """The deterministic takeover signatures, a service name and its unclaimed-page text, read from
-    the `signatures` frontmatter under `detections/`, so a dangling name pointing at an unclaimed
+    the `signatures` frontmatter under `findings/`, so a dangling name pointing at an unclaimed
     target is surfaced for the takeover finding to judge."""
     out: list[tuple[str, str]] = []
     for _path, meta, _body in iter_md_docs(Path(directory)):
@@ -192,8 +192,8 @@ class SurfaceTriage(Triage):
         for directory in knowledge_dirs:
             directory = Path(directory)
             self._classes.extend(_load_classes(directory / "findings"))
-            self._clues.extend(_load_clues(directory / "detections" / "clues"))
-            self._takeover.extend(_load_takeover(directory / "detections"))
+            self._clues.extend(_load_clues(directory / "findings"))
+            self._takeover.extend(_load_takeover(directory / "findings"))
         self._class_ids = frozenset(c["id"] for c in self._classes)
         self._class_impact = {c["id"]: c["impact"] for c in self._classes}
         self._renderer = SurfaceRenderer(self._clues, self._takeover)

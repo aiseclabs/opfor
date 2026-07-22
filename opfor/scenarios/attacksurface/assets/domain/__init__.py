@@ -20,9 +20,9 @@ from opfor.scenarios.attacksurface.assets.domain.fingerprint import (
 )
 from opfor.scenarios.attacksurface.assets.domain.classifiers import (
     classify_frameworks,
-    classify_edge,
+    classify_providers,
     load_frameworks,
-    load_edge,
+    load_providers,
 )
 from opfor.scenarios.attacksurface.assets.domain.capabilities.specs import (
     SPEC_PROBE_PATHS,
@@ -57,31 +57,23 @@ KNOWLEDGE = Path(__file__).resolve().parent / "knowledge"
 @dataclass(frozen=True, kw_only=True)
 class KnowledgePaths:
     """The fixed layout of the domain class's knowledge tree, resolved to absolute paths, so the
-    tree's shape lives in one contract rather than scattered `root / "technologies" / "services"`
-    conventions that drift as the tree grows. `detections` holds the deterministic payloads the
-    finding classes surface, kept apart from the model-read judgment prose in `findings`."""
+    tree's shape lives in one contract rather than scattered `root / "fingerprints" / "services"`
+    conventions that drift as the tree grows. A finding file under `findings` carries both the
+    model-read judgment prose and, in its frontmatter, the deterministic payloads that class
+    surfaces, so a concept is one file. `fingerprints` holds the technology identification data."""
 
     root: Path
     services: Path
     frameworks: Path
-    edge: Path
+    providers: Path
     findings: Path
-    detections: Path
-    clues: Path
-    takeover_signatures: Path
-    secret_patterns: Path
-    backup_templates: Path
 
     @classmethod
     def under(cls, root: Path) -> "KnowledgePaths":
-        tech = root / "technologies"
-        detections = root / "detections"
-        return cls(root=root, services=tech / "services", frameworks=tech / "frameworks",
-                   edge=root / "edge", findings=root / "findings", detections=detections,
-                   clues=detections / "clues",
-                   takeover_signatures=detections / "takeover-signatures.md",
-                   secret_patterns=detections / "secret-patterns.md",
-                   backup_templates=detections / "backup-templates.md")
+        fingerprints = root / "fingerprints"
+        return cls(root=root, services=fingerprints / "services",
+                   frameworks=fingerprints / "frameworks",
+                   providers=fingerprints / "providers", findings=root / "findings")
 
 
 PATHS = KnowledgePaths.under(KNOWLEDGE)
@@ -131,15 +123,15 @@ def assemble(*, enumerate_fn, resolve_fn, probe_fn, fetch_fn, fetch_doc_fn,
     # with no CVE seam wired. Frameworks and edge are deterministic, so it runs with or without
     # a model identify seam.
     frameworks_table = load_frameworks(PATHS.frameworks)
-    edge_table = load_edge(PATHS.edge)
+    provider_table = load_providers(PATHS.providers)
 
     def framework_fn(http):
         return classify_frameworks(http, frameworks_table)
 
-    def edge_fn(name, resolved, http):
-        return classify_edge(name, resolved, http, edge_table)
+    def provider_fn(name, resolved, http):
+        return classify_providers(name, resolved, http, provider_table)
 
-    capabilities.append(ProfileHost(identify_fn, framework_fn, edge_fn))
+    capabilities.append(ProfileHost(identify_fn, framework_fn, provider_fn))
     if cve_fn is not None:
         capabilities.append(CVELookup(cve_fn))
     # The plan config is loaded here, at assemble time, not at planner import, so the content root

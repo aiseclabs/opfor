@@ -1,14 +1,17 @@
 """Asset classes, the plugins a scenario is built from, one per kind of asset.
 
-An asset class is to a scenario what a scenario is to the engine, a self-contained
-plugin. It owns its node and fact payloads, its capabilities, its planner rules, and its
-own knowledge, and it names no other class. The domain class, the one the scenario ships
-today, knows nothing of any other, and adding a class is a new package here plus one line
-in the scenario's `build`, never an edit to an existing class.
+An asset class is to a scenario what a scenario is to the engine, a self-contained plugin. It owns
+its node and fact payloads, its capabilities, its planner rules, and its own knowledge, and it names
+no other class. Each class exposes `assemble`, which takes the injected seams a run wires and a test
+fakes, and returns a `ClassBundle`, the capabilities and rules the class contributes plus the
+knowledge directory its triage reads, if any. The scenario concatenates the bundles, so the classes
+compose without knowing each other.
 
-Each class exposes `assemble`, which takes the injected seams a run wires and a test
-fakes, and returns a `ClassBundle`, the capabilities and rules the class contributes plus
-the knowledge directory its triage reads, if any. The scenario concatenates the bundles.
+The domain class is the only one the scenario ships today. The `ClassBundle` seam and the
+`class_enabled` gate are the plugin contract, but the scenario's `build` still wires the domain
+class's own seams by name, so adding a second class means extending that wiring, not a one-line
+edit. When a second class arrives, lift the seam wiring behind a registry here. Until then this is
+honest scaffolding for one class, not a proven multi-class abstraction.
 """
 
 from __future__ import annotations

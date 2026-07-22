@@ -157,7 +157,7 @@ class PermuteSubdomains(Capability):
                 baseline = self._resolve(f"{_WILDCARD_PROBE}.{zone}")
             except Exception as exc:
                 return net_failed("wildcard baseline", exc)
-            if baseline.get("resolvable"):
+            if baseline.resolvable:
                 wildcard_zones.add(zone)
         found: list[Node] = []
         skipped: list[str] = []
@@ -171,7 +171,7 @@ class PermuteSubdomains(Capability):
             except Exception as exc:
                 skipped.append(f"{candidate}: {type(exc).__name__}")
                 continue
-            if result.get("resolvable"):
+            if result.resolvable:
                 found.append(Node(
                     id=f"domain:{candidate}", type="domain",
                     payload=DomainData(name=candidate, root=root, source="permuted",

@@ -36,13 +36,13 @@ class ProbeTLSPosture(Capability):
             return net_failed("tls probe", exc)
         payload = TLSPosture(
             host=name,
-            reachable=bool(result.get("reachable")),
-            reason=str(result.get("reason", "")),
-            valid=bool(result.get("valid")),
-            validity_error=str(result.get("validity_error", "")),
-            not_after=str(result.get("not_after", "")),
-            days_to_expiry=result.get("days_to_expiry"),
-            protocol=str(result.get("protocol", "")),
-            cipher=str(result.get("cipher", "")),
+            reachable=result.reachable,
+            reason=result.reason,
+            valid=result.valid,
+            validity_error=result.validity_error,
+            not_after=result.not_after,
+            days_to_expiry=result.days_to_expiry,
+            protocol=result.protocol,
+            cipher=result.cipher,
         )
         return Done(facts=(Fact(kind="tls", about=task.node, payload=payload),))

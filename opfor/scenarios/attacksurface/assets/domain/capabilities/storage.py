@@ -36,12 +36,12 @@ class BucketScan(Capability):
         for key in sorted(discovered):
             found, evidence = discovered[key]
             try:
-                result = self._probe(found["list_url"])
+                result = self._probe(found.list_url)
             except Exception as exc:
                 skipped.append(f"{key}: {type(exc).__name__}")
                 continue
-            status = result.get("status")
-            if status == 200 and bucket_listable(result.get("body", "")):
+            status = result.status
+            if status == 200 and bucket_listable(result.body):
                 state = "listable"
             elif status in (401, 403):
                 state = "private"
@@ -52,8 +52,8 @@ class BucketScan(Capability):
                 continue
             else:
                 continue
-            buckets.append(Bucket(name=found["bucket"], provider=found["provider"],
-                                  url=found["list_url"], state=state, evidence=evidence,
+            buckets.append(Bucket(name=found.bucket, provider=found.provider,
+                                  url=found.list_url, state=state, evidence=evidence,
                                   status=status))
         facts = [Fact(kind="buckets", about=task.node, payload=BucketReport(buckets=tuple(buckets)))]
         gap = _coverage_gap("bucket_scan", "cloud storage", len(discovered), skipped)

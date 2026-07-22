@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 
+from opfor.scenarios.attacksurface.assets.domain.sources.observations import Response
 from opfor.core import Budget, MockProvider, Node, Phase, Scope, run
 
 from tests.surface_fixtures import (
@@ -61,7 +62,7 @@ def test_engine_reproduces_a_grounded_finding_in_exploit_when_authorized():
 
     def fetch(url):
         fetched.append(url)
-        return {"status": 200, "url": url, "content_type": "application/json", "body": "{}"}
+        return Response(status=200, url=url, content_type="application/json", body="{}")
 
     world = _seed()
     world.add(Node(id="finding:x", type="finding", payload=FindingClaim(
@@ -106,8 +107,8 @@ def test_reproduce_replays_a_grounded_get_and_records_the_receipt():
 
     def fetch(url):
         calls.append(url)
-        return {"status": 200, "url": url, "content_type": "application/json",
-                "body": '{"ok": true}'}
+        return Response(status=200, url=url, content_type="application/json",
+                        body='{"ok": true}')
 
     world = World()
     fid = "finding:api-spec:https://api.example.com/config/all"
@@ -307,8 +308,8 @@ def test_confirm_regrades_end_to_end_across_triage_reproduce_and_confirm():
     assert graded and "poc_request" in graded[0].data  # grounded, so a node was materialized
 
     def fetch(url):
-        return {"status": 200, "url": url, "content_type": "text/html",
-                "body": "<!doctype html><html>app shell</html>"}
+        return Response(status=200, url=url, content_type="text/html",
+                        body="<!doctype html><html>app shell</html>")
 
     outcome = ReproduceFinding(fetch).run(
         Task(capability="reproduce_finding", node=graded[0].id), world)
@@ -363,7 +364,7 @@ def test_regression_a_grounded_finding_replays_exactly_its_observed_get_read_onl
 
     def repro_fetch(url):
         fetched.append(url)
-        return {"status": 200, "url": url, "content_type": "text/html", "body": "<html>spa</html>"}
+        return Response(status=200, url=url, content_type="text/html", body="<html>spa</html>")
 
     world = _seed()
     scenario = _make(reproduce=True, provider=MockProvider(default=finding),
@@ -397,7 +398,7 @@ def test_regression_grounding_never_replays_an_unobserved_url():
 
     def repro_fetch(url):
         fetched.append(url)
-        return {"status": 200, "url": url, "content_type": "text/html", "body": ""}
+        return Response(status=200, url=url, content_type="text/html", body="")
 
     world = _seed()
     scenario = _make(reproduce=True, provider=MockProvider(default=finding),
@@ -422,8 +423,8 @@ def test_reproduce_records_a_redirect_raw_with_location_and_expect():
 
     def fetch(url):
         # a live redirect, which a following fetch would chase off-site, is captured raw
-        return {"status": 302, "url": url, "content_type": "text/html",
-                "location": "https://accounts.google.com/login", "body": "redirecting"}
+        return Response(status=302, url=url, content_type="text/html",
+                        location="https://accounts.google.com/login", body="redirecting")
 
     outcome = ReproduceFinding(fetch).run(
         Task(capability="reproduce_finding", node="finding:x"), world)

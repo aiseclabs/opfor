@@ -109,13 +109,13 @@ class ReproduceFinding(Capability):
             result = self._fetch(request.url)
         except Exception as exc:
             return Failed(reason=f"reproduce fetch {type(exc).__name__}: {exc}")
-        status = result.get("status")
-        body = str(result.get("body") or "")
+        status = result.status
+        body = result.body
         repro = Reproduction(
             method=method, url=request.url, status=status,
-            content_type=str(result.get("content_type") or ""), size=len(body),
+            content_type=result.content_type, size=len(body),
             excerpt=self._redact(body)[:_EXCERPT],
-            location=str(result.get("location") or ""), expect=request.expect,
+            location=result.location, expect=request.expect,
             error="" if status is not None else "no response")
         return Done(facts=(Fact(kind="reproduction", about=task.node, payload=repro),))
 

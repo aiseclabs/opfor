@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from opfor.scenarios.attacksurface.assets.domain.sources.observations import Response
 from opfor.core import Budget, Node, Scope, World, run
 
 from tests.surface_fixtures import (
@@ -77,7 +78,7 @@ def test_paths_from_openapi_caps_and_expand_spec_reports_the_drop():
                    payload=Endpoint(url="https://h/openapi.json", path="/openapi.json",
                                     status=200, content_type="application/json")))
     import json as _json
-    fetch = lambda host, path: {"status": 200, "text": _json.dumps(doc)}
+    fetch = lambda host, path: Response(status=200, body=_json.dumps(doc))
     out = ExpandSpec(fetch).run(Task(capability="endpoint_expand_spec", node="endpoint:h/openapi.json"), world)
     assert isinstance(out, Done)
     gaps = [f.payload for f in out.facts if f.kind == "coverage_gap"]
@@ -104,13 +105,12 @@ def test_probe_spec_verifies_reads_defers_writes_and_skips_templated():
     def fetch(name, addresses, path):
         calls.append(path)
         if path.startswith("/opfor-baseline") or path.startswith("/does-not-exist"):
-            return {"status": 404, "content_type": "", "body": "", "location": ""}
+            return Response(status=404)
         if path == "/config/all":
-            return {"status": 200, "content_type": "application/json",
-                    "body": '{"ok":true}', "location": ""}
+            return Response(status=200, content_type="application/json", body='{"ok":true}')
         if path == "/users":
-            return {"status": 401, "content_type": "", "body": "", "location": ""}
-        return {"status": 404, "content_type": "", "body": "", "location": ""}
+            return Response(status=401)
+        return Response(status=404)
 
     world = World()
     world.add(Node(id="domain:api.example.com", type="domain",
@@ -156,8 +156,8 @@ def test_probe_spec_flags_a_coverage_gap_when_the_baseline_could_not_be_establis
         if path.startswith("/opfor-baseline") or path.startswith("/does-not-exist"):
             raise TimeoutError("baseline probe timed out")  # the catch-all baseline cannot be read
         if path == "/config/all":
-            return {"status": 200, "content_type": "application/json", "body": "{}", "location": ""}
-        return {"status": 404, "content_type": "", "body": "", "location": ""}
+            return Response(status=200, content_type="application/json", body="{}")
+        return Response(status=404)
 
     world = World()
     world.add(Node(id="domain:api.example.com", type="domain",
@@ -195,9 +195,9 @@ def test_expand_spec_fails_loud_on_transport_failure_and_on_a_malformed_body():
                                     status=200, content_type="application/json")))
     task = Task(capability="endpoint_expand_spec", node="endpoint:h/openapi.json")
 
-    no_answer = ExpandSpec(lambda h, p: {"status": None, "text": ""}).run(task, world)
+    no_answer = ExpandSpec(lambda h, p: Response(status=None)).run(task, world)
     assert isinstance(no_answer, Failed) and "no response" in no_answer.reason
-    bad_json = ExpandSpec(lambda h, p: {"status": 200, "text": "<html>not a spec"}).run(task, world)
+    bad_json = ExpandSpec(lambda h, p: Response(status=200, body="<html>not a spec")).run(task, world)
     assert isinstance(bad_json, Failed) and "not JSON" in bad_json.reason
 
 def test_graphql_introspection_fact_reads_query_and_mutation():

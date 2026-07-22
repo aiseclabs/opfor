@@ -10,6 +10,8 @@ from __future__ import annotations
 
 import re
 
+from opfor.scenarios.attacksurface.assets.domain.sources.observations import Response
+
 _LINK = re.compile(r'(?:href|src)\s*=\s*["\']([^"\'#?]+)', re.IGNORECASE)
 # Same-host bundles checked for a source map per host, bounded so a bundle-heavy app stays
 # a small number of extra reads.
@@ -23,7 +25,7 @@ def _is_static_asset(path: str, suffixes, prefixes) -> bool:
     return lowered.endswith(tuple(suffixes)) or lowered.startswith(tuple(prefixes))
 
 
-def _baseline(fetch, paths, name, addresses) -> dict:
+def _baseline(fetch, paths, name, addresses) -> Response:
     """A host's answer to paths that do not exist, its catch-all signature, so `_distinct` can
     tell a real endpoint from a blanket 200 or a uniform redirect. The first path that answers
     with any status wins, and an empty signature is returned when none does. The caller injects
@@ -33,12 +35,12 @@ def _baseline(fetch, paths, name, addresses) -> dict:
             result = fetch(name, addresses, path)
         except Exception:
             continue
-        if result.get("status") is not None:
+        if result.status is not None:
             return result
-    return {"status": None, "content_type": "", "body": ""}
+    return Response(status=None)
 
 
-def _distinct(result: dict, baseline: dict) -> bool:
+def _distinct(result: Response, baseline: Response) -> bool:
     """Whether a response is a real endpoint rather than the host's catch-all.
 
     When the catch-all is a positive page, a single-page app that answers 200 for every
@@ -47,10 +49,10 @@ def _distinct(result: dict, baseline: dict) -> bool:
     front-proxy 403, an endpoint that answers the same status but redirects to a different
     location is still real, so a differing location counts as distinct.
     """
-    base_status = baseline.get("status")
+    base_status = baseline.status
     if base_status is None:
         return True
-    if result.get("status") != base_status:
+    if result.status != base_status:
         return True
     if not (200 <= int(base_status) < 300):
         # a uniform non-2xx catch-all still hides an endpoint that redirects elsewhere, such
@@ -58,11 +60,11 @@ def _distinct(result: dict, baseline: dict) -> bool:
         # query is stripped before comparing, since a login wall that echoes the requested
         # path in a next parameter gives every path a different raw location and would
         # otherwise make every probe look distinct.
-        location = _redirect_target(result.get("location"))
-        return bool(location and location != _redirect_target(baseline.get("location")))
-    if _ct_family(result.get("content_type", "")) != _ct_family(baseline.get("content_type", "")):
+        location = _redirect_target(result.location)
+        return bool(location and location != _redirect_target(baseline.location))
+    if _ct_family(result.content_type) != _ct_family(baseline.content_type):
         return True
-    return abs(len(result.get("body", "")) - len(baseline.get("body", ""))) > 128
+    return abs(len(result.body) - len(baseline.body)) > 128
 
 
 def _redirect_target(location) -> str:

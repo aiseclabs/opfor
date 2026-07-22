@@ -35,9 +35,9 @@ class ResolveDomain(Capability):
             if gap is not None:
                 facts.append(Fact(kind="coverage_gap", about=task.node, payload=gap))
             return Done(facts=tuple(facts))
-        payload = Resolved(resolvable=bool(result["resolvable"]),
-                           addresses=tuple(result.get("addresses", ())),
-                           cnames=tuple(result.get("cnames", ())))
+        payload = Resolved(resolvable=result.resolvable,
+                           addresses=result.addresses,
+                           cnames=result.cnames)
         return Done(facts=(Fact(kind="resolved", about=task.node, payload=payload),))
 
 
@@ -67,9 +67,9 @@ class ProbeDNSEmailPosture(Capability):
             return net_failed("dns email posture", exc)
         payload = DNSEmailPosture(
             domain=name,
-            spf=tuple(str(s) for s in posture.get("spf", ())),
-            dmarc=str(posture.get("dmarc", "")),
-            caa=tuple(str(c) for c in posture.get("caa", ())),
-            dnssec=bool(posture.get("dnssec", False)),
+            spf=posture.spf,
+            dmarc=posture.dmarc,
+            caa=posture.caa,
+            dnssec=posture.dnssec,
         )
         return Done(facts=(Fact(kind="dns_email", about=task.node, payload=payload),))

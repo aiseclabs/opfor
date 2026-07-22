@@ -47,7 +47,7 @@ class SourceMapScan(Capability):
         host = world.node(task.node)
         name = host.payload.name
         try:
-            home = self._fetch_doc(name, "/").get("text", "")
+            home = self._fetch_doc(name, "/").body
         except Exception as exc:
             return net_failed("source map scan home fetch", exc)
         bundles = script_sources(home, name)
@@ -59,7 +59,7 @@ class SourceMapScan(Capability):
             # one bundle's error must not discard the maps already found on the others, so it
             # is a per-bundle coverage gap rather than a whole-scan Failed, invariant 5
             try:
-                text = self._fetch_doc(name, map_path).get("text", "")
+                text = self._fetch_doc(name, map_path).body
             except Exception as exc:
                 skipped.append(f"{map_path}: {type(exc).__name__}")
                 continue
@@ -68,9 +68,9 @@ class SourceMapScan(Capability):
                 continue
             leaks.append(SourceMapLeak(
                 bundle=bundle, url=f"https://{name}{map_path}",
-                sources_count=int(parsed["sources_count"]),
-                has_sources_content=bool(parsed["has_sources_content"]),
-                sample_sources=tuple(parsed["sample_sources"])))
+                sources_count=parsed.sources_count,
+                has_sources_content=parsed.has_sources_content,
+                sample_sources=parsed.sample_sources))
         if len(bundles) > len(probed):
             skipped.append(f"{len(bundles) - len(probed)} more bundles beyond the "
                            f"{_MAX_SOURCE_MAPS} cap were not scanned")
@@ -105,7 +105,7 @@ class SecretScan(Capability):
         name = host.payload.name
         patterns = task.params.get("patterns", [])
         try:
-            home = self._fetch_doc(name, "/").get("text", "")
+            home = self._fetch_doc(name, "/").body
         except Exception as exc:
             return net_failed("secret scan home fetch", exc)
         bundles = script_sources(home, name)
@@ -116,7 +116,7 @@ class SecretScan(Capability):
             # a bundle that fails to fetch must not discard secrets already found in the
             # others, so it is a per-bundle coverage gap rather than a whole-scan Failed
             try:
-                body = self._fetch_doc(name, bundle).get("text", "")
+                body = self._fetch_doc(name, bundle).body
             except Exception as exc:
                 skipped.append(f"{bundle}: {type(exc).__name__}")
                 continue
@@ -176,7 +176,7 @@ class BackupScan(Capability):
             except Exception as exc:
                 skipped.append(f"{path}: {type(exc).__name__}")
                 continue
-            status = result.get("status")
+            status = result.status
             if status is None:
                 # no answer on a live host is a transport failure, not an absent twin, so it
                 # is a coverage gap rather than a clean negative, invariant 5
@@ -187,11 +187,11 @@ class BackupScan(Capability):
             if not _distinct(result, baseline):
                 continue
             hits.append(BackupHit(
-                url=result.get("url", f"https://{name}{path}"),
+                url=result.url or f"https://{name}{path}",
                 path=path,
                 status=status,
-                content_type=str(result.get("content_type", "")),
-                size=len(result.get("body", "")),
+                content_type=result.content_type,
+                size=len(result.body),
             ))
         facts = [Fact(kind="backups", about=task.node, payload=BackupReport(hits=tuple(hits)))]
         gap = _coverage_gap("backup_scan", name, len(candidates), skipped)

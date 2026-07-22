@@ -53,17 +53,17 @@ class HTTPDomain(Capability):
         except Exception as exc:
             return net_failed("http", exc)
         payload = HTTP(
-            alive=bool(result["alive"]),
-            status=result.get("status"),
-            url=str(result.get("url", "")),
-            server=str(result.get("server", "")),
-            title=str(result.get("title", "")),
-            body=str(result.get("body", "")),
-            location=str(result.get("location", "")),
-            headers=tuple((str(k), str(v)) for k, v in result.get("headers", ())),
+            alive=result.alive,
+            status=result.status,
+            url=result.url,
+            server=result.server,
+            title=result.title,
+            body=result.body,
+            location=result.location,
+            headers=result.headers,
         )
         facts = [Fact(kind="http", about=task.node, payload=payload)]
-        if not payload.alive and result.get("reason") == "unreachable":
+        if not payload.alive and result.reason == "unreachable":
             # the host resolved to a public address but no address answered on either scheme
             # and every attempt timed out, so the run could not reach it, filtered or down.
             # That is a gap in coverage, not a confirmed absence of a web service, so record it
@@ -118,17 +118,17 @@ class HarvestPaths(Capability):
                 by_host.setdefault(host, set()).add(path.split("#")[0].split("?")[0])
 
         try:
-            home_doc = _safe(lambda: self._fetch_doc(name, "/")) or {}
-            home = home_doc.get("text", "") or ""
+            home_doc = _safe(lambda: self._fetch_doc(name, "/"))
+            home = home_doc.body if home_doc else ""
             cloud_refs.update(cloud_refs_in_text(home))
             for path in _home_paths(home):
                 add(name, path)
             for path in _safe(lambda: self._robots(name, addresses)) or []:
                 add(name, path)
-            for path in _safe(lambda: sitemap_paths(self._fetch_doc(name, "/sitemap.xml").get("text", ""), name)) or []:
+            for path in _safe(lambda: sitemap_paths(self._fetch_doc(name, "/sitemap.xml").body, name)) or []:
                 add(name, path)
             for script in script_sources(home, name)[:self._MAX_SCRIPTS]:
-                body = _safe(lambda s=script: self._fetch_doc(name, s).get("text", "")) or ""
+                body = _safe(lambda s=script: self._fetch_doc(name, s).body) or ""
                 cloud_refs.update(cloud_refs_in_text(body))
                 for path in paths_in_javascript(body):
                     add(name, path)
@@ -151,14 +151,14 @@ class HarvestPaths(Capability):
             return Done(facts=tuple(facts))
 
         facts = [Fact(kind="harvested", about=task.node)]
-        if home_doc.get("reason") in ("unreachable", "no-public-address") or not home_doc:
+        if home_doc is None or home_doc.reason in ("unreachable", "no-public-address"):
             # The home document is the primary source of candidate paths, so a failure reading
             # it is a coverage gap, not an empty harvest. That failure takes two shapes: a
             # transport gap fetch_document reports as a null status with an unreachable reason,
             # or an unexpected error `_safe` swallowed, leaving home_doc empty. Both are flagged,
             # else a timed-out or erroring home page reads downstream as a host that revealed no
             # paths, the laundering invariant 5 forbids. A reachable empty home has neither shape.
-            reason = home_doc.get("reason") or "read failed"
+            reason = (home_doc.reason if home_doc else "") or "read failed"
             gap = _coverage_gap("domain_harvest", name, 1, [
                 f"{name}: home document {reason}, candidate paths were not gathered"])
             if gap is not None:
@@ -176,13 +176,13 @@ class HarvestPaths(Capability):
 
     def _robots(self, name, addresses) -> list[str]:
         robots = self._fetch(name, addresses, "/robots.txt")
-        if robots.get("status") != 200:
+        if robots.status != 200:
             return []
-        paths, sitemaps = robots_entries(robots.get("body", ""))
+        paths, sitemaps = robots_entries(robots.body)
         for sitemap in sitemaps[:3]:
             path = same_host_path(sitemap, name)
             if path:
-                paths += _safe(lambda p=path: sitemap_paths(self._fetch_doc(name, p).get("text", ""), name)) or []
+                paths += _safe(lambda p=path: sitemap_paths(self._fetch_doc(name, p).body, name)) or []
         return paths
 
 
@@ -250,7 +250,7 @@ class ProbeEndpoints(Capability):
         baseline = _baseline(self._fetch, self._BASELINE_PATHS, name, addresses)
         endpoints: list[Node] = []
         skipped: list[str] = []
-        if baseline.get("status") is None and candidates:
+        if baseline.status is None and candidates:
             # the catch-all baseline could not be established, so distinctness cannot filter a
             # blanket-200 or blanket-redirect front, and any endpoint minted here is unfiltered.
             # Say so rather than let the failure pass as a confidently enumerated surface.
@@ -266,7 +266,7 @@ class ProbeEndpoints(Capability):
             except Exception as exc:
                 skipped.append(f"{path}: {type(exc).__name__}")
                 continue
-            status = result.get("status")
+            status = result.status
             if status is None:
                 # a live host gave no answer on this path, a transport failure such as a
                 # timeout or a WAF block, not an absent path, so it is a coverage gap rather
@@ -278,15 +278,15 @@ class ProbeEndpoints(Capability):
             if not _distinct(result, baseline):
                 continue
             payload = Endpoint(
-                url=result.get("url", f"https://{name}{path}"),
+                url=result.url or f"https://{name}{path}",
                 path=path,
                 status=status,
                 auth_required=status in (401, 403),
-                content_type=str(result.get("content_type", "")),
-                server=str(result.get("server", "")),
-                title=str(result.get("title", "")),
-                body=str(result.get("body", "")),
-                location=str(result.get("location", "")),
+                content_type=result.content_type,
+                server=result.server,
+                title=result.title,
+                body=result.body,
+                location=result.location,
             )
             endpoints.append(Node(id=f"endpoint:{name}{path}", type="endpoint", payload=payload))
         facts = [Fact(kind="endpoints", about=task.node, yields=tuple(endpoints))]

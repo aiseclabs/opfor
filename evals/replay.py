@@ -19,6 +19,13 @@ from opfor.scenarios.attacksurface import build
 from opfor.scenarios.attacksurface.hostnames import HostScope
 from opfor.scenarios.attacksurface.types import Org
 from opfor.scenarios.attacksurface.assets.domain import KNOWLEDGE
+from opfor.scenarios.attacksurface.assets.domain.sources.observations import (
+    EmailPosture,
+    Liveness,
+    Resolution,
+    Response,
+    TLSReport,
+)
 from opfor.scenarios.attacksurface.assets.domain.fingerprint import fingerprint, load_services
 
 _TABLE = load_services(KNOWLEDGE / "technologies" / "services")
@@ -45,20 +52,37 @@ def _seams(cassette: dict) -> dict:
         return set()
 
     def resolve_fn(name):
-        return resolved if name == host else {"resolvable": False, "addresses": (), "cnames": ()}
+        if name != host:
+            return Resolution(resolvable=False)
+        return Resolution(resolvable=resolved.get("resolvable", True),
+                          addresses=tuple(resolved.get("addresses", ())),
+                          cnames=tuple(resolved.get("cnames", ())))
 
     def probe_fn(name, addresses=()):
-        if name == host:
-            return root
-        return {"alive": False, "status": None, "url": "", "server": "", "title": "", "body": "",
-                "location": "", "headers": (), "reason": "no-public-address"}
+        if name != host:
+            return Liveness(alive=False, reason="no-public-address")
+        return Liveness(alive=root.get("alive", False), status=root.get("status"),
+                        url=root.get("url", ""), server=root.get("server", ""),
+                        title=root.get("title", ""), body=root.get("body", ""),
+                        location=root.get("location", ""),
+                        headers=tuple(tuple(h) for h in root.get("headers", ())),
+                        reason=root.get("reason", ""))
 
     def fetch_fn(name, addresses, path):
-        return fetch.get(path, {"status": 404, "url": f"https://{name}{path}", "content_type": "",
-                                "server": "", "title": "", "body": "", "location": "", "reason": ""})
+        d = fetch.get(path)
+        if d is None:
+            return Response(status=404, url=f"https://{name}{path}")
+        return Response(status=d.get("status"), url=d.get("url", f"https://{name}{path}"),
+                        content_type=d.get("content_type", ""), server=d.get("server", ""),
+                        title=d.get("title", ""), body=d.get("body", ""),
+                        location=d.get("location", ""), reason=d.get("reason", ""))
 
     def fetch_doc_fn(name, path):
-        return docs.get(path, {"status": None, "content_type": "", "text": ""})
+        d = docs.get(path)
+        if d is None:
+            return Response(status=None)
+        return Response(status=d.get("status"), content_type=d.get("content_type", ""),
+                        body=d.get("text", d.get("body", "")))
 
     def introspect_fn(name, path="/graphql"):
         return None
@@ -67,15 +91,13 @@ def _seams(cassette: dict) -> dict:
         return set()
 
     def probe_url_fn(url):
-        return {"status": 404, "url": url, "content_type": "", "body": "", "reason": ""}
+        return Response(status=404, url=url)
 
     def dns_fn(d):
-        return {"spf": (), "dmarc": "", "caa": (), "dnssec": False}
+        return EmailPosture()
 
     def tls_fn(name, addresses=()):
-        return {"host": name, "reachable": False, "reason": "no-tls", "valid": False,
-                "validity_error": "", "not_after": "", "days_to_expiry": None,
-                "protocol": "", "cipher": ""}
+        return TLSReport(reachable=False, reason="no-tls")
 
     return dict(enumerate_fn=enumerate_fn, resolve_fn=resolve_fn, probe_fn=probe_fn,
                 fetch_fn=fetch_fn, fetch_doc_fn=fetch_doc_fn, introspect_fn=introspect_fn,

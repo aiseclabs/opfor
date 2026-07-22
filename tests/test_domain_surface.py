@@ -3,6 +3,7 @@ from __future__ import annotations
 from opfor.core import Budget, Node, Phase, Scope, World, run
 from opfor.core.result import CLOSED
 
+from opfor.scenarios.attacksurface.assets.domain.sources.observations import Resolution
 from tests.surface_fixtures import (
     HostScope,
     ROOT,
@@ -79,7 +80,7 @@ def test_total_resolution_failure_reports_incomplete_not_dangling():
     # when not one name resolves, the resolver is the problem, so the run must say
     # incomplete rather than call every name dangling
     def none_resolve(name):
-        return {"resolvable": False, "addresses": ()}
+        return Resolution(resolvable=False)
 
     scenario = _make(resolve_fn=none_resolve)
     world = _seed(classes=("domain",))

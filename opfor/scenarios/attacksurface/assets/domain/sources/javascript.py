@@ -6,6 +6,7 @@ from __future__ import annotations
 import json
 import re
 
+from opfor.scenarios.attacksurface.assets.domain.sources.observations import SourceMapClues
 from opfor.scenarios.attacksurface.assets.domain.sources.parsers import same_host_path
 
 _SCRIPT_SRC = re.compile(r'<script[^>]+src\s*=\s*["\']([^"\']+)', re.IGNORECASE)
@@ -91,7 +92,7 @@ def urls_in_javascript(text: str) -> list[str]:
     return out
 
 
-def source_map_from_text(text: str) -> dict | None:
+def source_map_from_text(text: str) -> SourceMapClues | None:
     """Whether a body is a JavaScript source map, and what it leaks, parsed apart from the
     fetch so a test drives it without a network call.
 
@@ -111,14 +112,14 @@ def source_map_from_text(text: str) -> dict | None:
     if isinstance(data, dict) and "version" in data and "sources" in data:
         sources = [str(s) for s in (data.get("sources") or [])]
         content = data.get("sourcesContent") or []
-        return {"sources_count": len(sources),
-                "has_sources_content": any(bool(c) for c in content),
-                "sample_sources": tuple(sources[:5])}
+        return SourceMapClues(sources_count=len(sources),
+                              has_sources_content=any(bool(c) for c in content),
+                              sample_sources=tuple(sources[:5]))
     low = text.lower()
     if '"version"' in low and '"sources"' in low:
-        return {"sources_count": low.count('"../') + low.count('webpack://'),
-                "has_sources_content": '"sourcescontent"' in low,
-                "sample_sources": ()}
+        return SourceMapClues(sources_count=low.count('"../') + low.count('webpack://'),
+                              has_sources_content='"sourcescontent"' in low,
+                              sample_sources=())
     return None
 
 

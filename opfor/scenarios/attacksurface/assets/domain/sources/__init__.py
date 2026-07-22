@@ -66,12 +66,28 @@ from opfor.scenarios.attacksurface.assets.domain.sources.storage import (
     cloud_bucket_from_url,
     cloud_refs_in_text,
 )
+from opfor.scenarios.attacksurface.assets.domain.sources.observations import (
+    BucketReference,
+    EmailPosture,
+    Liveness,
+    Resolution,
+    Response,
+    SourceMapClues,
+    TLSReport,
+)
 
 
 # The public source names this facade re-exports, declared so the public surface is explicit
 # and a name that stops being used through the facade is caught rather than lingering.
 __all__ = [
+    "BucketReference",
+    "EmailPosture",
     "Enumeration",
+    "Liveness",
+    "Resolution",
+    "Response",
+    "SourceMapClues",
+    "TLSReport",
     "backup_candidates",
     "bucket_listable",
     "certspotter_subdomains",

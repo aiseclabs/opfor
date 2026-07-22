@@ -5,6 +5,7 @@ from __future__ import annotations
 from urllib.parse import urlparse
 
 from opfor.core import World
+from opfor.scenarios.attacksurface.assets.domain.sources.observations import BucketReference
 from opfor.scenarios.attacksurface.assets.domain.sources.parsers import backup_candidates
 from opfor.scenarios.attacksurface.assets.domain.sources.storage import cloud_bucket_from_url
 
@@ -47,13 +48,13 @@ def discovered_buckets(world: World) -> dict:
     """The buckets the target revealed, keyed by provider and name so a bucket referenced
     many times is checked once. Evidence is a url the pages reference or a subdomain CNAME
     that points at the provider, so a bucket here is observed, never guessed."""
-    found: dict[str, tuple[dict, str]] = {}
+    found: dict[str, tuple[BucketReference, str]] = {}
 
     def record(reference: str, evidence: str) -> None:
         bucket = cloud_bucket_from_url(reference)
         if bucket is None:
             return
-        found.setdefault(f"{bucket['provider']}:{bucket['bucket']}", (bucket, evidence))
+        found.setdefault(f"{bucket.provider}:{bucket.bucket}", (bucket, evidence))
 
     for fact in world.facts("cloud_refs"):
         host = world.node(fact.about)

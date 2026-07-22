@@ -6,13 +6,15 @@ import pytest
 
 from opfor.core import Node, World
 
+from dataclasses import replace
+
+from opfor.scenarios.attacksurface.assets.domain.sources.observations import Response
 from tests.surface_fixtures import (
     _resolve,
     _run,
     _run_capturing,
     _seed,
 )
-
 
 def test_javascript_and_url_parsing():
     from opfor.scenarios.attacksurface.assets.domain.sources import (
@@ -75,13 +77,13 @@ def test_source_map_parser_detects_inlined_source_and_paths_only():
     inlined = json.dumps({"version": 3, "sources": ["../src/app.ts", "../src/api.ts"],
                           "sourcesContent": ["export const x = 1", ""]})
     r = domains.source_map_from_text(inlined)
-    assert r["has_sources_content"] is True
-    assert r["sources_count"] == 2
-    assert "../src/app.ts" in r["sample_sources"]
+    assert r.has_sources_content is True
+    assert r.sources_count == 2
+    assert "../src/app.ts" in r.sample_sources
 
     # a map that lists paths but inlines no content is a lesser leak, not None
     paths_only = json.dumps({"version": 3, "sources": ["../src/app.ts"], "sourcesContent": [None]})
-    assert domains.source_map_from_text(paths_only)["has_sources_content"] is False
+    assert domains.source_map_from_text(paths_only).has_sources_content is False
 
     # ordinary json and an empty body are not source maps
     assert domains.source_map_from_text('{"hello": "world"}') is None
@@ -94,10 +96,10 @@ def test_source_map_scan_flags_an_inlined_map():
 
     def fetch_doc(name, path):
         if path == "/":
-            return {"text": home}
+            return Response(body=home)
         if path.endswith(".map"):
-            return {"text": mapdoc}
-        return {"text": ""}
+            return Response(body=mapdoc)
+        return Response(body="")
 
     report, _scenario, world = _run_capturing(fetch_doc_fn=fetch_doc)
     leaks = [f.payload for f in world.facts("source_maps") if f.payload.leaks]
@@ -117,13 +119,13 @@ def test_source_map_scan_tolerates_a_bundle_error_and_still_records_the_gap():
 
     def fetch_doc(name, path):
         if path == "/":
-            return {"status": 200, "text": home}
+            return Response(status=200, body=home)
         if path == "/a.js.map":
             raise TimeoutError("map fetch failed")
         if path == "/b.js.map":
-            return {"status": 200,
-                    "text": '{"version":3,"sources":["x.ts"],"sourcesContent":["code"]}'}
-        return {"status": None, "text": ""}
+            return Response(status=200,
+                            body='{"version":3,"sources":["x.ts"],"sourcesContent":["code"]}')
+        return Response(status=None)
 
     outcome = SourceMapScan(fetch_doc).run(Task(capability="source_map_scan", node="domain:h"), world)
     assert isinstance(outcome, Done)
@@ -182,10 +184,10 @@ def test_secret_scan_flags_a_key_in_a_bundle_and_redacts_it():
 
     def fetch_doc(name, path):
         if path == "/":
-            return {"text": home}
+            return Response(body=home)
         if path == "/static/main.js":
-            return {"text": bundle}
-        return {"text": ""}
+            return Response(body=bundle)
+        return Response(body="")
 
     report, _scenario, world = _run_capturing(fetch_doc_fn=fetch_doc)
     # the planner hands the real patterns from findings/secret-in-code.md, which includes the aws
@@ -235,21 +237,21 @@ def test_backup_scan_finds_a_twin_of_an_observed_file():
 
     def fetch(name, addresses, path):
         url = f"https://{name}{path}"
-        miss = {"status": 404, "url": url, "content_type": "", "server": "", "title": "", "body": ""}
+        miss = Response(status=404, url=url)
         if name != "admin.example.com":
             return miss
         if path == "/config.php":
-            return {"status": 200, "url": url, "content_type": "text/html",
-                    "server": "nginx", "title": "", "body": "rendered page"}
+            return Response(status=200, url=url, content_type="text/html",
+                            server="nginx", body="rendered page")
         if path == "/config.php.bak":
-            return {"status": 200, "url": url, "content_type": "text/plain",
-                    "server": "nginx", "title": "", "body": source}
+            return Response(status=200, url=url, content_type="text/plain",
+                            server="nginx", body=source)
         return miss
 
     def fetch_doc(name, path):
         if name == "admin.example.com" and path == "/":
-            return {"status": 200, "content_type": "text/html", "text": home}
-        return {"status": None, "content_type": "", "text": ""}
+            return Response(status=200, content_type="text/html", body=home)
+        return Response(status=None)
 
     report, _scenario, world = _run_capturing(fetch_fn=fetch, fetch_doc_fn=fetch_doc)
     hits = [h for f in world.facts("backups") for h in f.payload.hits]
@@ -261,20 +263,20 @@ def test_backup_scan_records_a_coverage_gap_when_a_twin_errors():
 
     def fetch(name, addresses, path):
         url = f"https://{name}{path}"
-        miss = {"status": 404, "url": url, "content_type": "", "server": "", "title": "", "body": ""}
+        miss = Response(status=404, url=url)
         if name != "admin.example.com":
             return miss
         if path == "/config.php":
-            return {"status": 200, "url": url, "content_type": "text/html",
-                    "server": "nginx", "title": "", "body": "rendered page"}
+            return Response(status=200, url=url, content_type="text/html",
+                            server="nginx", body="rendered page")
         if path == "/config.php.bak":
             raise ConnectionResetError("reset during backup twin probe")
         return miss
 
     def fetch_doc(name, path):
         if name == "admin.example.com" and path == "/":
-            return {"status": 200, "content_type": "text/html", "text": home}
-        return {"status": None, "content_type": "", "text": ""}
+            return Response(status=200, content_type="text/html", body=home)
+        return Response(status=None)
 
     _report, _scenario, world = _run_capturing(fetch_fn=fetch, fetch_doc_fn=fetch_doc)
     gaps = [f.payload for f in world.facts("coverage_gap") if f.payload.scan == "backup_scan"]
@@ -293,16 +295,16 @@ def test_cloud_bucket_from_url_recognizes_provider_forms():
     from opfor.scenarios.attacksurface.assets.domain import sources as domains
 
     s3v = domains.cloud_bucket_from_url("https://my-bucket.s3.amazonaws.com/key.txt")
-    assert s3v["provider"] == "s3" and s3v["bucket"] == "my-bucket"
+    assert s3v.provider == "s3" and s3v.bucket == "my-bucket"
     s3r = domains.cloud_bucket_from_url("https://s3.eu-west-1.amazonaws.com/other-bucket/x")
-    assert s3r["provider"] == "s3" and s3r["bucket"] == "other-bucket"
+    assert s3r.provider == "s3" and s3r.bucket == "other-bucket"
     gcs = domains.cloud_bucket_from_url("https://storage.googleapis.com/data-bucket/o")
-    assert gcs["provider"] == "gcs" and gcs["bucket"] == "data-bucket"
+    assert gcs.provider == "gcs" and gcs.bucket == "data-bucket"
     # a bare host, the shape a CNAME takes, is recognized without a scheme
     cname = domains.cloud_bucket_from_url("assets-bucket.s3.us-east-2.amazonaws.com")
-    assert cname["provider"] == "s3" and cname["bucket"] == "assets-bucket"
+    assert cname.provider == "s3" and cname.bucket == "assets-bucket"
     az = domains.cloud_bucket_from_url("https://acct.blob.core.windows.net/container/blob")
-    assert az["provider"] == "azure" and az["bucket"] == "acct/container"
+    assert az.provider == "azure" and az.bucket == "acct/container"
     # an azure account with no container cannot be listed, so it is not a bucket here
     assert domains.cloud_bucket_from_url("acct.blob.core.windows.net") is None
     # a non-cloud url is not a bucket
@@ -320,17 +322,17 @@ def test_bucket_scan_checks_buckets_the_target_reveals_by_cname():
     def resolve(name):
         base = _resolve(name)
         if name == "admin.example.com":
-            return {**base, "cnames": ("example-backup.s3.amazonaws.com",)}
+            return replace(base, cnames=("example-backup.s3.amazonaws.com",))
         if name == "www.example.com":
-            return {**base, "cnames": ("example-private.s3.amazonaws.com",)}
+            return replace(base, cnames=("example-private.s3.amazonaws.com",))
         return base
 
     def probe_url(url):
         if "example-backup.s3" in url:
-            return {"status": 200, "url": url, "content_type": "application/xml", "body": listing}
+            return Response(status=200, url=url, content_type="application/xml", body=listing)
         if "example-private.s3" in url:
-            return {"status": 403, "url": url, "content_type": "application/xml", "body": ""}
-        return {"status": 404, "url": url, "content_type": "", "body": ""}
+            return Response(status=403, url=url, content_type="application/xml")
+        return Response(status=404, url=url)
 
     report, _scenario, world = _run_capturing(resolve_fn=resolve, probe_url_fn=probe_url)
     buckets = [b for f in world.facts("buckets") for b in f.payload.buckets]
@@ -347,17 +349,17 @@ def test_bucket_scan_records_a_coverage_gap_when_a_probe_errors():
     def resolve(name):
         base = _resolve(name)
         if name == "admin.example.com":
-            return {**base, "cnames": ("example-backup.s3.amazonaws.com",)}
+            return replace(base, cnames=("example-backup.s3.amazonaws.com",))
         if name == "www.example.com":
-            return {**base, "cnames": ("example-private.s3.amazonaws.com",)}
+            return replace(base, cnames=("example-private.s3.amazonaws.com",))
         return base
 
     def probe_url(url):
         if "example-backup.s3" in url:
-            return {"status": 200, "url": url, "content_type": "application/xml", "body": listing}
+            return Response(status=200, url=url, content_type="application/xml", body=listing)
         if "example-private.s3" in url:
             raise TimeoutError("bucket probe timed out")
-        return {"status": 404, "url": url, "content_type": "", "body": ""}
+        return Response(status=404, url=url)
 
     report, _scenario, world = _run_capturing(resolve_fn=resolve, probe_url_fn=probe_url)
     # the reachable bucket is still reported, the errored one is a coverage gap, not a silent drop

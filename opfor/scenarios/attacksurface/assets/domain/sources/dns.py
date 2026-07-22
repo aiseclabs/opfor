@@ -18,6 +18,8 @@ import json
 import urllib.parse
 import urllib.request
 
+from opfor.scenarios.attacksurface.assets.domain.sources.observations import EmailPosture, Resolution
+
 _UA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
 _TIMEOUT = 12
 _DOH_RESOLVERS = ("https://dns.google/resolve", "https://cloudflare-dns.com/dns-query")
@@ -40,7 +42,7 @@ _DNS_NOERROR = 0
 _DNS_NXDOMAIN = 3
 
 
-def resolve_host(name: str) -> dict:
+def resolve_host(name: str) -> Resolution:
     """Resolve a name over DNS-over-HTTPS to its addresses and its CNAME chain.
 
     A and AAAA are both asked, so an IPv6-only host is not mistaken for a dangling one.
@@ -73,7 +75,7 @@ def resolve_host(name: str) -> dict:
         # A positive answer on either family means the host resolves, so a soft error on the other
         # family does not override an address that did answer.
         if addresses:
-            return {"resolvable": True, "addresses": addresses, "cnames": cnames}
+            return Resolution(resolvable=True, addresses=addresses, cnames=cnames)
         # No address answered. A no-address verdict is trusted only when BOTH families returned a
         # real rcode. If either errored, SERVFAIL or REFUSED, the absence is unproven, so this is
         # treated as a resolver failure and the next resolver is tried, rather than laundering an
@@ -82,7 +84,7 @@ def resolve_host(name: str) -> dict:
         if a_status not in real or aaaa_status not in real:
             last = RuntimeError(f"DoH resolver error for {name}, rcodes A={a_status} AAAA={aaaa_status}")
             continue
-        return {"resolvable": False, "addresses": (), "cnames": cnames}
+        return Resolution(resolvable=False, addresses=(), cnames=cnames)
     raise RuntimeError(f"all DoH resolvers failed for {name}: {last}")
 
 
@@ -145,7 +147,7 @@ def caa_strings(answers) -> list[str]:
             if a.get("type") == _DNS_CAA and a.get("data")]
 
 
-def dns_email_posture(domain: str) -> dict:
+def dns_email_posture(domain: str) -> EmailPosture:
     """The email-authentication and DNS-integrity posture of a registrable domain from public
     DNS. `spf` is every `v=spf1` TXT at the domain, so more than one, an invalid setup, stays
     visible. `dmarc` is the `_dmarc` TXT record, empty when absent. `caa` is the domain's CAA
@@ -157,7 +159,7 @@ def dns_email_posture(domain: str) -> dict:
     dmarc_answers, _ = _doh_lookup(f"_dmarc.{domain}", "TXT")
     dmarc = next((t for t in txt_strings(dmarc_answers) if t.lower().startswith("v=dmarc1")), "")
     caa_answers, _ = _doh_lookup(domain, "CAA")
-    return {"spf": spf, "dmarc": dmarc, "caa": tuple(caa_strings(caa_answers)), "dnssec": ad}
+    return EmailPosture(spf=spf, dmarc=dmarc, caa=tuple(caa_strings(caa_answers)), dnssec=ad)
 
 
 def public_addresses(addresses) -> list[str]:

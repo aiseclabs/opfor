@@ -34,9 +34,9 @@ def test_resolve_host_keeps_cname_and_asks_both_address_families(monkeypatch):
 
     monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
     result = domains.resolve_host("dangling.example.com")
-    assert result["resolvable"] is False
-    assert result["addresses"] == ()
-    assert result["cnames"] == ("target.s3.amazonaws.com",)
+    assert result.resolvable is False
+    assert result.addresses == ()
+    assert result.cnames == ("target.s3.amazonaws.com",)
     assert any("type=A" in u for u in asked) and any("type=AAAA" in u for u in asked)
 
 def test_resolve_host_treats_a_servfail_as_a_resolver_error_not_a_no_address(monkeypatch):
@@ -69,7 +69,7 @@ def test_resolve_host_treats_a_servfail_as_a_resolver_error_not_a_no_address(mon
     monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
     result = domains.resolve_host("h.example.com")
     # a SERVFAIL is not accepted as a confirmed no-address, the next resolver is consulted
-    assert result["resolvable"] is True and "1.2.3.4" in result["addresses"]
+    assert result.resolvable is True and "1.2.3.4" in result.addresses
     assert calls["n"] >= 3
 
 def test_resolve_host_does_not_launder_a_mixed_rcode_into_a_no_address(monkeypatch):
@@ -105,7 +105,7 @@ def test_resolve_host_does_not_launder_a_mixed_rcode_into_a_no_address(monkeypat
     monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
     result = domains.resolve_host("h.example.com")
     # the mixed rcode is a resolver error on the A family, not a proven no-address, so failover ran
-    assert result["resolvable"] is True and "1.2.3.4" in result["addresses"]
+    assert result.resolvable is True and "1.2.3.4" in result.addresses
     assert calls["n"] >= 3
 
 def test_doh_lookup_fails_over_resolvers_and_raises_when_all_error(monkeypatch):
@@ -139,14 +139,15 @@ def test_dns_email_posture_reads_spf_dmarc_caa_and_dnssec(monkeypatch):
 
     monkeypatch.setattr(domains, "_doh_lookup", lookup)
     posture = domains.dns_email_posture("example.com")
-    assert posture["spf"] == ("v=spf1 include:_spf.example.com -all",)
-    assert posture["dmarc"] == "v=DMARC1; p=reject"
-    assert posture["caa"] == ('0 issue "letsencrypt.org"',)
-    assert posture["dnssec"] is True
+    assert posture.spf == ("v=spf1 include:_spf.example.com -all",)
+    assert posture.dmarc == "v=DMARC1; p=reject"
+    assert posture.caa == ('0 issue "letsencrypt.org"',)
+    assert posture.dnssec is True
 
 def test_dns_email_capability_reports_records_and_fails_loud_on_error():
     from opfor.core import Done, Failed, Node, Task, World
     from opfor.scenarios.attacksurface.assets.domain.capabilities.dns import ProbeDNSEmailPosture
+    from opfor.scenarios.attacksurface.assets.domain.sources.observations import EmailPosture
     from opfor.scenarios.attacksurface.assets.domain.types import DomainData
 
     world = World()
@@ -154,7 +155,7 @@ def test_dns_email_capability_reports_records_and_fails_loud_on_error():
                    payload=DomainData(name="example.com", root="example.com", source="hint")))
     task = Task(capability="dns_email", node="domain:example.com")
 
-    ok = ProbeDNSEmailPosture(lambda d: {"spf": ("v=spf1 -all",), "dmarc": "", "caa": (), "dnssec": True})
+    ok = ProbeDNSEmailPosture(lambda d: EmailPosture(spf=("v=spf1 -all",), dmarc="", caa=(), dnssec=True))
     out = ok.run(task, world)
     assert isinstance(out, Done)
     assert out.facts[0].payload.spf == ("v=spf1 -all",)

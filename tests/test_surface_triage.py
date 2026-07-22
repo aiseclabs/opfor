@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+from dataclasses import replace
 
 import pytest
 
 from opfor.core import Budget, MockProvider, Scope, run
 from opfor.scenarios.attacksurface.lifecycle.triage import TriageError
+from opfor.scenarios.attacksurface.assets.domain.sources.observations import Resolution
 from tests.surface_fixtures import (
     ROOT,
     HostScope,
@@ -15,7 +17,6 @@ from tests.surface_fixtures import (
     _prompt,
     _knowledge,
 )
-
 
 def test_takeover_clue_and_class_are_surfaced():
     _, sc, _ = _run_capturing()
@@ -134,7 +135,7 @@ def test_empty_env_body_yields_no_exposure_clue():
 def test_resolution_failure_suppresses_the_model_call():
     # with the resolver down triage does not ask the model to judge an unreachable surface
     def none_resolve(name):
-        return {"resolvable": False, "addresses": ()}
+        return Resolution(resolvable=False)
 
     _, sc, _ = _run_capturing(_seed(classes=("domain",)), resolve_fn=none_resolve)
     assert sc.triage._provider.calls == []
@@ -229,8 +230,8 @@ def test_insecure_cookie_flags_are_surfaced_and_the_class_is_selected():
     # already reports alive, so aliveness is unchanged and only the cookie posture is new
     def probe(name, addresses=()):
         result = _probe(name, addresses)
-        if result.get("alive"):
-            return {**result, "headers": (("set-cookie", "sid; Path=/"),)}
+        if result.alive:
+            return replace(result, headers=(("set-cookie", "sid; Path=/"),))
         return result
 
     _, sc, _ = _run_capturing(probe_fn=probe)

@@ -4,6 +4,8 @@ import json
 
 import pytest
 
+from opfor.scenarios.attacksurface.assets.domain.sources.observations import Resolution
+
 
 def test_hosts_from_file_normalizes_a_dns_export(tmp_path):
     from opfor.scenarios.attacksurface.assets.domain.sources import hosts_from_file
@@ -380,7 +382,7 @@ def test_permute_subdomains_confirms_only_resolving_candidates_and_skips_a_wildc
 
     def resolve(name):
         answers = name in resolving
-        return {"resolvable": answers, "addresses": ("1.2.3.4",) if answers else (), "cnames": ()}
+        return Resolution(resolvable=answers, addresses=("1.2.3.4",) if answers else ())
 
     out = PermuteSubdomains(resolve).run(
         Task(capability="domain_permute", node="domain:example.com"), seed())
@@ -392,7 +394,7 @@ def test_permute_subdomains_confirms_only_resolving_candidates_and_skips_a_wildc
     assert "domain:api.eu.example.com" not in minted
 
     def wildcard(name):
-        return {"resolvable": True, "addresses": ("9.9.9.9",), "cnames": ()}
+        return Resolution(resolvable=True, addresses=("9.9.9.9",))
 
     out2 = PermuteSubdomains(wildcard).run(
         Task(capability="domain_permute", node="domain:example.com"), seed())
@@ -423,7 +425,7 @@ def test_permute_subdomains_catches_a_wildcard_on_a_deeper_zone_not_only_the_ape
         # a wildcard on the deeper zone eu.example.com answers every name there, while the apex
         # zone example.com has no wildcard; dev.example.com is a real host under the apex
         answers = name.endswith(".eu.example.com") or name == "dev.example.com"
-        return {"resolvable": answers, "addresses": ("9.9.9.9",) if answers else (), "cnames": ()}
+        return Resolution(resolvable=answers, addresses=("9.9.9.9",) if answers else ())
 
     out = PermuteSubdomains(resolve).run(
         Task(capability="domain_permute", node="domain:example.com"), seed())

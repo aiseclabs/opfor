@@ -3,6 +3,7 @@ from __future__ import annotations
 import pytest
 
 from opfor.core import Scope
+from opfor.scenarios.attacksurface.assets.domain.sources.observations import Resolution
 
 from tests.surface_fixtures import (
     HostScope,
@@ -26,8 +27,8 @@ def test_http_probe_tries_every_public_ip_retries_timeouts_and_raises_the_unexpe
 
     monkeypatch.setattr(domains, "_connect", refuse_first_ip)
     result = domains.http_probe("host.example.com", ("8.8.8.8", "1.1.1.1"))
-    assert result["alive"] is True
-    assert result["status"] == 200
+    assert result.alive is True
+    assert result.status == 200
     assert ("1.1.1.1", "https") in calls
 
     # a timeout is transient, so it is retried and the live server on the retry is found
@@ -40,7 +41,7 @@ def test_http_probe_tries_every_public_ip_retries_timeouts_and_raises_the_unexpe
         return (200, "nginx", "text/html", "", "", ())
 
     monkeypatch.setattr(domains, "_connect", timeout_then_ok)
-    assert domains.http_probe("host.example.com", ("8.8.8.8",))["alive"] is True
+    assert domains.http_probe("host.example.com", ("8.8.8.8",)).alive is True
     assert state["n"] >= 2
 
     # an unexpected error is raised loud, never passed off as not alive
@@ -53,8 +54,8 @@ def test_http_probe_tries_every_public_ip_retries_timeouts_and_raises_the_unexpe
 
     # a private-only host has no public address, a real negative, not a coverage gap
     private = domains.http_probe("host.example.com", ("10.0.0.1",))
-    assert private["alive"] is False
-    assert private["reason"] == "no-public-address"
+    assert private.alive is False
+    assert private.reason == "no-public-address"
 
     # a refused connection is evidence there is no web service, a real negative, not a gap
     def refuse_all(name, ip, scheme, path, **kw):
@@ -62,8 +63,8 @@ def test_http_probe_tries_every_public_ip_retries_timeouts_and_raises_the_unexpe
 
     monkeypatch.setattr(domains, "_connect", refuse_all)
     refused = domains.http_probe("host.example.com", ("8.8.8.8",))
-    assert refused["alive"] is False
-    assert refused["reason"] == "refused"
+    assert refused.alive is False
+    assert refused.reason == "refused"
 
     # a uniform timeout across every address and scheme means the run could not reach the
     # host, a coverage gap the caller records rather than a confirmed dead host
@@ -72,8 +73,8 @@ def test_http_probe_tries_every_public_ip_retries_timeouts_and_raises_the_unexpe
 
     monkeypatch.setattr(domains, "_connect", timeout_all)
     unreachable = domains.http_probe("host.example.com", ("8.8.8.8", "1.1.1.1"))
-    assert unreachable["alive"] is False
-    assert unreachable["reason"] == "unreachable"
+    assert unreachable.alive is False
+    assert unreachable.reason == "unreachable"
 
     # the redirect target is captured, so a host fronted by an identity proxy is visible to
     # triage rather than read as a plain live host
@@ -83,9 +84,9 @@ def test_http_probe_tries_every_public_ip_retries_timeouts_and_raises_the_unexpe
 
     monkeypatch.setattr(domains, "_connect", connect_redirect)
     redirected = domains.http_probe("host.example.com", ("8.8.8.8",))
-    assert redirected["alive"] is True
-    assert redirected["location"] == "https://accounts.google.com/o/oauth2/v2/auth"
-    assert redirected["headers"] == (("www-authenticate", "Bearer"),)
+    assert redirected.alive is True
+    assert redirected.location == "https://accounts.google.com/o/oauth2/v2/auth"
+    assert redirected.headers == (("www-authenticate", "Bearer"),)
 
 def test_http_probe_denied_when_domain_out_of_scope():
     world = _seed()
@@ -108,7 +109,7 @@ def test_fetch_url_tries_every_public_address_not_only_the_first(monkeypatch):
 
     monkeypatch.setattr(domains, "_connect", connect)
     result = domains.fetch_url("h.example.com", ("1.1.1.1", "2.2.2.2"), "/x")
-    assert result["status"] == 200 and "2.2.2.2" in seen
+    assert result.status == 200 and "2.2.2.2" in seen
 
 def test_fetch_seams_are_loud_on_the_unexpected_and_name_why_no_address_answered(monkeypatch):
     from opfor.scenarios.attacksurface.assets.domain.sources import http as domains
@@ -119,7 +120,7 @@ def test_fetch_seams_are_loud_on_the_unexpected_and_name_why_no_address_answered
         raise ValueError("bug")
 
     monkeypatch.setattr(domains, "_connect", raise_bug)
-    monkeypatch.setattr(domains, "resolve_host", lambda n: {"addresses": ("2.2.2.2",)})
+    monkeypatch.setattr(domains, "resolve_host", lambda n: Resolution(resolvable=True, addresses=("2.2.2.2",)))
     with pytest.raises(ValueError):
         domains.fetch_url("h.example.com", ("2.2.2.2",), "/x")
     with pytest.raises(ValueError):
@@ -133,22 +134,22 @@ def test_fetch_seams_are_loud_on_the_unexpected_and_name_why_no_address_answered
         raise TimeoutError()
 
     monkeypatch.setattr(domains, "_connect", timeout_all)
-    assert domains.fetch_url("h.example.com", ("2.2.2.2",), "/x")["reason"] == "unreachable"
-    assert domains.fetch_document("h.example.com", "/x")["reason"] == "unreachable"
-    assert domains.fetch_readonly("https://h.example.com/x")["reason"] == "unreachable"
+    assert domains.fetch_url("h.example.com", ("2.2.2.2",), "/x").reason == "unreachable"
+    assert domains.fetch_document("h.example.com", "/x").reason == "unreachable"
+    assert domains.fetch_readonly("https://h.example.com/x").reason == "unreachable"
 
     # a host with no public address is told apart from a host that had one but did not answer
-    monkeypatch.setattr(domains, "resolve_host", lambda n: {"addresses": ("10.0.0.1",)})
-    assert domains.fetch_url("h.example.com", ("10.0.0.1",), "/x")["reason"] == "no-public-address"
-    assert domains.fetch_document("h.example.com", "/x")["reason"] == "no-public-address"
-    assert domains.fetch_readonly("https://h.example.com/x")["reason"] == "no-public-address"
+    monkeypatch.setattr(domains, "resolve_host", lambda n: Resolution(resolvable=True, addresses=("10.0.0.1",)))
+    assert domains.fetch_url("h.example.com", ("10.0.0.1",), "/x").reason == "no-public-address"
+    assert domains.fetch_document("h.example.com", "/x").reason == "no-public-address"
+    assert domains.fetch_readonly("https://h.example.com/x").reason == "no-public-address"
 
 def test_fetch_public_url_is_loud_on_the_unexpected_and_names_unreachable(monkeypatch):
     from opfor.scenarios.attacksurface.assets.domain.sources import http as domains
 
     # the host resolves to a public address, so it clears the no-public-address guard and the
     # opener behavior below is what is under test
-    monkeypatch.setattr(domains, "resolve_host", lambda n: {"addresses": ("1.1.1.1",)})
+    monkeypatch.setattr(domains, "resolve_host", lambda n: Resolution(resolvable=True, addresses=("1.1.1.1",)))
 
     class BugOpener:
         def open(self, *a, **k):
@@ -163,7 +164,7 @@ def test_fetch_public_url_is_loud_on_the_unexpected_and_names_unreachable(monkey
             raise ConnectionResetError()
 
     monkeypatch.setattr(domains, "_NO_REDIRECT_OPENER", DeadOpener())
-    assert domains.fetch_public_url("https://bucket.example.com/")["reason"] == "unreachable"
+    assert domains.fetch_public_url("https://bucket.example.com/").reason == "unreachable"
 
 def test_fetch_public_url_uses_the_no_redirect_opener(monkeypatch):
     from opfor.scenarios.attacksurface.assets.domain.sources import http as domains
@@ -190,19 +191,19 @@ def test_fetch_public_url_uses_the_no_redirect_opener(monkeypatch):
     monkeypatch.setattr(domains._NO_REDIRECT_OPENER, "open", fake_open)
     result = domains.fetch_public_url("https://x.s3.amazonaws.com/")
     # a bucket probe does not chase a server-controlled redirect off to another host
-    assert used.get("opener") and result["status"] == 200
+    assert used.get("opener") and result.status == 200
 
 def test_readonly_fetch_refuses_a_host_that_resolves_only_to_a_private_address(monkeypatch):
     from opfor.scenarios.attacksurface.assets.domain.sources import http as domains
     monkeypatch.setattr(domains, "resolve_host",
-                        lambda h: {"addresses": ("127.0.0.1",), "resolvable": True, "cnames": ()})
+                        lambda h: Resolution(resolvable=True, addresses=("127.0.0.1",), cnames=()))
     # a name repointed at loopback between observation and replay must not be fetched
-    assert domains.fetch_readonly("http://internal.example.com/x")["status"] is None
+    assert domains.fetch_readonly("http://internal.example.com/x").status is None
 
 def test_readonly_fetch_pins_a_public_address_and_verifies_the_certificate(monkeypatch):
     from opfor.scenarios.attacksurface.assets.domain.sources import http as domains
     monkeypatch.setattr(domains, "resolve_host",
-                        lambda h: {"addresses": ("93.184.216.34",), "resolvable": True, "cnames": ()})
+                        lambda h: Resolution(resolvable=True, addresses=("93.184.216.34",), cnames=()))
     seen = {}
 
     def fake_connect(name, ip, scheme, path, **kw):
@@ -213,7 +214,7 @@ def test_readonly_fetch_pins_a_public_address_and_verifies_the_certificate(monke
     monkeypatch.setattr(domains, "_connect", fake_connect)
     result = domains.fetch_readonly("https://example.com/panel")
     # the replay is pinned to the vetted public address and verifies the certificate
-    assert result["status"] == 200 and seen["ip"] == "93.184.216.34" and seen["verify"] is True
+    assert result.status == 200 and seen["ip"] == "93.184.216.34" and seen["verify"] is True
 
 def test_connect_closes_the_raw_socket_when_the_tls_handshake_fails(monkeypatch):
     import socket
@@ -309,7 +310,7 @@ def test_signal_headers_keep_cookie_flags_but_drop_the_secret_value():
 
 def test_graphql_introspection_raises_on_a_server_error(monkeypatch):
     from opfor.scenarios.attacksurface.assets.domain.sources import http as domains
-    monkeypatch.setattr(domains, "resolve_host", lambda n: {"addresses": ("2.2.2.2",)})
+    monkeypatch.setattr(domains, "resolve_host", lambda n: Resolution(resolvable=True, addresses=("2.2.2.2",)))
     monkeypatch.setattr(domains, "_connect", lambda *a, **k: (500, "", "", "", "", ()))
     # a 5xx introspection is errored and unknown, never reported as safely disabled
     with pytest.raises(RuntimeError):
@@ -317,7 +318,7 @@ def test_graphql_introspection_raises_on_a_server_error(monkeypatch):
 
 def test_graphql_introspection_is_off_on_a_client_refusal(monkeypatch):
     from opfor.scenarios.attacksurface.assets.domain.sources import http as domains
-    monkeypatch.setattr(domains, "resolve_host", lambda n: {"addresses": ("2.2.2.2",)})
+    monkeypatch.setattr(domains, "resolve_host", lambda n: Resolution(resolvable=True, addresses=("2.2.2.2",)))
     monkeypatch.setattr(domains, "_connect",
                         lambda *a, **k: (403, "", "", "introspection disabled", "", ()))
     # a 4xx is an intentional refusal, a genuine off, so None rather than a raise

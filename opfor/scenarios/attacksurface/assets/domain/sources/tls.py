@@ -12,6 +12,7 @@ import ssl
 import time
 
 from opfor.scenarios.attacksurface.assets.domain.sources.dns import _TIMEOUT, public_addresses
+from opfor.scenarios.attacksurface.assets.domain.sources.observations import TLSReport
 
 
 def _tls_connect(name: str, ip: str, context: "ssl.SSLContext") -> tuple:
@@ -60,7 +61,7 @@ def _days_until(not_after: str) -> int | None:
     return int((expiry - time.time()) // 86400)
 
 
-def _tls_inspect(name: str, ip: str) -> dict:
+def _tls_inspect(name: str, ip: str) -> TLSReport:
     """The TLS posture of one address: whether the certificate validates for the name, why not
     when it does not, its expiry, and the negotiated protocol and cipher. A verifying handshake
     decides trust, hostname, and expiry in one shot. When it fails on the certificate, the peer
@@ -84,18 +85,18 @@ def _tls_inspect(name: str, ip: str) -> dict:
         # trust anchor rather than leaving the date blank on exactly the certificates worth watching.
         cert = _validity_of(name, ip, der)
     not_after = str(cert.get("notAfter", "")) if cert else ""
-    return {
-        "reachable": True,
-        "valid": valid,
-        "validity_error": error,
-        "not_after": not_after,
-        "days_to_expiry": _days_until(not_after),
-        "protocol": version,
-        "cipher": cipher[0] if cipher else "",
-    }
+    return TLSReport(
+        reachable=True,
+        valid=valid,
+        validity_error=error,
+        not_after=not_after,
+        days_to_expiry=_days_until(not_after),
+        protocol=version,
+        cipher=cipher[0] if cipher else "",
+    )
 
 
-def tls_probe(name: str, addresses=()) -> dict:
+def tls_probe(name: str, addresses=()) -> TLSReport:
     """The TLS posture of a name on 443, certificate validity, expiry, and negotiated protocol.
 
     Connects to a public resolved address with the name as SNI, the same local-resolver bypass
@@ -107,7 +108,7 @@ def tls_probe(name: str, addresses=()) -> dict:
     """
     public = public_addresses(addresses)
     if not public:
-        return {"reachable": False, "reason": "no-public-address"}
+        return TLSReport(reachable=False, reason="no-public-address")
     last: Exception | None = None
     for ip in public:
         try:
@@ -115,5 +116,5 @@ def tls_probe(name: str, addresses=()) -> dict:
         except (OSError, ssl.SSLError) as exc:
             last = exc
             continue
-    return {"reachable": False,
-            "reason": f"unreachable: {type(last).__name__}" if last else "unreachable"}
+    return TLSReport(reachable=False,
+                     reason=f"unreachable: {type(last).__name__}" if last else "unreachable")

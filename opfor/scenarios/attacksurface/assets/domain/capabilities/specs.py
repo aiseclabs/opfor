@@ -53,8 +53,8 @@ class ExpandSpec(Capability):
             document = self._fetch(host, endpoint.path)
         except Exception as exc:
             return net_failed("spec fetch", exc)
-        text = document.get("text") or ""
-        if document.get("status") is None:
+        text = document.body or ""
+        if document.status is None:
             # the endpoint probed reachable but the full document did not answer, a transport
             # failure, not a spec that declares nothing, so fail loud rather than drop it as a
             # count-0 spec the renderer silently discards, invariant 5
@@ -128,7 +128,7 @@ class ProbeSpec(Capability):
                 operations.append(SpecOperation(path=path, methods=joined,
                                                 reason=f"probe error {type(exc).__name__}"))
                 continue
-            status = result.get("status")
+            status = result.status
             if status is None:
                 operations.append(SpecOperation(path=path, methods=joined, reason="no response"))
                 continue
@@ -136,12 +136,12 @@ class ProbeSpec(Capability):
                 path=path, methods=joined, verified=True, status=status,
                 auth_required=status in (401, 403),
                 distinct=_distinct(result, baseline),
-                location=str(result.get("location", "")),
-                content_type=str(result.get("content_type", "")),
+                location=result.location,
+                content_type=result.content_type,
             ))
         payload = SpecAudit(base=endpoint.url, operations=tuple(operations))
         facts: list[Fact] = [Fact(kind="spec_audit", about=task.node, payload=payload)]
-        if baseline.get("status") is None and any(op.verified for op in operations):
+        if baseline.status is None and any(op.verified for op in operations):
             # The catch-all baseline could not be established, so a distinct 200 cannot be told from
             # a blanket-200 front, and every operation marked reachable here is unfiltered. Say so
             # rather than let a blanket-200 host read as a set of confirmed exposed operations, the

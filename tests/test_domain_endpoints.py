@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from opfor.core import Node, World
 
+from opfor.scenarios.attacksurface.assets.domain.sources.observations import Liveness, Response
 from tests.surface_fixtures import (
     ROOT,
     _fetch,
@@ -75,8 +76,7 @@ def test_endpoint_probe_records_a_coverage_gap_on_a_transport_failure_not_only_a
     # timed-out probe reads as a clean negative, invariant 5
     def fetch(name, addresses, path):
         if name == "admin.example.com" and path == "/.git/config":
-            return {"status": None, "url": f"https://{name}{path}", "content_type": "",
-                    "server": "", "title": "", "body": ""}
+            return Response(status=None, url=f"https://{name}{path}")
         return _fetch(name, addresses, path)
 
     _report, _scenario, world = _run_capturing(fetch_fn=fetch)
@@ -94,8 +94,7 @@ def test_endpoint_probe_reports_truncation_when_the_candidate_cap_is_hit():
     paths = [f"/p{i}" for i in range(500)]
 
     def fetch(name, addresses, path):
-        return {"status": 404, "url": f"https://{name}{path}", "content_type": "",
-                "server": "", "title": "", "body": "", "location": ""}
+        return Response(status=404, url=f"https://{name}{path}")
 
     outcome = ProbeEndpoints(fetch).run(
         Task(capability="domain_endpoints", node="domain:h", params={"paths": paths}), world)
@@ -115,10 +114,8 @@ def test_endpoint_probe_flags_when_the_baseline_cannot_be_established():
     def fetch(name, addresses, path):
         # only the real path answers, the baseline catch-all probes get no response
         if path == "/real":
-            return {"status": 200, "url": f"https://{name}{path}", "content_type": "text/html",
-                    "server": "", "title": "", "body": "x", "location": ""}
-        return {"status": None, "url": f"https://{name}{path}", "content_type": "",
-                "server": "", "title": "", "body": "", "location": ""}
+            return Response(status=200, url=f"https://{name}{path}", content_type="text/html", body="x")
+        return Response(status=None, url=f"https://{name}{path}")
 
     outcome = ProbeEndpoints(fetch).run(
         Task(capability="domain_endpoints", node="domain:h", params={"paths": ["/real"]}), world)
@@ -131,9 +128,9 @@ def test_distinct_treats_a_differing_redirect_location_as_a_real_endpoint():
     from opfor.scenarios.attacksurface.assets.domain.responses import _distinct
     # a host that answers a blanket 302 to /login for unknown paths still hides a real /admin
     # that redirects to its own dashboard, so a differing location is distinct
-    baseline = {"status": 302, "location": "https://h/login", "content_type": "", "body": ""}
-    same = {"status": 302, "location": "https://h/login"}
-    other = {"status": 302, "location": "https://h/admin/dashboard"}
+    baseline = Response(status=302, location="https://h/login")
+    same = Response(status=302, location="https://h/login")
+    other = Response(status=302, location="https://h/admin/dashboard")
     assert _distinct(same, baseline) is False
     assert _distinct(other, baseline) is True
 
@@ -141,11 +138,11 @@ def test_distinct_ignores_a_path_echoing_login_redirect_query():
     from opfor.scenarios.attacksurface.assets.domain.responses import _distinct
     # a login wall that echoes the requested path in ?next= gives every path a different raw
     # location, but it is one catch-all, so not distinct
-    baseline = {"status": 302, "location": "https://h/login?next=/x", "content_type": "", "body": ""}
-    echoed = {"status": 302, "location": "https://h/login?next=/admin"}
+    baseline = Response(status=302, location="https://h/login?next=/x")
+    echoed = Response(status=302, location="https://h/login?next=/admin")
     assert _distinct(echoed, baseline) is False
     # a real redirect to a genuinely different path is still distinct
-    assert _distinct({"status": 302, "location": "https://h/admin/dashboard"}, baseline) is True
+    assert _distinct(Response(status=302, location="https://h/admin/dashboard"), baseline) is True
 
 def test_norm_url_keeps_the_query_so_a_query_bearing_poc_does_not_false_match():
     from opfor.scenarios.attacksurface.lifecycle.grounding import _norm_url
@@ -161,7 +158,7 @@ def test_a_resolvable_but_unreachable_seed_host_reports_a_gap_not_a_bare_clean()
     # could not achieve as a coverage gap, invariant 3 and 5.
     def probe(name, addresses=()):
         if name == ROOT:
-            return {"alive": False, "status": None, "reason": "unreachable"}
+            return Liveness(alive=False, reason="unreachable")
         return _probe(name, addresses)
 
     report, _scenario, _world = _run_capturing(probe_fn=probe)
@@ -187,13 +184,13 @@ def test_http_domain_records_a_gap_when_unreachable_but_not_when_refused():
     task = Task(capability="domain_http", node="domain:h")
 
     unreachable = HTTPDomain(
-        lambda name, addresses: {"alive": False, "status": None, "reason": "unreachable"}).run(task, world)
+        lambda name, addresses: Liveness(alive=False, reason="unreachable")).run(task, world)
     assert isinstance(unreachable, Done)
     gaps = [f.payload for f in unreachable.facts if f.kind == "coverage_gap"]
     assert len(gaps) == 1 and gaps[0].scan == "domain_http" and gaps[0].host == "h"
 
     refused = HTTPDomain(
-        lambda name, addresses: {"alive": False, "status": None, "reason": "refused"}).run(task, world)
+        lambda name, addresses: Liveness(alive=False, reason="refused")).run(task, world)
     assert isinstance(refused, Done)
     assert not any(f.kind == "coverage_gap" for f in refused.facts)
 
@@ -255,7 +252,7 @@ def test_harvest_records_a_gap_when_the_home_document_is_unreachable():
     # fetch_document reports an unreachable host as a None status rather than raising. Harvest
     # must surface that as a coverage gap, not launder a transport failure into an empty
     # harvest that reads downstream as a host revealing no paths.
-    unreachable = lambda *a: {"status": None, "reason": "unreachable", "text": ""}
+    unreachable = lambda *a: Response(status=None, reason="unreachable")
     out = HarvestPaths(unreachable, unreachable, lambda *a: set()).run(
         Task(capability="domain_harvest", node="domain:h"), world)
     assert isinstance(out, Done)

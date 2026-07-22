@@ -33,6 +33,7 @@ from opfor.scenarios.attacksurface.assets.domain.sources.dns import (
     public_addresses,
     resolve_host,
 )
+from opfor.scenarios.attacksurface.assets.domain.sources.observations import Liveness, Response
 
 _BODY_HEAD = 4096
 # One retry on a transient timeout, so a single slow read does not mark a live host dead.
@@ -43,7 +44,7 @@ _TITLE = re.compile(r"<title[^>]*>(.*?)</title>", re.IGNORECASE | re.DOTALL)
 # --- HTTP probe, connecting to a resolved address ---------------------------
 
 
-def http_probe(name: str, addresses=()) -> dict:
+def http_probe(name: str, addresses=()) -> Liveness:
     """Probe a name over HTTPS then HTTP across every public address it resolves to.
 
     Connecting to the address with the name as SNI and Host bypasses the local resolver.
@@ -78,7 +79,7 @@ def http_probe(name: str, addresses=()) -> dict:
     return _dead("refused" if refused else "unreachable")
 
 
-def fetch_url(name: str, addresses, path: str) -> dict:
+def fetch_url(name: str, addresses, path: str) -> Response:
     """Fetch one interface path on a name by connecting to a public resolved address.
 
     Every public address is tried, not only the first, the same way the alive probe does, so
@@ -99,24 +100,23 @@ def fetch_url(name: str, addresses, path: str) -> dict:
             except (OSError, http.client.HTTPException):
                 continue
             match = _TITLE.search(body)
-            return {"status": status, "url": f"{scheme}://{name}{path}", "content_type": content_type,
-                    "server": server, "title": match.group(1).strip()[:200] if match else "",
-                    "body": body.lower(), "location": location, "reason": ""}
+            return Response(status=status, url=f"{scheme}://{name}{path}", content_type=content_type,
+                            server=server, title=match.group(1).strip()[:200] if match else "",
+                            body=body.lower(), location=location, reason="")
     return _no_url_answer(name, path, "unreachable")
 
 
-def _no_url_answer(name: str, path: str, reason: str) -> dict:
+def _no_url_answer(name: str, path: str, reason: str) -> Response:
     """A null-status `fetch_url` result carrying why no address answered, so the shape is the
     same as a real answer and the caller reads the reason rather than guessing at a bare null."""
-    return {"status": None, "url": f"https://{name}{path}", "content_type": "", "server": "",
-            "title": "", "body": "", "location": "", "reason": reason}
+    return Response(status=None, url=f"https://{name}{path}", reason=reason)
 
 
 _PUBLIC_URL_TIMEOUT = 10
 _PUBLIC_URL_BODY = 4096
 
 
-def fetch_public_url(url: str) -> dict:
+def fetch_public_url(url: str) -> Response:
     """Anonymous GET of a public url, for checking a derived cloud-storage endpoint.
 
     A 403 or a 404 is a meaningful answer, the bucket exists but is private or it does not
@@ -131,26 +131,25 @@ def fetch_public_url(url: str) -> dict:
     or internal address. The no-redirect opener already blocks a server-controlled Location.
     """
     host = urllib.parse.urlparse(url).hostname or ""
-    if not host or not public_addresses(resolve_host(host).get("addresses", ())):
-        return {"status": None, "url": url, "content_type": "", "body": "",
-                "reason": "no-public-address"}
+    if not host or not public_addresses(resolve_host(host).addresses):
+        return Response(status=None, url=url, reason="no-public-address")
     request = urllib.request.Request(url, headers={"User-Agent": _UA})
     try:
         # do not follow a redirect, a server-controlled Location could steer this at another
         # host, and the bucket state is read from the direct response, not a chased one
         with _NO_REDIRECT_OPENER.open(request, timeout=_PUBLIC_URL_TIMEOUT) as resp:
             body = resp.read(_PUBLIC_URL_BODY).decode("utf-8", "replace")
-            return {"status": resp.status, "url": url,
-                    "content_type": resp.headers.get("Content-Type", ""), "body": body, "reason": ""}
+            return Response(status=resp.status, url=url,
+                            content_type=resp.headers.get("Content-Type", ""), body=body, reason="")
     except urllib.error.HTTPError as exc:
         try:
             body = exc.read(_PUBLIC_URL_BODY).decode("utf-8", "replace")
         except (OSError, http.client.HTTPException):
             body = ""
         content_type = exc.headers.get("Content-Type", "") if exc.headers else ""
-        return {"status": exc.code, "url": url, "content_type": content_type, "body": body, "reason": ""}
+        return Response(status=exc.code, url=url, content_type=content_type, body=body, reason="")
     except (OSError, http.client.HTTPException):
-        return {"status": None, "url": url, "content_type": "", "body": "", "reason": "unreachable"}
+        return Response(status=None, url=url, reason="unreachable")
 
 
 # The read-only reproduce replay must never follow a redirect. Following one would chase a
@@ -170,7 +169,7 @@ class _NoRedirect(urllib.request.HTTPRedirectHandler):
 _NO_REDIRECT_OPENER = urllib.request.build_opener(_NoRedirect)
 
 
-def fetch_readonly(url: str) -> dict:
+def fetch_readonly(url: str) -> Response:
     """A single GET for the read-only reproduce replay, connected to a vetted public address.
 
     The host is resolved and filtered to its public addresses, and the request is pinned to
@@ -189,10 +188,9 @@ def fetch_readonly(url: str) -> dict:
     path = parts.path or "/"
     if parts.query:
         path = f"{path}?{parts.query}"
-    def empty(reason: str) -> dict:
-        return {"status": None, "url": url, "content_type": "", "location": "", "body": "",
-                "reason": reason}
-    public = public_addresses(resolve_host(host).get("addresses", ()))
+    def empty(reason: str) -> Response:
+        return Response(status=None, url=url, reason=reason)
+    public = public_addresses(resolve_host(host).addresses)
     if not public:
         return empty("no-public-address")
     for ip in public:
@@ -201,8 +199,8 @@ def fetch_readonly(url: str) -> dict:
                 host, ip, scheme, path, read_limit=_REPRODUCE_BODY, verify=True)
         except (OSError, http.client.HTTPException):
             continue
-        return {"status": status, "url": url, "content_type": content_type,
-                "location": location, "body": body, "reason": ""}
+        return Response(status=status, url=url, content_type=content_type,
+                        location=location, body=body, reason="")
     return empty("unreachable")
 
 
@@ -217,7 +215,7 @@ _INTROSPECTION = (
 )
 
 
-def fetch_document(name: str, path: str) -> dict:
+def fetch_document(name: str, path: str) -> Response:
     """Full GET of one document on a name, no body cap, for parsing a spec.
 
     Resolves over DNS-over-HTTPS then connects to a public address with SNI, the same way
@@ -227,9 +225,9 @@ def fetch_document(name: str, path: str) -> dict:
     read as a real no-content answer. Only transport errors are caught, so an unexpected
     error is raised loud rather than swallowed as a null status, invariant 5.
     """
-    public = public_addresses(resolve_host(name).get("addresses", ()))
+    public = public_addresses(resolve_host(name).addresses)
     if not public:
-        return {"status": None, "content_type": "", "text": "", "reason": "no-public-address"}
+        return Response(status=None, reason="no-public-address")
     for ip in public:
         for scheme in ("https", "http"):
             try:
@@ -237,8 +235,8 @@ def fetch_document(name: str, path: str) -> dict:
                     name, ip, scheme, path, read_limit=_DOCUMENT_LIMIT)
             except (OSError, http.client.HTTPException):
                 continue
-            return {"status": status, "content_type": content_type, "text": body, "reason": ""}
-    return {"status": None, "content_type": "", "text": "", "reason": "unreachable"}
+            return Response(status=status, content_type=content_type, body=body, reason="")
+    return Response(status=None, reason="unreachable")
 
 
 def graphql_introspect(name: str, path: str = "/graphql") -> dict | None:
@@ -251,7 +249,7 @@ def graphql_introspect(name: str, path: str = "/graphql") -> dict | None:
     could not be checked is never read as safely disabled, invariant 5. Every public address
     is tried, not only the first.
     """
-    public = public_addresses(resolve_host(name).get("addresses", ()))
+    public = public_addresses(resolve_host(name).addresses)
     if not public:
         raise RuntimeError(f"graphql introspection has no public address for {name!r}")
     body = _INTROSPECTION.encode("utf-8")
@@ -409,16 +407,15 @@ def _connect(name: str, ip: str, scheme: str, path: str, *, read_limit: int = _B
 
 
 def _result(alive: bool, status, url: str, server: str, body: str, location: str = "",
-            headers: tuple = ()) -> dict:
+            headers: tuple = ()) -> Liveness:
     match = _TITLE.search(body)
-    return {"alive": alive, "status": status, "url": url, "server": server,
-            "title": match.group(1).strip()[:200] if match else "", "body": body.lower(),
-            "location": location, "headers": headers, "reason": ""}
+    return Liveness(alive=alive, status=status, url=url, server=server,
+                    title=match.group(1).strip()[:200] if match else "", body=body.lower(),
+                    location=location, headers=headers, reason="")
 
 
-def _dead(reason: str = "unreachable") -> dict:
+def _dead(reason: str = "unreachable") -> Liveness:
     """A not-alive probe result. `reason` tells a genuine negative from a coverage gap.
     `no-public-address` and `refused` are real negatives, `unreachable` is a gap the caller
     records so a host the run never reached is not read as a confirmed dead host."""
-    return {"alive": False, "status": None, "url": "", "server": "", "title": "", "body": "",
-            "location": "", "headers": (), "reason": reason}
+    return Liveness(alive=False, reason=reason)

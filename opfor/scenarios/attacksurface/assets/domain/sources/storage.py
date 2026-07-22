@@ -6,6 +6,7 @@ import re
 import urllib.parse
 
 from opfor.scenarios.attacksurface.assets.domain.sources.javascript import QUOTED_URL
+from opfor.scenarios.attacksurface.assets.domain.sources.observations import BucketReference
 
 _BUCKET_NAME = re.compile(r"^[a-z0-9][a-z0-9.\-]{1,61}[a-z0-9]$")
 # XML listing roots each provider returns for a public, listable bucket, so a 200 that is an
@@ -35,7 +36,7 @@ def _valid_bucket(name: str) -> bool:
     return bool(_BUCKET_NAME.match(name)) and ".." not in name
 
 
-def cloud_bucket_from_url(reference: str) -> dict | None:
+def cloud_bucket_from_url(reference: str) -> BucketReference | None:
     """The cloud-storage bucket a url or a CNAME names, or None when it is not one.
 
     Recognizes the S3, GCS, and Azure Blob endpoint forms, both virtual-host and path style,
@@ -72,10 +73,10 @@ def cloud_bucket_from_url(reference: str) -> dict | None:
     return None
 
 
-def _bucket(provider: str, name: str, list_url: str) -> dict | None:
+def _bucket(provider: str, name: str, list_url: str) -> BucketReference | None:
     if not _valid_bucket(name.split("/")[0]):
         return None
-    return {"provider": provider, "bucket": name, "list_url": list_url}
+    return BucketReference(provider=provider, bucket=name, list_url=list_url)
 
 
 def cloud_refs_in_text(text: str) -> list[str]:

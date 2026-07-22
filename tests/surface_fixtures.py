@@ -12,12 +12,17 @@ from __future__ import annotations
 
 import json
 
-
 from opfor.core import Budget, MockProvider, Node, Scope, World, run
 from opfor.scenarios.attacksurface import build
+from opfor.scenarios.attacksurface.assets.domain.sources.observations import (
+    EmailPosture,
+    Liveness,
+    Resolution,
+    Response,
+    TLSReport,
+)
 from opfor.scenarios.attacksurface.hostnames import HostScope
 from opfor.scenarios.attacksurface.types import Org
-
 
 ROOT = "example.com"
 
@@ -94,19 +99,19 @@ def _fetch(name, addresses, path):
     if name == "spa.example.com":
         # a single-page app: 200 HTML for every path, but a real JSON spec at one path
         if path == "/openapi.json":
-            return {"status": 200, "url": url, "content_type": "application/json",
-                    "server": "cf", "title": "", "body": '{"openapi":"3.0.0","paths":{}}'}
-        return {"status": 200, "url": url, "content_type": "text/html",
-                "server": "cf", "title": "", "body": "<html>spa app single page</html>"}
+            return Response(status=200, url=url, content_type="application/json",
+                            server="cf", body='{"openapi":"3.0.0","paths":{}}')
+        return Response(status=200, url=url, content_type="text/html",
+                        server="cf", body="<html>spa app single page</html>")
     if name == "cf.example.com":
         # a host that serves an empty 200 for /.env, the shape that used to false-positive
         if path == "/.env":
-            return {"status": 200, "url": url, "content_type": "", "server": "cf", "title": "", "body": ""}
-        return {"status": 404, "url": url, "content_type": "", "server": "", "title": "", "body": ""}
+            return Response(status=200, url=url, server="cf")
+        return Response(status=404, url=url)
     d = ENDPOINTS.get(url, {"status": 404, "body": ""})
-    return {"status": d["status"], "url": url, "content_type": d.get("ct", ""),
-            "server": d.get("server", ""), "title": "", "body": d["body"].lower(),
-            "location": d.get("loc", "")}
+    return Response(status=d["status"], url=url, content_type=d.get("ct", ""),
+                    server=d.get("server", ""), body=d["body"].lower(),
+                    location=d.get("loc", ""))
 
 
 
@@ -114,17 +119,17 @@ def _fetch(name, addresses, path):
 # a home page linking a JavaScript bundle that hardcodes an API path only readable from it.
 def _fetch_doc(name, path):
     if name == "spa.example.com" and path == "/openapi.json":
-        return {"status": 200, "content_type": "application/json",
-                "text": '{"openapi":"3.0.0","paths":{"/users":{"get":{}},"/orders":{"get":{},"post":{}}}}'}
+        return Response(status=200, content_type="application/json",
+                        body='{"openapi":"3.0.0","paths":{"/users":{"get":{}},"/orders":{"get":{},"post":{}}}}')
     if name == "admin.example.com" and path == "/":
-        return {"status": 200, "content_type": "text/html",
-                "text": '<html><body><script src="/app.js"></script></body></html>'}
+        return Response(status=200, content_type="text/html",
+                        body='<html><body><script src="/app.js"></script></body></html>')
     if name == "admin.example.com" and path == "/app.js":
-        return {"status": 200, "content_type": "application/javascript",
-                "text": ('const API="/api";fetch("/api/secret");const css="/main.css";'
-                         'fetch("/portal");fetch("/private");'
-                         'fetch("https://api.example.com/v2/balance");')}
-    return {"status": None, "content_type": "", "text": ""}
+        return Response(status=200, content_type="application/javascript",
+                        body=('const API="/api";fetch("/api/secret");const css="/main.css";'
+                              'fetch("/portal");fetch("/private");'
+                              'fetch("https://api.example.com/v2/balance");'))
+    return Response(status=None)
 
 
 def _introspect(name, path="/graphql"):
@@ -143,11 +148,16 @@ def _enumerate(domain):
 
 
 def _resolve(name):
-    return DNS.get(name, {"resolvable": False, "addresses": ()})
+    d = DNS.get(name, {"resolvable": False, "addresses": ()})
+    return Resolution(resolvable=d["resolvable"], addresses=d.get("addresses", ()),
+                      cnames=d.get("cnames", ()))
 
 
 def _probe(name, addresses=()):
-    return HTTP.get(name, {"alive": False, "status": None, "url": "", "server": "", "title": "", "body": ""})
+    d = HTTP.get(name, {"alive": False})
+    return Liveness(alive=d["alive"], status=d.get("status"), url=d.get("url", ""),
+                    server=d.get("server", ""), title=d.get("title", ""), body=d.get("body", ""),
+                    location=d.get("location", ""), headers=d.get("headers", ()))
 
 
 def _identify(evidence):
@@ -163,20 +173,20 @@ def _cves(product, version, cpe=""):
 def _probe_url(url):
     # By default every derived bucket name is absent, so the bucket scan is a quiet no-op. A
     # test that drives a listable bucket overrides this seam.
-    return {"status": 404, "url": url, "content_type": "", "body": ""}
+    return Response(status=404, url=url)
 
 
 def _dns(domain):
     # By default a root sets no email authentication and no CAA and is unsigned, so the posture
     # scan surfaces the absences. A test overrides this seam to drive a configured domain.
-    return {"spf": (), "dmarc": "", "caa": (), "dnssec": False}
+    return EmailPosture(spf=(), dmarc="", caa=(), dnssec=False)
 
 
 def _tls(name, addresses=()):
     # By default a host serves a valid certificate over a modern protocol, so the TLS scan is a
     # quiet clean result. A test overrides this seam to drive an expired or untrusted cert.
-    return {"reachable": True, "valid": True, "validity_error": "", "not_after": "",
-            "days_to_expiry": 300, "protocol": "TLSv1.3", "cipher": "TLS_AES_256_GCM_SHA384"}
+    return TLSReport(reachable=True, valid=True, days_to_expiry=300,
+                     protocol="TLSv1.3", cipher="TLS_AES_256_GCM_SHA384")
 
 
 def _make(**over):
@@ -263,7 +273,7 @@ def _two_findings():
     ]})
 
 def _read_only(url):
-    return {"status": 200, "url": url, "content_type": "text/html", "body": "<html></html>"}
+    return Response(status=200, url=url, content_type="text/html", body="<html></html>")
 
 
 __all__ = [

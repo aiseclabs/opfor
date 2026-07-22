@@ -22,7 +22,7 @@ import urllib.request
 from pathlib import Path
 from urllib.parse import urlsplit
 
-from opfor.scenarios.attacksurface.assets.domain import KNOWLEDGE
+from opfor.scenarios.attacksurface.assets.domain import PATHS
 from opfor.scenarios.attacksurface.assets.domain.fingerprint import load_services, service_probe_paths
 
 _TITLE = re.compile(r"<title[^>]*>(.*?)</title>", re.I | re.S)
@@ -55,7 +55,7 @@ def _paths() -> list[str]:
     """The exact path set opfor probes for a service, the services' own version endpoints, so a
     service versioned only at an endpoint such as `/api/status` is captured. A capture that skipped
     these would silently miss those endpoints, invariant 5."""
-    return list(service_probe_paths(load_services(KNOWLEDGE / "technologies" / "services")))
+    return list(service_probe_paths(load_services(PATHS.services)))
 
 
 def capture(product: str, version: str, url: str) -> dict:

@@ -18,7 +18,7 @@ from opfor.core.engine import run as engine_run
 from opfor.scenarios.attacksurface import build
 from opfor.scenarios.attacksurface.hostnames import HostScope
 from opfor.scenarios.attacksurface.types import Org
-from opfor.scenarios.attacksurface.assets.domain import KNOWLEDGE
+from opfor.scenarios.attacksurface.assets.domain import PATHS
 from opfor.scenarios.attacksurface.assets.domain.sources.observations import (
     EmailPosture,
     Liveness,
@@ -28,7 +28,7 @@ from opfor.scenarios.attacksurface.assets.domain.sources.observations import (
 )
 from opfor.scenarios.attacksurface.assets.domain.fingerprint import fingerprint, load_services
 
-_TABLE = load_services(KNOWLEDGE / "technologies" / "services")
+_TABLE = load_services(PATHS.services)
 
 
 def _fingerprint_only(evidence: str) -> dict:

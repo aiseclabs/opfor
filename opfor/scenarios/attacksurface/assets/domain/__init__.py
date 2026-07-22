@@ -8,7 +8,7 @@ directory the scenario's triage reads.
 
 from __future__ import annotations
 
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 from opfor.scenarios.attacksurface.assets import ClassBundle
@@ -54,6 +54,30 @@ from opfor.scenarios.attacksurface.assets.domain.capabilities import (
 KNOWLEDGE = Path(__file__).resolve().parent / "knowledge"
 
 
+@dataclass(frozen=True, kw_only=True)
+class KnowledgePaths:
+    """The fixed layout of the domain class's knowledge tree, resolved to absolute paths, so the
+    tree's shape lives in one contract rather than scattered `root / "technologies" / "services"`
+    conventions that drift as the tree grows. `detections` holds the deterministic payloads the
+    finding classes surface, kept apart from the model-read judgment prose in `findings`."""
+
+    root: Path
+    services: Path
+    frameworks: Path
+    edge: Path
+    findings: Path
+    detections: Path
+
+    @classmethod
+    def under(cls, root: Path) -> "KnowledgePaths":
+        tech = root / "technologies"
+        return cls(root=root, services=tech / "services", frameworks=tech / "frameworks",
+                   edge=root / "edge", findings=root / "findings", detections=root / "detections")
+
+
+PATHS = KnowledgePaths.under(KNOWLEDGE)
+
+
 def assemble(*, enumerate_fn, resolve_fn, probe_fn, fetch_fn, fetch_doc_fn,
              introspect_fn, wayback_fn, probe_url_fn, dns_fn, tls_fn,
              identify_fn=None, cve_fn=None) -> ClassBundle:
@@ -85,7 +109,7 @@ def assemble(*, enumerate_fn, resolve_fn, probe_fn, fetch_fn, fetch_doc_fn,
     # seam, so the seam tries the services first and falls to the model on a miss, and a thin or
     # stale set identifies less rather than wrong. They are the class's own knowledge, loaded here
     # at assemble time. An empty set leaves the seam pure model, so a missing tree is no regression.
-    fingerprints = load_services(KNOWLEDGE / "technologies" / "services")
+    fingerprints = load_services(PATHS.services)
     if identify_fn is not None and fingerprints:
         model_identify = identify_fn
 
@@ -97,8 +121,8 @@ def assemble(*, enumerate_fn, resolve_fn, probe_fn, fetch_fn, fetch_doc_fn,
     # lookup and the report both read, so identity survives a CVE-lookup failure and exists even
     # with no CVE seam wired. Frameworks and edge are deterministic, so it runs with or without
     # a model identify seam.
-    frameworks_table = load_frameworks(KNOWLEDGE / "technologies" / "frameworks")
-    edge_table = load_edge(KNOWLEDGE / "edge")
+    frameworks_table = load_frameworks(PATHS.frameworks)
+    edge_table = load_edge(PATHS.edge)
 
     def framework_fn(http):
         return classify_frameworks(http, frameworks_table)

@@ -23,7 +23,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from opfor.core.markdown_docs import iter_md_docs
-from opfor.scenarios.attacksurface.assets.domain import KNOWLEDGE
+from opfor.scenarios.attacksurface.assets.domain import KNOWLEDGE, KnowledgePaths
 
 DETECTION = "detection"
 JUDGMENT = "judgment"
@@ -48,6 +48,7 @@ def scan_knowledge(root: Path = KNOWLEDGE) -> dict[str, KnowledgeItem]:
     """Every knowledge claim in the tree, keyed by its ref. Refs are flat, so a duplicate across
     two files fails loud rather than one silently shadowing the other. `index.md` files are not
     units, the loaders skip them, so they contribute no ref."""
+    paths = KnowledgePaths.under(root)
     items: dict[str, KnowledgeItem] = {}
 
     def add(ref: str, kind: str, path: Path) -> None:
@@ -57,16 +58,16 @@ def scan_knowledge(root: Path = KNOWLEDGE) -> dict[str, KnowledgeItem]:
                              f"{path}, rename one so refs stay flat")
         items[ref] = KnowledgeItem(ref=ref, kind=kind, path=path)
 
-    for path, _meta, _body in iter_md_docs(root / "technologies" / "services"):
+    for path, _meta, _body in iter_md_docs(paths.services):
         add(f"service:{path.stem}", DETECTION, path)
-    for path, _meta, _body in iter_md_docs(root / "technologies" / "frameworks"):
+    for path, _meta, _body in iter_md_docs(paths.frameworks):
         add(f"framework:{path.stem}", DETECTION, path)
-    for path, meta, _body in iter_md_docs(root / "edge"):
+    for path, meta, _body in iter_md_docs(paths.edge):
         category = str(meta.get("category", "")).strip()
         if category:
             add(f"edge:{category}", DETECTION, path)
 
-    for path, meta, _body in iter_md_docs(root / "findings"):
+    for path, meta, _body in iter_md_docs(paths.findings):
         add(f"class:{path.stem}", JUDGMENT, path)
         for clue in meta.get("clues") or []:
             if clue.get("id"):

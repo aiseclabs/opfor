@@ -32,7 +32,7 @@ def test_knowledge_inventory_enumerates_every_claim_by_ref_and_kind():
         by_ns[ref.split(":", 1)[0]] = by_ns.get(ref.split(":", 1)[0], 0) + 1
     # every knowledge namespace is enumerated, so a new detection or judgment unit that ships
     # without a backtest shows up as an uncovered ref rather than being invisible
-    assert by_ns["service"] == 6
+    assert by_ns["product"] == 6
     assert by_ns["framework"] == 2
     assert by_ns["class"] == 19
     assert by_ns["clue"] >= 15 and by_ns["secret"] >= 5 and by_ns["signature"] >= 20
@@ -50,13 +50,13 @@ def test_coverage_matrix_counts_cases_per_claim_and_flags_gaps():
     from evals.knowledge import coverage_matrix, coverage_problems
 
     cov = coverage_matrix()
-    # the grafana service has both a positive cassette and a negative that must not fire it, so it
+    # the grafana product has both a positive cassette and a negative that must not fire it, so it
     # is the one fully covered claim, its precision guarded
-    assert cov["service:grafana"].positive >= 1 and cov["service:grafana"].negative >= 1
-    assert cov["service:grafana"].covered
-    # a service with a positive cassette but no negative is not covered, precision is unguarded
-    assert cov["service:jenkins"].positive >= 1 and cov["service:jenkins"].negative == 0
-    assert not cov["service:jenkins"].covered
+    assert cov["product:grafana"].positive >= 1 and cov["product:grafana"].negative >= 1
+    assert cov["product:grafana"].covered
+    # a product with a positive cassette but no negative is not covered, precision is unguarded
+    assert cov["product:jenkins"].positive >= 1 and cov["product:jenkins"].negative == 0
+    assert not cov["product:jenkins"].covered
     # a claim no case exercises is uncovered, so it is a visible gap
     assert cov["clue:exposed-git"].positive == 0 and not cov["clue:exposed-git"].covered
 
@@ -71,7 +71,7 @@ def test_coverage_flags_a_case_label_that_names_no_knowledge(tmp_path):
     from evals.knowledge import coverage_problems
 
     (tmp_path / "bogus.json").write_text(
-        '{"expect": {"positive": ["service:does-not-exist"], "negative": []}}', encoding="utf-8")
+        '{"expect": {"positive": ["product:does-not-exist"], "negative": []}}', encoding="utf-8")
     problems = coverage_problems(corpus=tmp_path)
     # a case naming a ref no knowledge defines is a stale or misspelt label, caught loud
     assert any(p.kind == "unresolved-reference" and "does-not-exist" in p.ref for p in problems)

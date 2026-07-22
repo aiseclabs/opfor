@@ -129,7 +129,7 @@
   "docs": {},
   "expect": {
     "positive": [
-      "service:kibana"
+      "product:kibana"
     ],
     "negative": []
   }

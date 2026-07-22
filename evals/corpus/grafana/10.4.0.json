@@ -703,7 +703,7 @@
   "docs": {},
   "expect": {
     "positive": [
-      "service:grafana"
+      "product:grafana"
     ],
     "negative": []
   }

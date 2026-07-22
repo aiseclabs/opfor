@@ -289,7 +289,7 @@
   "docs": {},
   "expect": {
     "positive": [
-      "service:elasticsearch"
+      "product:elasticsearch"
     ],
     "negative": []
   }

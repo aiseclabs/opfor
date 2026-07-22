@@ -1,10 +1,10 @@
-"""Deterministic service fingerprinting, the identify seam's first pass before the model.
+"""Deterministic product fingerprinting, the identify seam's first pass before the model.
 
 It matches a host's gathered evidence against a curated set of high-signal markers, so a known
-service such as a Jenkins or a Kibana is identified without a model call, with the exact version a
-version header or endpoint carries. Each service is one `fingerprints/services/<name>.md` knowledge
+product such as a Jenkins or a Kibana is identified without a model call, with the exact version a
+version header or endpoint carries. Each product is one `fingerprints/products/<name>.md` knowledge
 unit, its `cpe` frontmatter field the NVD `vendor:product` key, its markers and version the
-detection knowledge, and its title the human name. A service the markers miss returns empty, which
+detection knowledge, and its title the human name. A product the markers miss returns empty, which
 the caller falls to the model, so a thin or stale set identifies less, never wrong.
 """
 
@@ -24,13 +24,13 @@ _TITLE = re.compile(r"^#\s+(.+)$", re.MULTILINE)
 
 @dataclass(frozen=True, kw_only=True)
 class Fingerprint:
-    """One service's identification rule. `name` is the human service name from the unit's title.
+    """One product's identification rule. `name` is the human product name from the unit's title.
     `cpe` is the NVD CPE `vendor:product`, the CVE-lookup key. `markers` are lowercased high-signal
     substrings, any one present is a match. `version` is a compiled pattern with one capture group,
-    or None when the service publishes no plain version. `probe_paths` are the service's own paths
+    or None when the product publishes no plain version. `probe_paths` are the product's own paths
     the probe adds to the generic set, so a marker or version that appears only at a specific path,
     a login page or a health endpoint, is still reached, and that path knowledge lives with the
-    service rather than in a global list."""
+    product rather than in a global list."""
 
     name: str
     cpe: str
@@ -39,12 +39,12 @@ class Fingerprint:
     probe_paths: tuple[str, ...] = ()
 
 
-def load_services(directory: Path) -> tuple[Fingerprint, ...]:
-    """Load the service fingerprints at build time, one `fingerprints/services/<name>.md` unit each.
+def load_products(directory: Path) -> tuple[Fingerprint, ...]:
+    """Load the product fingerprints at build time, one `fingerprints/products/<name>.md` unit each.
     The `cpe` frontmatter field is the NVD `vendor:product` lookup key, the title is the human name,
     and the markers and version are the detection knowledge. A missing directory is an empty set, so
     the identify seam stays pure model. A malformed version regex fails the run loudly here rather
-    than silently skipping a service during a scan, invariant 5."""
+    than silently skipping a product during a scan, invariant 5."""
     table: list[Fingerprint] = []
     for path, meta, body in iter_md_docs(Path(directory)):
         cpe = str(meta.get("cpe", "")).strip()
@@ -64,9 +64,9 @@ def load_services(directory: Path) -> tuple[Fingerprint, ...]:
     return tuple(table)
 
 
-def service_probe_paths(table: tuple[Fingerprint, ...]) -> tuple[str, ...]:
-    """The union of the paths the services declare, so the probe adds them to its generic set and a
-    service's own identification or version endpoint is probed without being a global path."""
+def product_probe_paths(table: tuple[Fingerprint, ...]) -> tuple[str, ...]:
+    """The union of the paths the products declare, so the probe adds them to its generic set and a
+    product's own identification or version endpoint is probed without being a global path."""
     seen: list[str] = []
     for fp in table:
         for path in fp.probe_paths:
@@ -76,10 +76,10 @@ def service_probe_paths(table: tuple[Fingerprint, ...]) -> tuple[str, ...]:
 
 
 def fingerprint(evidence: str, table: tuple[Fingerprint, ...]) -> dict:
-    """Identify the service behind one host's evidence from the table, deterministically.
+    """Identify the product behind one host's evidence from the table, deterministically.
 
-    Returns a dict with `product`, the identified service's name, `version`, and `cpe`, its NVD
-    `vendor:product` lookup key, on the first service whose markers match, or an empty dict when
+    Returns a dict with `product`, the identified product's name, `version`, and `cpe`, its NVD
+    `vendor:product` lookup key, on the first product whose markers match, or an empty dict when
     none does, so the caller reads a miss as falsy and falls to the model. A version is filled
     only when its pattern captures a plausible version string, so a stale pattern yields no
     version rather than a wrong one.

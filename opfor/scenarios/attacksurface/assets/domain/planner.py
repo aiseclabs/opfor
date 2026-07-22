@@ -56,7 +56,7 @@ class DomainPlanConfig:
     and the secret and backup name templates the planner hands each capability so the capability
     reads no knowledge file, invariant 1. This is action config, not triage knowledge. Loaded once
     at assemble time by `load_plan_config`, so import triggers no IO. `probe_paths` starts empty and
-    the class composes it from the owners of each path, the services' own version endpoints and the
+    the class composes it from the owners of each path, the products' own version endpoints and the
     spec and introspection locations, so there is no global guessed path list."""
 
     probe_paths: tuple[str, ...] = ()

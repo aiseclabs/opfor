@@ -23,7 +23,7 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 from opfor.scenarios.attacksurface.assets.domain import PATHS
-from opfor.scenarios.attacksurface.assets.domain.fingerprint import load_services, service_probe_paths
+from opfor.scenarios.attacksurface.assets.domain.fingerprint import load_products, product_probe_paths
 
 _TITLE = re.compile(r"<title[^>]*>(.*?)</title>", re.I | re.S)
 _UA = "Mozilla/5.0 (compatible; opfor-eval-capture)"
@@ -52,10 +52,10 @@ def _get(url: str) -> dict | None:
 
 
 def _paths() -> list[str]:
-    """The exact path set opfor probes for a service, the services' own version endpoints, so a
+    """The exact path set opfor probes for a product, the products' own version endpoints, so a
     service versioned only at an endpoint such as `/api/status` is captured. A capture that skipped
     these would silently miss those endpoints, invariant 5."""
-    return list(service_probe_paths(load_services(PATHS.services)))
+    return list(product_probe_paths(load_products(PATHS.products)))
 
 
 def capture(product: str, version: str, url: str) -> dict:
@@ -74,7 +74,7 @@ def capture(product: str, version: str, url: str) -> dict:
         fetch[path] = {"status": r["status"], "url": base + path, "content_type": r["content_type"],
                        "server": r["server"], "title": r["title"], "body": r["body"],
                        "location": r["location"], "reason": ""}
-    # `version` is what the scan is expected to extract, blank for a service that exposes none
+    # `version` is what the scan is expected to extract, blank for a product that exposes none
     # unauthenticated, which makes the cassette a recall-only case. `instance_version` is the real
     # version of the captured instance, always recorded, so the file's identity is never ambiguous.
     return {"product": product, "version": version, "instance_version": version, "host": host,
@@ -92,7 +92,7 @@ def main(argv=None) -> int:
                              "the display name is not the slug, e.g. --product \"Apache Airflow\" "
                              "--slug airflow")
     parser.add_argument("--version", required=True,
-                        help="the version the scan is expected to extract, empty for a service that "
+                        help="the version the scan is expected to extract, empty for a product that "
                              "exposes none unauthenticated, which then needs an explicit --out")
     parser.add_argument("--url", required=True, help="base URL of the running instance, e.g. http://localhost:3104")
     parser.add_argument("--out", default="", help="output path, default evals/corpus/<slug>/<version>.json")

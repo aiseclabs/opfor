@@ -15,8 +15,8 @@ from opfor.scenarios.attacksurface.assets.base import ClassBundle
 from opfor.scenarios.attacksurface.assets.domain import planner
 from opfor.scenarios.attacksurface.assets.domain.fingerprint import (
     fingerprint,
-    load_services,
-    service_probe_paths,
+    load_products,
+    product_probe_paths,
 )
 from opfor.scenarios.attacksurface.assets.domain.classifiers import (
     classify_frameworks,
@@ -55,20 +55,20 @@ KNOWLEDGE = Path(__file__).resolve().parent / "knowledge"
 @dataclass(frozen=True, kw_only=True)
 class KnowledgePaths:
     """The fixed layout of the domain class's knowledge tree, resolved to absolute paths, so the
-    tree's shape lives in one contract rather than scattered `root / "fingerprints" / "services"`
+    tree's shape lives in one contract rather than scattered `root / "fingerprints" / "products"`
     conventions that drift as the tree grows. A finding file under `findings` carries both the
     model-read judgment prose and, in its frontmatter, the deterministic payloads that class
     surfaces, so a concept is one file. `fingerprints` holds the technology identification data."""
 
     root: Path
-    services: Path
+    products: Path
     frameworks: Path
     findings: Path
 
     @classmethod
     def under(cls, root: Path) -> "KnowledgePaths":
         fingerprints = root / "fingerprints"
-        return cls(root=root, services=fingerprints / "services",
+        return cls(root=root, products=fingerprints / "products",
                    frameworks=fingerprints / "frameworks", findings=root / "findings")
 
 
@@ -101,12 +101,12 @@ def assemble(*, enumerate_fn, resolve_fn, probe_fn, fetch_fn, fetch_doc_fn,
         BackupScan(fetch_fn),
         BucketScan(probe_url_fn),
     ]
-    # The per-service knowledge units identify a known service without a model call, with the
+    # The per-product knowledge units identify a known product without a model call, with the
     # exact version a version header or endpoint carries. They wrap the injected model identify
-    # seam, so the seam tries the services first and falls to the model on a miss, and a thin or
+    # seam, so the seam tries the products first and falls to the model on a miss, and a thin or
     # stale set identifies less rather than wrong. They are the class's own knowledge, loaded here
     # at assemble time. An empty set leaves the seam pure model, so a missing tree is no regression.
-    fingerprints = load_services(PATHS.services)
+    fingerprints = load_products(PATHS.products)
     if identify_fn is not None and fingerprints:
         model_identify = identify_fn
 
@@ -127,11 +127,11 @@ def assemble(*, enumerate_fn, resolve_fn, probe_fn, fetch_fn, fetch_doc_fn,
         capabilities.append(CVELookup(cve_fn))
     # The plan config is loaded here, at assemble time, not at planner import, so the content root
     # stays swappable and importing the class triggers no file IO. The probe set is composed from
-    # the owners of each path rather than one global guessed list: the services' own identification
+    # the owners of each path rather than one global guessed list: the products' own identification
     # and version endpoints, the spec-discovery locations owned by ExpandSpec, the GraphQL endpoint
     # owned by the introspector, and the disclosure files owned by the harvester.
     config = planner.load_plan_config(PATHS)
-    owned = (service_probe_paths(fingerprints) + SPEC_PROBE_PATHS
+    owned = (product_probe_paths(fingerprints) + SPEC_PROBE_PATHS
              + GRAPHQL_PROBE_PATHS + DISCLOSURE_PROBE_PATHS)
     extra_paths = tuple(p for p in owned if p not in config.probe_paths)
     if extra_paths:

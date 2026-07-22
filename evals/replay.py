@@ -26,9 +26,9 @@ from opfor.scenarios.attacksurface.assets.domain.sources.observations import (
     Response,
     TLSReport,
 )
-from opfor.scenarios.attacksurface.assets.domain.fingerprint import fingerprint, load_services
+from opfor.scenarios.attacksurface.assets.domain.fingerprint import fingerprint, load_products
 
-_TABLE = load_services(PATHS.services)
+_TABLE = load_products(PATHS.products)
 
 
 def _fingerprint_only(evidence: str) -> dict:

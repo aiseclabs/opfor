@@ -12,10 +12,10 @@ import re
 from pathlib import Path
 
 from opfor.scenarios.attacksurface.assets.domain import KNOWLEDGE
-from opfor.scenarios.attacksurface.assets.domain.fingerprint import fingerprint, load_services
+from opfor.scenarios.attacksurface.assets.domain.fingerprint import fingerprint, load_products
 from opfor.scenarios.attacksurface.assets.domain.fingerprint import Fingerprint
 
-_TABLE = load_services(KNOWLEDGE / "fingerprints" / "services")
+_TABLE = load_products(KNOWLEDGE / "fingerprints" / "products")
 
 
 def test_shipped_table_loads():
@@ -70,7 +70,7 @@ def test_a_version_capture_that_is_not_a_version_is_dropped():
 
 
 def test_a_missing_file_is_an_empty_table():
-    assert load_services(Path("/no/such/fingerprints")) == ()
+    assert load_products(Path("/no/such/fingerprints")) == ()
 
 
 def test_first_match_wins_by_table_order():

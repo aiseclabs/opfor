@@ -767,7 +767,7 @@
   "docs": {},
   "expect": {
     "positive": [
-      "service:gitlab"
+      "product:gitlab"
     ],
     "negative": []
   }

@@ -93,7 +93,7 @@
   "docs": {},
   "expect": {
     "positive": [
-      "service:airflow"
+      "product:airflow"
     ],
     "negative": []
   }

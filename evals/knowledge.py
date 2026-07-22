@@ -44,7 +44,7 @@ def _slug(text: str) -> str:
 class KnowledgeItem:
     """One claim the coverage matrix tracks, addressed by a namespaced ref a case references."""
 
-    ref: str        # service:grafana, framework:nextjs, class:<id>, clue:<id>, secret:<id>, signature:<slug>, backup:<file>
+    ref: str        # product:grafana, framework:nextjs, class:<id>, clue:<id>, secret:<id>, signature:<slug>, backup:<file>
     kind: str       # detection or judgment
     path: Path      # the knowledge file the claim lives in
 
@@ -63,8 +63,8 @@ def scan_knowledge(root: Path = KNOWLEDGE) -> dict[str, KnowledgeItem]:
                              f"{path}, rename one so refs stay flat")
         items[ref] = KnowledgeItem(ref=ref, kind=kind, path=path)
 
-    for path, _meta, _body in iter_md_docs(paths.services):
-        add(f"service:{path.stem}", DETECTION, path)
+    for path, _meta, _body in iter_md_docs(paths.products):
+        add(f"product:{path.stem}", DETECTION, path)
     for path, _meta, _body in iter_md_docs(paths.frameworks):
         add(f"framework:{path.stem}", DETECTION, path)
     # A finding file carries the class judgment ref plus the deterministic payload refs its

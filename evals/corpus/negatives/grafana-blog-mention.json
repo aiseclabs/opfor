@@ -26,7 +26,7 @@
   "expect": {
     "positive": [],
     "negative": [
-      "service:grafana"
+      "product:grafana"
     ]
   }
 }

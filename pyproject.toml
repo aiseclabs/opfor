@@ -43,6 +43,8 @@ requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
+# The wheel ships the engine only. `tests` and `evals` are repository-local development tools, the
+# backtest and its Docker capture, not runtime code, so they are deliberately left out of the build.
 include = ["opfor*"]
 
 [tool.setuptools.package-data]

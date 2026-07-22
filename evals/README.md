@@ -34,5 +34,11 @@ Fails with a nonzero exit on any regression, so it is a CI gate.
     python -m evals.capture.capture --product Grafana --version 10.4.0 --url http://localhost:3104
     docker compose -f evals/capture/grafana/docker-compose.yml down
 
-Each product has its own compose file under `evals/capture/<product>/docker-compose.yml`. Add a
-product by adding its own directory with a compose file of pinned versions and capturing each.
+Compose files are grouped by stack under `evals/capture/<stack>/docker-compose.yml`, a stack being
+the vendor or project whose products come up together. Most stacks hold one product, so the
+directory reads as the product, `grafana`, `gitlab`, `jenkins`. Some hold more than one because the
+products cannot run apart: `elastic` brings up Elasticsearch and Kibana together, since Kibana needs
+an Elasticsearch to talk to, and `apache` holds the Apache-project instances such as Airflow. Each
+capture still writes `corpus/<product>/<version>.json`, so the corpus stays keyed by product. Add a
+product by placing its instance in the matching stack directory, a new directory when it has no
+stack yet, with a compose file of pinned versions, then capturing each.

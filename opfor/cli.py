@@ -18,9 +18,12 @@ import sys
 from pathlib import Path
 
 from opfor import __version__
+from opfor.core import SEVERITIES
 from opfor.scenarios.registry import known_scenarios
 
-_SEVERITY_ORDER = ("CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO")
+# The report lists findings most-severe first, derived from the kernel's one severity vocabulary
+# rather than a second hardcoded list, so the CLI and the kernel cannot drift to opposite orders.
+_SEVERITY_ORDER = tuple(reversed(SEVERITIES))
 
 
 def _env_int(name: str, default: int) -> int:

@@ -103,4 +103,4 @@ def test_triage_judge_mints_findings_and_mutates_no_world_node():
     assert len(grounded) == len(findings)  # one finding per input, none minted, none dropped
     assert world.nodes("finding")  # the grounded finding is now materialized for reproduce
     # the scenario wires the grounder as its post-triage step
-    assert isinstance(_make().post_triage, FindingGrounder)
+    assert isinstance(_make().grounding, FindingGrounder)

@@ -63,7 +63,7 @@ def test_wildcard_base_node_is_flagged():
     from opfor.core import Node, World
     from opfor.scenarios.attacksurface.assets.domain.capabilities import EnumerateSubdomains
     from opfor.scenarios.attacksurface.assets.domain.types import DomainData
-    from opfor.scenarios.attacksurface.types import Org
+    from opfor.scenarios.attacksurface.seed import Org
 
     world = World()
     world.add(Node(id="org:x", type="org", payload=Org(name="X", domains=("example.com",))))

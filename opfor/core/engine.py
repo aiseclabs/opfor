@@ -209,13 +209,13 @@ def _run_phase(state: RunState, phase: Phase) -> Report | None:
         s.budget.charge()
         s.findings = tuple(s.scenario.triage.judge(s.world))
         s.ledger.append("triage", findings=len(s.findings))
-        if s.scenario.post_triage is not None:
+        if s.scenario.grounding is not None:
             # A deterministic step, not a judgment. It grounds findings in observed requests
             # and materializes the nodes the intrusive phases act on, so world mutation stays
             # out of triage. It returns one finding per input finding, so the count the run
             # reports is unchanged.
-            s.findings = tuple(s.scenario.post_triage.run(s.world, s.findings))
-            s.ledger.append("post_triage", findings=len(s.findings))
+            s.findings = tuple(s.scenario.grounding.run(s.world, s.findings))
+            s.ledger.append("grounding", findings=len(s.findings))
         return None
 
     if phase == Phase.CONFIRM and s.scenario.confirm is not None:

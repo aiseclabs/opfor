@@ -1,15 +1,16 @@
-"""Post-triage: a step the engine runs once after TRIAGE, before the intrusive half.
+"""Grounding: the deterministic step the engine runs once after TRIAGE, before the intrusive half.
 
 Triage judges the enriched world into findings, and that is all it does, invariant 2. Some
-scenarios then need a deterministic step that neither judges nor mints, it grounds a finding
-in a request the surface actually observed and materializes the world nodes the later phases
-act on. That is not a verdict and it is not a capability action, so it lives here as a step
-the engine runs after TRIAGE rather than inside triage or a capability.
+scenarios then need a deterministic step that neither judges nor mints, it grounds a finding in a
+request the surface actually observed and materializes the world nodes the later phases act on.
+That is not a verdict and it is not a capability action, so it lives here as a step the engine runs
+after TRIAGE rather than inside triage or a capability. It is named for what it does, grounding, not
+for when it runs, the same way `Triage` and `Confirm` name their roles.
 
-The step returns one finding per input finding, so it never mints and never drops, and the
-surface a run reports is unchanged in count. It may add nodes to the world for a later phase
-to act on. A scenario that needs no such step declares none, and the engine runs TRIAGE
-straight into the next phase.
+The step returns one finding per input finding, so it never mints and never drops, and the surface
+a run reports is unchanged in count. It may add nodes to the world for a later phase to act on. A
+scenario that needs no such step declares none, and the engine runs TRIAGE straight into the next
+phase.
 """
 
 from __future__ import annotations
@@ -20,7 +21,7 @@ from opfor.core.result import Finding
 from opfor.core.world import World
 
 
-class PostTriage(ABC):
+class Grounding(ABC):
     @abstractmethod
     def run(self, world: World, findings: tuple[Finding, ...]) -> list[Finding]:
         """Run once after TRIAGE. Return one finding per input finding, in order, annotated

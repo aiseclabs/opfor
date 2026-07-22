@@ -22,7 +22,7 @@ from dataclasses import replace
 from urllib.parse import parse_qsl, urlencode, urljoin, urlsplit
 
 from opfor.core import Finding, Node, World
-from opfor.core import PostTriage
+from opfor.core import Grounding
 from opfor.scenarios.attacksurface.lifecycle.reproduce import FindingClaim, PoCRequest
 
 _URL_RE = re.compile(r"https?://[^\s;'\"`)>]+")
@@ -48,7 +48,7 @@ def _norm_url(url: str) -> str:
     return f"{parts.scheme.lower()}://{host.lower()}{path}{query}"
 
 
-class FindingGrounder(PostTriage):
+class FindingGrounder(Grounding):
     """Ground each finding whose safe-read proof of concept names an observed GET, and no
     other, then materialize the grounded ones as world nodes for the reproduce phase."""
 

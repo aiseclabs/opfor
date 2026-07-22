@@ -17,7 +17,7 @@ from typing import Callable, Mapping
 from opfor.core.capability import Capability
 from opfor.core.confirm import Confirm
 from opfor.core.phase import Phase
-from opfor.core.post_triage import PostTriage
+from opfor.core.grounding import Grounding
 from opfor.core.rules import Planner
 from opfor.core.scope import ExactScope, ScopeMatcher
 from opfor.core.triage import Triage
@@ -37,7 +37,7 @@ class Scenario:
     # requests and materialize the nodes later phases act on. Absent when a scenario needs
     # none, then TRIAGE runs straight into the next phase. Judgment stays in triage, world
     # mutation stays here, invariant 2.
-    post_triage: PostTriage | None = None
+    grounding: Grounding | None = None
     # The confirm judge, run in the CONFIRM phase to regrade findings against the live
     # reproduction receipts. Absent when a scenario never reproduces, then CONFIRM is idle.
     confirm: Confirm | None = None

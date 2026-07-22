@@ -30,7 +30,7 @@ from opfor.scenarios.attacksurface.lifecycle.triage import SurfaceTriage
 from opfor.scenarios.attacksurface.lifecycle.confirm import ConfirmTriage
 from opfor.scenarios.attacksurface.lifecycle.grounding import FindingGrounder
 from opfor.scenarios.attacksurface.lifecycle.reproduce import ReproduceFinding, reproduce_rule
-from opfor.scenarios.attacksurface.types import Org
+from opfor.scenarios.attacksurface.seed import Org
 
 NAME = "attacksurface"
 
@@ -41,12 +41,12 @@ def _payloads() -> dict[str, type]:
     introspection rather than a hand list, so a new payload type is registered by defining it,
     not by editing this map."""
     from dataclasses import is_dataclass
-    from opfor.scenarios.attacksurface import types as surface_types
+    from opfor.scenarios.attacksurface import seed as surface_seed
     from opfor.scenarios.attacksurface.lifecycle import reproduce
     from opfor.scenarios.attacksurface.assets.domain import types as domain_types
 
     registry: dict[str, type] = {}
-    for module in (surface_types, domain_types, reproduce):
+    for module in (surface_seed, domain_types, reproduce):
         for name, obj in vars(module).items():
             if isinstance(obj, type) and is_dataclass(obj):
                 registry[name] = obj
@@ -161,7 +161,7 @@ def build(
         triage=SurfaceTriage(knowledge_dirs, provider=provider, model=model,
                              challenger=challenger, challenger_model=challenger_model,
                              judge=judge, judge_model=judge_model),
-        post_triage=FindingGrounder(),
+        grounding=FindingGrounder(),
         confirm=ConfirmTriage(provider=provider, model=model) if confirm else None,
         payloads=_payloads(),
         scope_matcher=HostScope.from_dict,

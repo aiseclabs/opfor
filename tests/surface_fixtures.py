@@ -22,7 +22,7 @@ from opfor.scenarios.attacksurface.assets.domain.sources.observations import (
     TLSReport,
 )
 from opfor.scenarios.attacksurface.hostnames import HostScope
-from opfor.scenarios.attacksurface.types import Org
+from opfor.scenarios.attacksurface.seed import Org
 
 ROOT = "example.com"
 

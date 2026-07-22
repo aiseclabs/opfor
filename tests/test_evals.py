@@ -36,6 +36,8 @@ def test_knowledge_inventory_enumerates_every_claim_by_ref_and_kind():
     assert by_ns["framework"] == 2
     assert by_ns["class"] == 19
     assert by_ns["clue"] >= 15 and by_ns["secret"] >= 5 and by_ns["signature"] >= 20
+    # a reproduction recipe is a detection claim, so it is enumerated and owes a backtest case
+    assert by_ns["repro"] >= 1
     # a finding class is judgment, its embedded detection payloads are detection, so the two
     # regimes are told apart by the ref's kind
     assert items["class:sensitive-file-exposure"].kind == JUDGMENT

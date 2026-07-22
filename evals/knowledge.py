@@ -44,7 +44,7 @@ def _slug(text: str) -> str:
 class KnowledgeItem:
     """One claim the coverage matrix tracks, addressed by a namespaced ref a case references."""
 
-    ref: str        # product:grafana, framework:nextjs, class:<id>, clue:<id>, secret:<id>, signature:<slug>, backup:<file>
+    ref: str        # product:grafana, framework:nextjs, class:<id>, clue:<id>, secret:<id>, signature:<slug>, repro:<cve>, backup:<file>
     kind: str       # detection or judgment
     path: Path      # the knowledge file the claim lives in
 
@@ -63,8 +63,14 @@ def scan_knowledge(root: Path = KNOWLEDGE) -> dict[str, KnowledgeItem]:
                              f"{path}, rename one so refs stay flat")
         items[ref] = KnowledgeItem(ref=ref, kind=kind, path=path)
 
-    for path, _meta, _body in iter_md_docs(paths.products):
+    for path, meta, _body in iter_md_docs(paths.products):
         add(f"product:{path.stem}", DETECTION, path)
+        # A product file carries its identification ref plus a reproduction ref per read-only CVE
+        # recipe its frontmatter surfaces, so both are enumerated from the one file, told apart by
+        # the ref kind, the same shape a finding file uses for its class and payload refs.
+        for repro in meta.get("reproductions") or []:
+            if repro.get("id"):
+                add(f"repro:{_slug(repro['id'])}", DETECTION, path)
     for path, _meta, _body in iter_md_docs(paths.frameworks):
         add(f"framework:{path.stem}", DETECTION, path)
     # A finding file carries the class judgment ref plus the deterministic payload refs its

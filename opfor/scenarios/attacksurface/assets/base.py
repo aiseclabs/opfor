@@ -26,13 +26,16 @@ from opfor.core import Capability
 class ClassBundle:
     """One asset class's contribution to a scenario. `map_rules` and `enrich_rules` are the
     rules the class adds to those phases, `knowledge_dir` is where its triage knowledge
-    lives, or None when the class mints only structural findings and reads no knowledge."""
+    lives, or None when the class mints only structural findings and reads no knowledge, and
+    `reproductions` are the read-only CVE reproduction recipes its knowledge carries, which the
+    scenario grounder reads to reproduce a known vulnerability."""
 
     name: str
     capabilities: tuple[Capability, ...]
     map_rules: tuple = ()
     enrich_rules: tuple = ()
     knowledge_dir: Path | None = None
+    reproductions: tuple = ()
 
 
 def class_enabled(org, name: str) -> bool:

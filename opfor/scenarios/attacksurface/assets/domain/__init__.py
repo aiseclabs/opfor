@@ -12,6 +12,7 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 
 from opfor.scenarios.attacksurface.assets.base import ClassBundle
+from opfor.scenarios.attacksurface.lifecycle.grounding import load_reproductions
 from opfor.scenarios.attacksurface.assets.domain import planner
 from opfor.scenarios.attacksurface.assets.domain.fingerprint import (
     fingerprint,
@@ -143,4 +144,5 @@ def assemble(*, enumerate_fn, resolve_fn, probe_fn, fetch_fn, fetch_doc_fn,
         enrich_rules=tuple(planner.enrich_rules(
             config, with_profile=True, with_cve=cve_fn is not None)),
         knowledge_dir=KNOWLEDGE,
+        reproductions=load_reproductions(PATHS.products),
     )

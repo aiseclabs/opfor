@@ -140,6 +140,7 @@ def build(
     map_rules = [rule for bundle in bundles for rule in bundle.map_rules]
     enrich_rules = [rule for bundle in bundles for rule in bundle.enrich_rules]
     knowledge_dirs = [bundle.knowledge_dir for bundle in bundles if bundle.knowledge_dir]
+    reproductions = tuple(r for bundle in bundles for r in bundle.reproductions)
 
     # Confirm regrades findings against the reproduction receipts, so it needs the receipts
     # the EXPLOIT phase records, so confirm implies reproduce.
@@ -161,7 +162,7 @@ def build(
         triage=SurfaceTriage(knowledge_dirs, provider=provider, model=model,
                              challenger=challenger, challenger_model=challenger_model,
                              judge=judge, judge_model=judge_model),
-        grounding=FindingGrounder(),
+        grounding=FindingGrounder(reproductions=reproductions),
         confirm=ConfirmTriage(provider=provider, model=model) if confirm else None,
         payloads=_payloads(),
         scope_matcher=HostScope.from_dict,

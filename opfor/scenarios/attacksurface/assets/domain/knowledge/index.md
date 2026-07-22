@@ -17,11 +17,12 @@ The tree:
   evidence, that evidence too, its clues, takeover signatures, secret patterns, or backup templates.
   So a concept is one file, its judgment and the detection it rests on read together, and the
   backtest scores the class by model judgment and each embedded payload by an exact match, apart.
-- `fingerprints/` deterministic technology identification, the data that names what runs a host,
-  read to identify and enrich rather than to mint a finding. `services/` open-source products
-  identified by markers, each with a version and a `cpe` that drives the CVE lookup. `frameworks/`
-  front-end frameworks detected as context tags, no version lookup. How a host is fronted, a CDN,
-  cloud, or vendor, is left to the judge, which reads the raw CNAME and headers on the surface.
+- `fingerprints/` deterministic per-product and per-framework knowledge, read to identify and enrich
+  rather than to mint a finding. `products/` open-source products identified by markers, each with a
+  version and a `cpe` that drives the CVE lookup, and the read-only reproduction recipes for the CVEs
+  that product carries. `frameworks/` front-end frameworks detected as context tags, no version
+  lookup. How a host is fronted, a CDN, cloud, or vendor, is left to the judge, which reads the raw
+  CNAME and headers on the surface.
 
 A finding file's frontmatter fields:
 
@@ -35,6 +36,12 @@ A finding file's frontmatter fields:
   never whether a finding is real.
 - `clues`, `signatures`, `secrets`, `backups` the deterministic payloads this class surfaces, when
   it has any. The planner and renderer read them, a capability never does, invariant 1.
+
+A product file's `reproductions` frontmatter is one entry per read-only reproducible CVE the product
+carries, each naming the CVE `id`, the read `method`, the request `path`, and the `expect` marker the
+confirm judge weighs. It lives with the product because it is specific to it, not with the generic
+known-vulnerability class. The grounder replays a recipe only for a CVE the lookup tied to the running
+version, only in the intrusive EXPLOIT phase, and only as a read, a capability never does, invariant 1.
 
 Every unit is meant to be backtested, so a detection marker that stops matching or a judgment class
 no case exercises is a visible gap rather than a silent one. Adding knowledge is a new or extended

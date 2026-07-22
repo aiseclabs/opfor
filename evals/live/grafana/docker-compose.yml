@@ -1,0 +1,17 @@
+# A Grafana instance at a version with a read-only reproducible CVE, for the live reproduction lane.
+#
+# Run on a machine with Docker, not in CI. Bring it up, run the lane, tear down:
+#
+#   docker compose -f evals/live/grafana/docker-compose.yml up -d
+#   python -m evals.live.run --url http://localhost:3083 --expect-cve CVE-2021-43798
+#   docker compose -f evals/live/grafana/docker-compose.yml down
+#
+# Grafana 8.3.0 carries CVE-2021-43798, an unauthenticated path-traversal file read, so its
+# reproduction recipe is a read-only GET whose response bears an /etc/passwd root: line when the
+# instance is affected. The lane identifies the version, looks its CVEs up in NVD, replays the
+# recipe under authorization, and confirms it on the live receipt.
+
+services:
+  grafana-8-3-0:
+    image: grafana/grafana:8.3.0
+    ports: ["3083:3000"]

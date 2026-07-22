@@ -18,14 +18,54 @@ finding in place, a grounded finding is a new object with the observed receipt i
 from __future__ import annotations
 
 import re
-from dataclasses import replace
+from dataclasses import dataclass, replace
+from pathlib import Path
 from urllib.parse import parse_qsl, urlencode, urljoin, urlsplit
 
-from opfor.core import Finding, Node, World
+from opfor.core import Finding, Node, World, iter_md_docs
 from opfor.core import Grounding
 from opfor.scenarios.attacksurface.lifecycle.reproduce import FindingClaim, PoCRequest
 
 _URL_RE = re.compile(r"https?://[^\s;'\"`)>]+")
+
+# The one finding class a recipe reproduces, so the grounder matches a recipe only against the
+# known-vulnerability finding that names a CVE, never against an unrelated class.
+_KNOWN_VULN = "known-vulnerability"
+# The lookup basis a recipe is allowed to fire on, the database tied the CVE to the running
+# version, so a recipe is never replayed against a product-wide or name-only match it may not
+# affect. The value mirrors the `match` tag the CVE source records.
+_VERSION_MATCH = "version"
+
+
+@dataclass(frozen=True, kw_only=True)
+class ReproductionRecipe:
+    """One CVE's recorded read-only reproduction, the exact request that demonstrates it and the
+    marker its response bears when the instance is affected. It is data read from a
+    known-vulnerability finding's frontmatter, so adding one is a knowledge change and no attack
+    decision lives in code, invariant 1."""
+
+    cve: str
+    method: str
+    path: str
+    expect: str
+
+
+def load_reproductions(directory) -> tuple[ReproductionRecipe, ...]:
+    """The reproduction recipes carried in the `reproductions` frontmatter of the product files
+    under `fingerprints/products/`, since a CVE reproduction is specific to the product it targets
+    and lives with that product's own knowledge, not with the generic judgment class. An entry with
+    no CVE id is skipped, so a malformed recipe adds nothing rather than grounding on an empty id."""
+    out: list[ReproductionRecipe] = []
+    for _path, meta, _body in iter_md_docs(Path(directory)):
+        for entry in (meta.get("reproductions") or []):
+            cve = str(entry.get("id", "")).strip()
+            if not cve:
+                continue
+            out.append(ReproductionRecipe(
+                cve=cve, method=str(entry.get("method", "GET")).strip() or "GET",
+                path=str(entry.get("path", "")).strip(),
+                expect=str(entry.get("expect", "")).strip()))
+    return tuple(out)
 
 
 def _urls_in(text: str) -> list[str]:
@@ -49,14 +89,31 @@ def _norm_url(url: str) -> str:
 
 
 class FindingGrounder(Grounding):
-    """Ground each finding whose safe-read proof of concept names an observed GET, and no
-    other, then materialize the grounded ones as world nodes for the reproduce phase."""
+    """Ground each finding on a reproducible request, then materialize the grounded ones as world
+    nodes for the reproduce phase.
+
+    A finding grounds on one of two sources. When the asset is unknown the only ground is a request
+    the surface already observed, a safe read replayed later, strict so a request no capability made
+    is never reproducible. When the asset is a known product at a version, a CVE the lookup tied to
+    that version has a recorded read-only reproduction, so the finding grounds on the recipe's
+    request directly, the request that demonstrates that CVE, without having observed it first. The
+    recipe source fires only under the intrusive EXPLOIT phase, so the default recon run replays
+    only observed reads.
+    """
+
+    def __init__(self, reproductions: tuple[ReproductionRecipe, ...] = ()) -> None:
+        # Keyed by upper-cased CVE id, so a lookup record and a recipe match regardless of case.
+        self._recipes = {r.cve.upper(): r for r in reproductions}
 
     def run(self, world: World, findings: tuple[Finding, ...]) -> list[Finding]:
         observed = self._observed_gets(world)
         out: list[Finding] = []
         for finding in findings:
+            # Prefer an observed safe read, the recon-tier ground. Fall to a recipe only when the
+            # finding names a known vulnerability whose CVE the lookup tied to the running version.
             request = self._poc_request(finding, observed)
+            if request is None:
+                request = self._recipe_request(finding, world)
             if request is None:
                 out.append(finding)
                 continue
@@ -87,6 +144,38 @@ class FindingGrounder(Grounding):
                     expect += f" {receipt['content_type']}"
                 return {"method": "GET", "url": url.strip(), "expect": expect,
                         "source": receipt["source"]}
+        return None
+
+    def _recipe_request(self, finding: Finding, world: World) -> dict | None:
+        """The recipe-sourced request for a known-vulnerability finding, or None. The finding must
+        name the known-vulnerability class, and its host must carry a CVE the lookup matched to the
+        running version, since a recipe is never replayed against a product-wide or name-only match.
+        The request url is built from the recipe path against the host's observed scheme and
+        authority, not normalized, so the traversal the recipe encodes reaches the target as written
+        rather than being collapsed away. Only the first matching CVE on a host is grounded, since a
+        finding materializes one claim node under one id."""
+        if not self._recipes or finding.data.get("kind") != _KNOWN_VULN:
+            return None
+        host = urlsplit(finding.where).hostname or finding.where.split("/", 1)[0].split(":", 1)[0]
+        node = next((n for n in world.nodes("domain") if n.payload.name == host), None)
+        if node is None:
+            return None
+        scan = world.latest("cve_scanned", node.id)
+        if scan is None or scan.payload.match != _VERSION_MATCH:
+            return None
+        http = world.latest("http", node.id)
+        base = getattr(http.payload, "url", "") if http is not None else ""
+        parts = urlsplit(base or f"https://{host}/")
+        authority = parts.netloc or host
+        for cve in scan.payload.cves:
+            recipe = self._recipes.get(cve.id.upper())
+            if recipe is None:
+                continue
+            url = f"{parts.scheme or 'https'}://{authority}{recipe.path}"
+            expect = (f"the {recipe.cve} reproduction succeeds when the response body carries "
+                      f"{recipe.expect!r}")
+            return {"method": recipe.method, "url": url, "expect": expect,
+                    "source": f"reproduction:{recipe.cve}"}
         return None
 
     def _observed_gets(self, world: World) -> dict:

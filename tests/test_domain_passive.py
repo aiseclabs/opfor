@@ -202,7 +202,7 @@ def test_certspotter_token_error_that_is_not_429_is_raised(monkeypatch):
 def test_subdomains_drops_dns_control_record_names(monkeypatch):
     # passive DNS returns control records (_dmarc, _domainkey, _acme-challenge); these are not
     # hosts and must not be admitted as probeable subdomains, a validation label unwraps to its host
-    from opfor.scenarios.attacksurface.assets.domain.sources import passive as domains
+    from opfor.scenarios.attacksurface.assets.domain.sources import enumeration as domains
 
     monkeypatch.setattr(domains, "certspotter_subdomains",
                         lambda d: {"api.example.com", "_dmarc.example.com",
@@ -217,7 +217,7 @@ def test_subdomains_drops_dns_control_record_names(monkeypatch):
 
 def test_subdomains_union_merges_the_keyless_windows(monkeypatch):
     # certificate logs and the archive have different windows, so the union is their merge
-    from opfor.scenarios.attacksurface.assets.domain.sources import passive as domains
+    from opfor.scenarios.attacksurface.assets.domain.sources import enumeration as domains
 
     monkeypatch.setattr(domains, "certspotter_subdomains", lambda d: {"cert-only.example.com"})
     monkeypatch.setattr(domains, "wayback_subdomains", lambda d: domains.Enumeration({"archived.example.com"}))
@@ -227,7 +227,7 @@ def test_subdomains_union_merges_the_keyless_windows(monkeypatch):
 
 def test_wayback_subdomains_extracts_hosts_under_the_domain(monkeypatch):
     import urllib.request
-    from opfor.scenarios.attacksurface.assets.domain.sources import passive as domains
+    from opfor.scenarios.attacksurface.assets.domain.sources import enumeration as domains
 
     rows = [["original"],
             ["https://api.example.com/v1"],
@@ -331,7 +331,7 @@ def test_certspotter_does_not_flag_truncation_when_the_cursor_runs_dry(monkeypat
 def test_certspotter_non_list_response_fails_loud(monkeypatch):
     import urllib.request
 
-    from opfor.scenarios.attacksurface.assets.domain.sources import passive
+    from opfor.scenarios.attacksurface.assets.domain.sources import enumeration
 
     class _Resp:
         def read(self, *_a):
@@ -347,7 +347,7 @@ def test_certspotter_non_list_response_fails_loud(monkeypatch):
     # a certspotter error object is a dict, not a list, and must fail loud rather than crash
     # on issuances[-1] or extend records with dict keys
     with pytest.raises(RuntimeError):
-        passive._certspotter_issuances("example.com", token=None, pages=1)
+        enumeration._certspotter_issuances("example.com", token=None, pages=1)
 
 def test_permutation_candidates_cross_pollinate_observed_labels_only():
     from opfor.scenarios.attacksurface.assets.domain.capabilities.discovery import (

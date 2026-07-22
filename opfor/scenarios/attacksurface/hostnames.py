@@ -76,6 +76,25 @@ def looks_like_host(name: str) -> bool:
     return True
 
 
+def host_from_record(name: str) -> str | None:
+    """The probeable host a DNS record name refers to, or None when it names no host. A leading
+    validation label such as an ACM `_<hash>` wraps a real host and is unwrapped, a wildcard base
+    such as *.dev.example.com is the host dev.example.com, and a control record such as a `_dmarc`
+    or `_domainkey` name is dropped, since it is not a probeable host. Shared by the passive
+    enumeration union and the seed-file loaders, so both apply the one filter."""
+    if not name or name.startswith("#"):
+        return None
+    labels = name.lstrip("*.").split(".")
+    if labels and labels[0].startswith("_"):
+        labels = labels[1:]                       # unwrap a leading validation label
+    if any(label.startswith("_") for label in labels):
+        return None                               # a control record, not a host
+    host = ".".join(labels)
+    if len(labels) < 2 or not looks_like_host(host):
+        return None
+    return host
+
+
 def _normalize_host(name: str) -> str:
     """A host reduced to its canonical comparison form, lowercased with surrounding whitespace
     and a trailing root dot removed. A hostname is case-insensitive and `example.com.` names the

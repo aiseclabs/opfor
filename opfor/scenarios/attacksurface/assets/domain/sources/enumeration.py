@@ -1,22 +1,21 @@
-"""Domain-class passive sources: certificate transparency, passive DNS, cves.
+"""Domain-class passive enumeration: subdomains and paths from public indexes.
 
-All standard library, no installed tool. Certificate transparency names hosts from a public
-log without touching the target, an osint read. Every source here is a public read that
-never touches the target, and each is an injected seam, so a test drives the scenario with
-fixtures. The HTTP transport these leans on lives in `http`, imported rather than duplicated.
+All standard library, no installed tool. Certificate transparency, passive DNS, and the Wayback
+archive name hosts and paths from public sources without touching the target, an osint read. Each
+source is an injected seam, so a test drives the scenario with fixtures, and each is best effort so
+one dead source does not blind the rest. The HTTP transport these lean on lives in `http`, imported
+rather than duplicated.
 """
 
 from __future__ import annotations
 
 import json
-import threading
-import time
 import urllib.error
 import urllib.parse
 import urllib.request
 
 from opfor.scenarios.attacksurface import config
-from opfor.scenarios.attacksurface.hostnames import looks_like_host, registrable_root
+from opfor.scenarios.attacksurface.hostnames import host_from_record, looks_like_host
 from opfor.scenarios.attacksurface.assets.domain.sources.dns import _JSON_LIMIT, _TIMEOUT, _UA
 from opfor.scenarios.attacksurface.assets.domain.sources.parsers import same_host_path
 
@@ -81,10 +80,10 @@ def subdomains(domain: str) -> Enumeration:
     if not names and len(errors) == len(sources):
         raise RuntimeError("all passive subdomain sources failed: " + ", ".join(errors))
     # Passive DNS sources return DNS control-record names too, `_dmarc`, `_domainkey`, an ACME
-    # `_acme-challenge` label. These are not hosts, so `_host_from_record` unwraps a leading
+    # `_acme-challenge` label. These are not hosts, so `host_from_record` unwraps a leading
     # validation label to the host it protects and drops a pure control record, the same filter
     # the DNS-export path applies, so a `_dmarc` name is never admitted as a probeable subdomain.
-    hosts = {host for name in names if (host := _host_from_record(name)) is not None}
+    hosts = {host for name in names if (host := host_from_record(name)) is not None}
     union = Enumeration(hosts)
     union.truncated = truncated
     # A source that failed while others answered is a blind spot, so the errors ride the
@@ -292,173 +291,8 @@ def subdomains_from_dnsdumpster(data, domain: str) -> set[str]:
     return names
 
 
-# --- known vulnerabilities: cves for an identified product version -------
+# --- wayback archive: hosts and paths from a public crawl index -------------
 
-_NVD_TIMEOUT = 30
-_NVD_MAX = 25
-_NVD_MAX_REFS = 3
-# NVD rate-limits by address, about one request per six seconds without a key and far more
-# with one. The scan runs many hosts concurrently, so a process-wide throttle serializes
-# NVD calls to stay under the limit rather than bursting into a 429. See `_nvd_wait`.
-_NVD_INTERVAL_KEYLESS = 6.0
-_NVD_INTERVAL_KEYED = 1.0
-_NVD_RETRIES = 3
-_NVD_LOCK = threading.Lock()
-_nvd_next = [0.0]
-
-
-def _nvd_wait(interval: float) -> None:
-    """Block until at least `interval` seconds have passed since the last NVD call, across
-    all threads, so concurrent scans do not burst past the rate limit."""
-    with _NVD_LOCK:
-        now = time.monotonic()
-        wait = _nvd_next[0] - now
-        if wait > 0:
-            time.sleep(wait)
-        _nvd_next[0] = time.monotonic() + interval
-
-
-def nvd_cves(product: str, version: str, cpe: str = "") -> list[dict]:
-    """CVEs affecting a product from the NVD 2.0 API, most a bounded page.
-
-    Each returned record carries a `match` tag naming how it was found, so triage weighs how
-    precisely it applies rather than trusting a bare list, the honest way past a product-name
-    match read as a version match. Three bases, strongest first:
-
-    - `version`, a cpe match with the running version, so the database tied the cve to the
-      affected-version range. The model supplies the cpe when it knows the product.
-    - `product`, a cpe match without a version, so the list is the product's whole history,
-      not filtered to what is running.
-    - `keyword`, a fallback text search on the product name when the cpe match named nothing,
-      a wrong vendor guess or a cve not tagged with the cpe, so a real advisory is not missed.
-      It never uses the version, since NVD keyword search matches the cve description text and
-      a version string almost never appears there.
-
-    Whether a returned cve applies and how severe is triage's judgment, this seam reports the
-    raw records and the basis. Querying NVD is a public read that never touches the target,
-    keyless by default and higher-rate with a key.
-    """
-    if not product:
-        return []
-    if cpe:
-        version_field = version or "*"
-        match = urllib.parse.quote(f"cpe:2.3:a:{cpe}:{version_field}:*:*:*:*:*:*:*", safe="")
-        results = _nvd_fetch(f"virtualMatchString={match}")
-        if results:
-            return _tag_match(results, "version" if version else "product")
-    return _tag_match(_nvd_fetch(f"keywordSearch={urllib.parse.quote(product)}"), "keyword")
-
-
-def _tag_match(results: list[dict], basis: str) -> list[dict]:
-    """Tag each cve record with the basis on which the lookup matched it."""
-    for record in results:
-        record["match"] = basis
-    return results
-
-
-def _nvd_fetch(query: str) -> list[dict]:
-    """One NVD 2.0 query, throttled and retried, returning the parsed CVE records. The
-    process-wide throttle serializes concurrent scans under the rate limit, and a 429 is
-    retried with a back-off that honors a Retry-After header before it is raised loud."""
-    headers = {"User-Agent": _UA, "Accept": "application/json"}
-    key = config.nvd_api_key()
-    if key:
-        headers["apiKey"] = key
-    url = f"https://services.nvd.nist.gov/rest/json/cves/2.0?{query}&resultsPerPage={_NVD_MAX}"
-    request = urllib.request.Request(url, headers=headers)
-    interval = _NVD_INTERVAL_KEYED if key else _NVD_INTERVAL_KEYLESS
-    for attempt in range(_NVD_RETRIES):
-        _nvd_wait(interval)
-        try:
-            with urllib.request.urlopen(request, timeout=_NVD_TIMEOUT) as resp:
-                data = json.loads(resp.read(_JSON_LIMIT).decode("utf-8", "replace"))
-            return cves_from_nvd(data)
-        except urllib.error.HTTPError as exc:
-            if exc.code != 429 or attempt == _NVD_RETRIES - 1:
-                raise
-            retry_after = exc.headers.get("Retry-After") if exc.headers else None
-            time.sleep(float(retry_after) if retry_after and retry_after.isdigit() else interval * (attempt + 2))
-    return []
-
-
-def cves_from_nvd(data) -> list[dict]:
-    """The id, CVSS score, severity, and summary of each CVE in an NVD 2.0 reply, parsed
-    apart from the fetch so a test drives it without a network call."""
-    out: list[dict] = []
-    for item in data.get("vulnerabilities") or []:
-        cve = item.get("cve") or {}
-        cid = str(cve.get("id") or "")
-        if not cid:
-            continue
-        score, severity = _nvd_score(cve.get("metrics") or {})
-        descriptions = cve.get("descriptions") or []
-        summary = next((str(d.get("value", "")) for d in descriptions if d.get("lang") == "en"), "")
-        references = [str(r.get("url", "")) for r in (cve.get("references") or []) if r.get("url")]
-        out.append({"id": cid, "cvss": score, "severity": severity, "summary": summary[:300],
-                    "references": references[:_NVD_MAX_REFS]})
-    return out
-
-
-def _nvd_score(metrics) -> tuple:
-    """The base score and severity from the strongest CVSS metric an NVD entry carries,
-    preferring v3.1 over v3.0 over v2."""
-    for key in ("cvssMetricV31", "cvssMetricV30", "cvssMetricV2"):
-        entries = metrics.get(key) or []
-        if entries:
-            cvss = entries[0].get("cvssData") or {}
-            severity = str(cvss.get("baseSeverity") or entries[0].get("baseSeverity") or "")
-            return (cvss.get("baseScore"), severity)
-    return (None, "")
-
-
-def hosts_from_file(path: str) -> tuple[str, ...]:
-    """Read known hosts from a newline-delimited DNS export, normalized to probeable names.
-
-    This is the DNS-export path that closes the wildcard blind spot, the operator supplies
-    the hosts a wildcard certificate hides from passive discovery. A blank line or a `#`
-    comment is skipped. A wildcard base such as *.dev.example.com is the real host dev.example.com.
-    A leading validation label such as the `_<hash>` an ACM record uses wraps a real host,
-    so it is unwrapped. A name with a control label elsewhere, such as a `_domainkey` DKIM
-    record, is not a probeable host and is dropped. The result is sorted and deduplicated."""
-    hosts: set[str] = set()
-    with open(path, encoding="utf-8") as handle:
-        for line in handle:
-            host = _host_from_record(line.strip().lower().rstrip("."))
-            if host:
-                hosts.add(host)
-    return tuple(sorted(hosts))
-
-
-def roots_from_file(path: str) -> tuple[str, ...]:
-    """Read root domains from a newline-delimited file, each reduced to its registrable
-    root and deduplicated. A subdomain such as www.example.com folds to example.com, so a list
-    that mixes roots and hosts still yields clean roots. Normalization matches
-    `hosts_from_file`, a blank or comment line and a control record are skipped."""
-    roots: set[str] = set()
-    with open(path, encoding="utf-8") as handle:
-        for line in handle:
-            host = _host_from_record(line.strip().lower().rstrip("."))
-            if host:
-                roots.add(registrable_root(host))
-    return tuple(sorted(roots))
-
-
-def _host_from_record(name: str) -> str | None:
-    """The probeable host a DNS record name refers to, or None when it names no host."""
-    if not name or name.startswith("#"):
-        return None
-    labels = name.lstrip("*.").split(".")
-    if labels and labels[0].startswith("_"):
-        labels = labels[1:]                       # unwrap a leading validation label
-    if any(label.startswith("_") for label in labels):
-        return None                               # a control record, not a host
-    host = ".".join(labels)
-    if len(labels) < 2 or not looks_like_host(host):
-        return None
-    return host
-
-
-# --- certificate SAN pivot: sibling roots that share a certificate ----------
 
 def wayback_subdomains(domain: str) -> Enumeration:
     """Subdomains of a domain seen in the Wayback Machine CDX index, a passive read.

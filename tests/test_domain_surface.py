@@ -93,7 +93,7 @@ def test_total_resolution_failure_reports_incomplete_not_dangling():
 def test_subdomain_enumeration_partial_failure_surfaces_a_coverage_gap():
     from opfor.core import Done, Task
     from opfor.scenarios.attacksurface.assets.domain.capabilities.discovery import EnumerateSubdomains
-    from opfor.scenarios.attacksurface.assets.domain.sources.passive import Enumeration
+    from opfor.scenarios.attacksurface.assets.domain.sources.enumeration import Enumeration
     from opfor.scenarios.attacksurface.assets.domain.types import DomainData
 
     world = World()

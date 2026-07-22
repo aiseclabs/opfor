@@ -694,5 +694,11 @@
       "reason": ""
     }
   },
-  "docs": {}
+  "docs": {},
+  "expect": {
+    "positive": [
+      "service:jenkins"
+    ],
+    "negative": []
+  }
 }

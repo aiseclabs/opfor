@@ -3,7 +3,13 @@
   "version": "",
   "host": "plain.test",
   "note": "a generic nginx welcome page, it runs none of the fingerprinted products",
-  "resolved": {"resolvable": true, "addresses": ["127.0.0.1"], "cnames": []},
+  "resolved": {
+    "resolvable": true,
+    "addresses": [
+      "127.0.0.1"
+    ],
+    "cnames": []
+  },
   "root": {
     "alive": true,
     "status": 200,
@@ -16,5 +22,9 @@
     "reason": ""
   },
   "fetch": {},
-  "docs": {}
+  "docs": {},
+  "expect": {
+    "positive": [],
+    "negative": []
+  }
 }

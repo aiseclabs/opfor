@@ -90,5 +90,11 @@
       "reason": ""
     }
   },
-  "docs": {}
+  "docs": {},
+  "expect": {
+    "positive": [
+      "service:airflow"
+    ],
+    "negative": []
+  }
 }

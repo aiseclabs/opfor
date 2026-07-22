@@ -126,5 +126,11 @@
       "reason": ""
     }
   },
-  "docs": {}
+  "docs": {},
+  "expect": {
+    "positive": [
+      "service:kibana"
+    ],
+    "negative": []
+  }
 }

@@ -700,5 +700,11 @@
       "reason": ""
     }
   },
-  "docs": {}
+  "docs": {},
+  "expect": {
+    "positive": [
+      "service:grafana"
+    ],
+    "negative": []
+  }
 }

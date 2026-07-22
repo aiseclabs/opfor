@@ -48,6 +48,37 @@ def test_knowledge_inventory_enumerates_every_claim_by_ref_and_kind():
     assert "detections" in items["clue:exposed-git"].path.parts
 
 
+def test_coverage_matrix_counts_cases_per_claim_and_flags_gaps():
+    from evals.knowledge import coverage_matrix, coverage_problems
+
+    cov = coverage_matrix()
+    # the grafana service has both a positive cassette and a negative that must not fire it, so it
+    # is the one fully covered claim, its precision guarded
+    assert cov["service:grafana"].positive >= 1 and cov["service:grafana"].negative >= 1
+    assert cov["service:grafana"].covered
+    # a service with a positive cassette but no negative is not covered, precision is unguarded
+    assert cov["service:jenkins"].positive >= 1 and cov["service:jenkins"].negative == 0
+    assert not cov["service:jenkins"].covered
+    # a claim no case exercises is uncovered, so it is a visible gap
+    assert cov["clue:exposed-git"].positive == 0 and not cov["clue:exposed-git"].covered
+
+    problems = coverage_problems()
+    kinds = {p.kind for p in problems}
+    assert "missing-positive" in kinds and "missing-negative" in kinds and "missing-case" in kinds
+    # every judgment class with no case is reported, so an unexercised class is not silent
+    assert any(p.kind == "missing-case" and p.ref == "class:cors-misconfiguration" for p in problems)
+
+
+def test_coverage_flags_a_case_label_that_names_no_knowledge(tmp_path):
+    from evals.knowledge import coverage_problems
+
+    (tmp_path / "bogus.json").write_text(
+        '{"expect": {"positive": ["service:does-not-exist"], "negative": []}}', encoding="utf-8")
+    problems = coverage_problems(corpus=tmp_path)
+    # a case naming a ref no knowledge defines is a stale or misspelt label, caught loud
+    assert any(p.kind == "unresolved-reference" and "does-not-exist" in p.ref for p in problems)
+
+
 def test_gate_blocks_an_empty_corpus():
     # an empty corpus scores a vacuous 100% recall and version accuracy, so the gate must not
     # let it pass as clean, it has to fail for want of a real sample

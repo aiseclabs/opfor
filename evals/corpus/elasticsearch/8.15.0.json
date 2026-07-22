@@ -286,5 +286,11 @@
       "reason": ""
     }
   },
-  "docs": {}
+  "docs": {},
+  "expect": {
+    "positive": [
+      "service:elasticsearch"
+    ],
+    "negative": []
+  }
 }

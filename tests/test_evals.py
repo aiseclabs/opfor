@@ -23,6 +23,28 @@ def test_a_page_that_only_mentions_a_product_is_not_identified_as_it():
     assert prof is None or prof.product == ""
 
 
+def test_knowledge_inventory_enumerates_every_claim_by_ref_and_kind():
+    from evals.knowledge import DETECTION, JUDGMENT, scan_knowledge
+
+    items = scan_knowledge()
+    by_ns: dict[str, int] = {}
+    for ref in items:
+        by_ns[ref.split(":", 1)[0]] = by_ns.get(ref.split(":", 1)[0], 0) + 1
+    # every knowledge namespace is enumerated, so a new detection or judgment unit that ships
+    # without a backtest shows up as an uncovered ref rather than being invisible
+    assert by_ns["service"] == 6
+    assert by_ns["framework"] == 2
+    assert by_ns["edge"] == 3
+    assert by_ns["class"] == 18
+    assert by_ns["clue"] >= 15 and by_ns["secret"] >= 5 and by_ns["signature"] >= 20
+    # a finding class is judgment, its embedded detection payloads are detection, so the two
+    # regimes are told apart by the ref's kind
+    assert items["class:sensitive-file-exposure"].kind == JUDGMENT
+    assert items["clue:exposed-git"].kind == DETECTION
+    # the clue and the class live in the same file, the bundle, but are distinct refs
+    assert items["clue:exposed-git"].path == items["class:sensitive-file-exposure"].path
+
+
 def test_gate_blocks_an_empty_corpus():
     # an empty corpus scores a vacuous 100% recall and version accuracy, so the gate must not
     # let it pass as clean, it has to fail for want of a real sample

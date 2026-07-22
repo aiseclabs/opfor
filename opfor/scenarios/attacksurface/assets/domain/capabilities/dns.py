@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from opfor.core import Capability, Done, Fact, Outcome, Phase, Task, World
-from opfor.scenarios.attacksurface.assets.domain.capabilities.failures import _coverage_gap, net_failed
+from opfor.scenarios.attacksurface.assets.domain.failures import _coverage_gap, net_failed
 from opfor.scenarios.attacksurface.assets.domain.types import DNSEmailPosture, Resolved
 
 
@@ -41,7 +41,7 @@ class ResolveDomain(Capability):
         return Done(facts=(Fact(kind="resolved", about=task.node, payload=payload),))
 
 
-class DNSEmailSecurity(Capability):
+class ProbeDNSEmailPosture(Capability):
     """ENRICH: read a registrable root's email-authentication and DNS-integrity posture.
 
     It reads public DNS only, SPF and DMARC TXT records, CAA records, and the resolver's

@@ -14,7 +14,7 @@ class Budget:
         self.max_steps = max_steps
         self.steps = 0
 
-    def ok(self) -> bool:
+    def has_steps(self) -> bool:
         return self.steps < self.max_steps
 
     def charge(self, n: int = 1) -> None:

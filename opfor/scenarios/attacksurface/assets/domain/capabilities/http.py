@@ -5,12 +5,12 @@ from __future__ import annotations
 from urllib.parse import urlparse
 
 from opfor.core import Capability, Done, Fact, Node, Outcome, Phase, Task, World
-from opfor.scenarios.attacksurface.assets.domain.capabilities.failures import (
+from opfor.scenarios.attacksurface.assets.domain.failures import (
     _coverage_gap,
     _safe,
     net_failed,
 )
-from opfor.scenarios.attacksurface.assets.domain.capabilities.responses import (
+from opfor.scenarios.attacksurface.assets.domain.responses import (
     _baseline,
     _distinct,
     _home_paths,
@@ -212,7 +212,7 @@ class PermutePaths(Capability):
         return Done(facts=tuple(facts))
 
 
-class Endpoints(Capability):
+class ProbeEndpoints(Capability):
     """ENRICH: probe a host's candidate interface paths, recording which need no auth.
 
     The candidates are the knowledge list the planner hands in plus everything harvested

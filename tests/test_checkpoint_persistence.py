@@ -7,7 +7,7 @@ crash-recovery path the in-memory state cannot serve.
 
 from __future__ import annotations
 
-from opfor.core import Budget, Checkpoint, Node, Scope, World, restore, resume_run, run
+from opfor.core import Budget, Checkpoint, Node, Scope, World, restore, resume_checkpoint, run
 from opfor.core.result import CLOSED, SUSPENDED
 from opfor.scenarios.mock import MOCK
 
@@ -42,6 +42,6 @@ def test_a_suspended_run_keeps_a_checkpoint_that_restores_and_closes(tmp_path):
     state = restore(Checkpoint.from_json(ckpt.read_text(encoding="utf-8")), MOCK)
     state.checkpoint_path = ckpt
     state.budget.max_steps = 100
-    closed = resume_run(state)
+    closed = resume_checkpoint(state)
     assert closed.closed and closed.status == CLOSED
     assert not ckpt.exists()  # the resumed run closed, so it removed the checkpoint

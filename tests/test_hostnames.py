@@ -1,6 +1,6 @@
 """Hostname primitives and the scenario scope matcher: registrable roots, host-shape checks,
 and the HostScope suffix rule. These are the seam between asset classes, so they are tested apart
-from the DNS, HTTP, and TLS transport in test_domain_transport.
+from the DNS, HTTP, and TLS transport in test_domain_dns, test_domain_http, and test_domain_tls.
 """
 
 from __future__ import annotations

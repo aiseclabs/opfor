@@ -60,7 +60,7 @@ class ExactScope:
 
 
 @dataclass(frozen=True, kw_only=True)
-class Decision:
+class ScopeDecision:
     allowed: bool
     reason: str
 
@@ -87,15 +87,15 @@ class Scope:
         self.matcher: ScopeMatcher = matcher if matcher is not None else ExactScope()
         self.authorized = authorized
 
-    def authorize(self, tier: str, *, osint: bool, target: str | None = None) -> Decision:
+    def authorize(self, tier: str, *, osint: bool, target: str | None = None) -> ScopeDecision:
         if osint and tier_rank(tier) == 0:
-            return Decision(allowed=True, reason="passive osint")
+            return ScopeDecision(allowed=True, reason="passive osint")
         if target is None:
-            return Decision(allowed=False, reason="task names no target")
+            return ScopeDecision(allowed=False, reason="task names no target")
         if not self.matcher.in_scope(target):
-            return Decision(allowed=False, reason=f"target out of scope: {target!r}")
+            return ScopeDecision(allowed=False, reason=f"target out of scope: {target!r}")
         if tier_rank(tier) > tier_rank(self.max_tier):
-            return Decision(allowed=False, reason=f"tier {tier} exceeds ceiling {self.max_tier}")
+            return ScopeDecision(allowed=False, reason=f"tier {tier} exceeds ceiling {self.max_tier}")
         if tier_rank(tier) >= _INTRUSIVE and not self.authorized:
-            return Decision(allowed=False, reason="intrusive tier requires explicit authorization")
-        return Decision(allowed=True, reason="in scope")
+            return ScopeDecision(allowed=False, reason="intrusive tier requires explicit authorization")
+        return ScopeDecision(allowed=True, reason="in scope")

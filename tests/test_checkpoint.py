@@ -9,7 +9,7 @@ serialized, dropped, rebuilt from JSON, and resumed to closure, the cross-proces
 from __future__ import annotations
 
 from opfor.core import (Budget, Checkpoint, Fact, Node, Phase, Scope, World, checkpoint, restore,
-                        resume, run)
+                        resume_async, run)
 from opfor.core.engine import RunState
 from opfor.scenarios.attacksurface.hostnames import HostScope
 from opfor.core.ledger import Ledger
@@ -118,6 +118,6 @@ def test_durable_checkpoint_resumes_across_a_simulated_process_restart():
     # process would, then feed the async result back and drive it to closure
     blob = checkpoint(report.state).to_json()
     revived = restore(Checkpoint.from_json(blob), _async_scenario())
-    closed = resume(revived, {"h1": (Fact(kind="callback", about="root:1"),)})
+    closed = resume_async(revived, {"h1": (Fact(kind="callback", about="root:1"),)})
     assert closed.closed and closed.status == CLOSED
     assert revived.world.has_fact("root:1", "callback")

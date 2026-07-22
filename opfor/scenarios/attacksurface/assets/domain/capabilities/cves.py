@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from opfor.core import Capability, Done, Fact, Outcome, Phase, Task, World
 from opfor.scenarios.attacksurface.assets.domain.types import CVE, CVEScan
-from opfor.scenarios.attacksurface.assets.domain.capabilities.failures import net_failed
+from opfor.scenarios.attacksurface.assets.domain.failures import net_failed
 
 
 class CVELookup(Capability):

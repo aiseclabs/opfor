@@ -1,6 +1,6 @@
 """Durable checkpoint: serialize a suspended run to JSON and restore it in a later process.
 
-`engine.resume` continues a suspended run from a live `RunState`, in one process. A durable
+`engine.resume_async` continues a suspended run from a live `RunState`, in one process. A durable
 checkpoint takes that further. It serializes the run to JSON so a run parked on an async
 result can be resumed after a restart or on another worker, the phishing "hours later" path
 across process boundaries. The checkpoint carries the world, the phase, the done and pending

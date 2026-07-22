@@ -49,7 +49,7 @@ def _env_float(name: str, default: float) -> float:
 
 
 def _run(args) -> int:
-    from opfor.core import Budget, Checkpoint, restore, resume_run
+    from opfor.core import Budget, Checkpoint, restore, resume_checkpoint
     from opfor.core.engine import run as engine_run
     from opfor.scenarios.registry import run_adapter
 
@@ -84,7 +84,7 @@ def _run(args) -> int:
         # that stopped it and suspends again at once. Already-spent steps still count against it.
         state.budget.max_steps = args.budget
         world = state.world
-        report = resume_run(state)
+        report = resume_checkpoint(state)
     else:
         # The directory must exist before the run so the first checkpoint can be written. A
         # directory it cannot make disables checkpointing rather than failing the run.

@@ -12,7 +12,7 @@ from opfor.core.budget import Budget
 from opfor.core.capability import Capability, Done, Failed, Later, Outcome, Task
 from opfor.core.checkpoint import Checkpoint, checkpoint, restore
 from opfor.core.confirm import Confirm
-from opfor.core.engine import RunState, resume, resume_run, run
+from opfor.core.engine import RunState, resume_async, resume_checkpoint, run
 from opfor.core.json_parse import extract_json_object, require_json_object
 from opfor.core.ledger import Event, Ledger
 from opfor.core.markdown_docs import iter_md_docs, parse_frontmatter
@@ -22,7 +22,7 @@ from opfor.core.providers import CompletionResult, Message, MockProvider, Provid
 from opfor.core.result import Finding, Report
 from opfor.core.rules import Planner, Rule, RuleSet, each
 from opfor.core.scenario import Scenario
-from opfor.core.scope import Decision, ExactScope, Scope, ScopeMatcher
+from opfor.core.scope import ScopeDecision, ExactScope, Scope, ScopeMatcher
 from opfor.core.severity import SEVERITIES
 from opfor.core.triage import Triage
 from opfor.core.world import Fact, Node, World
@@ -33,7 +33,7 @@ __all__ = [
     "Checkpoint",
     "CompletionResult",
     "Confirm",
-    "Decision",
+    "ScopeDecision",
     "Done",
     "Event",
     "Fact",
@@ -69,7 +69,7 @@ __all__ = [
     "parse_frontmatter",
     "require_json_object",
     "restore",
-    "resume",
-    "resume_run",
+    "resume_async",
+    "resume_checkpoint",
     "run",
 ]

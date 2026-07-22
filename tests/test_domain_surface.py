@@ -60,7 +60,7 @@ def test_inventory_hosts_enter_the_surface_as_enriched_leaves():
 
 def test_wildcard_base_node_is_flagged():
     from opfor.core import Node, World
-    from opfor.scenarios.attacksurface.assets.domain.capabilities import Subdomains
+    from opfor.scenarios.attacksurface.assets.domain.capabilities import EnumerateSubdomains
     from opfor.scenarios.attacksurface.assets.domain.types import DomainData
     from opfor.scenarios.attacksurface.types import Org
 
@@ -68,7 +68,7 @@ def test_wildcard_base_node_is_flagged():
     world.add(Node(id="org:x", type="org", payload=Org(name="X", domains=("example.com",))))
     world.add(Node(id="domain:example.com", type="domain",
                    payload=DomainData(name="example.com", root="example.com", source="hint")))
-    cap = Subdomains(lambda root: {"*.dev.example.com", "api.example.com"})
+    cap = EnumerateSubdomains(lambda root: {"*.dev.example.com", "api.example.com"})
     from opfor.core import Task
     outcome = cap.run(Task(capability="domain_subdomains", node="domain:example.com"), world)
     nodes = {n.payload.name: n.payload for n in outcome.facts[0].yields}
@@ -91,7 +91,7 @@ def test_total_resolution_failure_reports_incomplete_not_dangling():
 
 def test_subdomain_enumeration_partial_failure_surfaces_a_coverage_gap():
     from opfor.core import Done, Task
-    from opfor.scenarios.attacksurface.assets.domain.capabilities.discovery import Subdomains
+    from opfor.scenarios.attacksurface.assets.domain.capabilities.discovery import EnumerateSubdomains
     from opfor.scenarios.attacksurface.assets.domain.sources.passive import Enumeration
     from opfor.scenarios.attacksurface.assets.domain.types import DomainData
 
@@ -105,7 +105,7 @@ def test_subdomain_enumeration_partial_failure_surfaces_a_coverage_gap():
         found.source_count = 3
         return found
 
-    outcome = Subdomains(enumerate_fn).run(
+    outcome = EnumerateSubdomains(enumerate_fn).run(
         Task(capability="domain_subdomains", node="domain:example.com"), world)
     assert isinstance(outcome, Done)
     # a source that failed while others answered is surfaced as a coverage gap, so the

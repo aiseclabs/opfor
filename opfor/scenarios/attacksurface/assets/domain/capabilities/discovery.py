@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from opfor.core import Capability, Done, Fact, Node, Outcome, Phase, Task, World
 from opfor.scenarios.attacksurface.hostnames import looks_like_host, registrable_root
-from opfor.scenarios.attacksurface.assets.domain.capabilities.failures import _coverage_gap, net_failed
+from opfor.scenarios.attacksurface.assets.domain.failures import _coverage_gap, net_failed
 from opfor.scenarios.attacksurface.assets.domain.types import CoverageGap, DomainData
 
 
@@ -42,7 +42,7 @@ class DiscoverDomains(Capability):
         return Done(facts=(Fact(kind="domains_discovered", about=task.node, yields=roots + hosts),))
 
 
-class Subdomains(Capability):
+class EnumerateSubdomains(Capability):
     """MAP: passively discovered subdomains of a root, as new domain nodes.
 
     The source is a union of public passive sources, certificate transparency and a

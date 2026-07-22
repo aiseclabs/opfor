@@ -8,11 +8,11 @@
 # Run on a machine with Docker, not in CI. Bring the versions up, capture each, tear down:
 #
 #   docker compose -f evals/capture/elastic/docker-compose.yml up -d
-#   python -m evals.capture.capture --product Elasticsearch --version 8.15.0 --url http://localhost:9215
-#   python -m evals.capture.capture --product Kibana        --version 8.15.0 --url http://localhost:5615
+#   python -m evals.capture.record --product Elasticsearch --version 8.15.0 --url http://localhost:9215
+#   python -m evals.capture.record --product Kibana        --version 8.15.0 --url http://localhost:5615
 #   docker compose -f evals/capture/elastic/docker-compose.yml down -v
 #
-# Each capture probes the instance exactly as opfor would and writes evals/corpus/<product>/<version>.json.
+# Each capture probes the instance exactly as opfor would and writes evals/corpus/<slug>/<version>.json.
 
 services:
   elasticsearch-8-15:

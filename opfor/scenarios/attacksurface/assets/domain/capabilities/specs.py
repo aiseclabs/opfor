@@ -6,9 +6,9 @@ import json
 from urllib.parse import urlparse
 
 from opfor.core import Capability, Done, Fact, Failed, Outcome, Phase, Task, World
-from opfor.scenarios.attacksurface.assets.domain.capabilities.failures import _coverage_gap, net_failed
-from opfor.scenarios.attacksurface.assets.domain.capabilities.responses import _baseline, _distinct
-from opfor.scenarios.attacksurface.assets.domain.capabilities.http import Endpoints
+from opfor.scenarios.attacksurface.assets.domain.failures import _coverage_gap, net_failed
+from opfor.scenarios.attacksurface.assets.domain.responses import _baseline, _distinct
+from opfor.scenarios.attacksurface.assets.domain.capabilities.http import ProbeEndpoints
 from opfor.scenarios.attacksurface.assets.domain.sources import (
     info_from_openapi,
     operations_from_introspection,
@@ -109,7 +109,7 @@ class ProbeSpec(Capability):
         endpoint = world.node(task.node).payload
         host = urlparse(endpoint.url).hostname or ""
         addresses = self._addresses(world, host)
-        baseline = _baseline(self._fetch, Endpoints._BASELINE_PATHS, host, addresses)
+        baseline = _baseline(self._fetch, ProbeEndpoints._BASELINE_PATHS, host, addresses)
         operations: list[SpecOperation] = []
         for entry in list(spec.payload.paths)[: self._MAX_OPERATIONS]:
             methods, path = split_operation(entry)
@@ -154,7 +154,7 @@ class ProbeSpec(Capability):
         if total > self._MAX_OPERATIONS:
             # The audit is capped, so the tail of a large spec is unprobed. Record why rather than
             # let a run close with declared operations silently unverified, the same capped-scan
-            # disclosure ExpandSpec and Endpoints make, invariant 5.
+            # disclosure ExpandSpec and ProbeEndpoints make, invariant 5.
             gap = _coverage_gap("spec_probe", host, total - self._MAX_OPERATIONS,
                                 [f"only the first {self._MAX_OPERATIONS} of {total} declared operations were probed"])
             if gap is not None:

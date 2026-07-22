@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from opfor.core import (Budget, Capability, Fact, Later, Node, Phase, RuleSet, Scenario, Scope,
-                        Task, Triage, World, resume, run)
+                        Task, Triage, World, resume_async, run)
 from opfor.core.result import CLOSED, ERRORED, SUSPENDED
 from opfor.scenarios.mock import MOCK
 
@@ -134,7 +134,7 @@ def test_resume_feeds_the_async_result_back_and_closes_the_run():
     assert report.status == SUSPENDED
 
     # the async result arrives later and is fed back through its handle, unblocking the run
-    closed = resume(report.state, {"h1": (Fact(kind="callback", about="root:1"),)})
+    closed = resume_async(report.state, {"h1": (Fact(kind="callback", about="root:1"),)})
     assert closed.closed
     assert closed.status == CLOSED
     assert closed.reached == Phase.TRIAGE
@@ -147,7 +147,7 @@ def test_resume_with_an_unknown_handle_is_loud_not_silent():
     report = run(_async_scenario(), world, scope=Scope(max_tier="recon"), budget=Budget(100))
     # a result for a handle no task is parked under is recorded, never silently dropped, and
     # the still-pending real handle keeps the run suspended
-    again = resume(report.state, {"ghost": (Fact(kind="callback", about="root:1"),)})
+    again = resume_async(report.state, {"ghost": (Fact(kind="callback", about="root:1"),)})
     assert again.status == SUSPENDED
     assert any("ghost" in n for n in again.notes)
     assert again.pending == ("h1",)
@@ -159,7 +159,7 @@ def test_resume_with_no_facts_is_a_loud_failure_not_a_clean_completion():
     report = run(_async_scenario(), world, scope=Scope(max_tier="recon"), budget=Budget(100))
     # an async callback that returns no facts is a failed completion, so it is recorded loud
     # rather than absorbed as clean: the callback fact never lands and the failure is in the notes
-    done = resume(report.state, {"h1": ()})
+    done = resume_async(report.state, {"h1": ()})
     assert not world.has_fact("root:1", "callback")
     assert any("no facts" in n and "async_probe" in n for n in done.notes)
 
@@ -199,7 +199,7 @@ def test_a_budget_suspension_carries_resumable_state_and_continues_when_topped_u
     assert report.state.resume_from == Phase.MAP
     # the operator raises the ceiling and resumes, the run picks up and closes
     report.state.budget.max_steps = 100
-    closed = resume(report.state, {})
+    closed = resume_async(report.state, {})
     assert closed.closed
     assert closed.reached == Phase.TRIAGE
     assert len(world.nodes("widget")) == 3
@@ -219,7 +219,7 @@ def test_budget_running_out_on_parked_async_keeps_the_resume_point_and_names_the
     assert report.state.resume_from == Phase.MAP
     # top up and deliver the async result, the run resumes in MAP and closes
     report.state.budget.max_steps = 100
-    closed = resume(report.state, {"h1": (Fact(kind="callback", about="root:1"),)})
+    closed = resume_async(report.state, {"h1": (Fact(kind="callback", about="root:1"),)})
     assert closed.closed
     assert world.has_fact("root:1", "callback")
 

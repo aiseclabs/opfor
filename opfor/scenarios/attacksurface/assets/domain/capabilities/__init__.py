@@ -9,14 +9,14 @@ from opfor.scenarios.attacksurface.assets.domain.capabilities.cves import CVELoo
 from opfor.scenarios.attacksurface.assets.domain.capabilities.discovery import (
     DiscoverDomains,
     PermuteSubdomains,
-    Subdomains,
+    EnumerateSubdomains,
 )
 from opfor.scenarios.attacksurface.assets.domain.capabilities.dns import (
-    DNSEmailSecurity,
+    ProbeDNSEmailPosture,
     ResolveDomain,
 )
 from opfor.scenarios.attacksurface.assets.domain.capabilities.http import (
-    Endpoints,
+    ProbeEndpoints,
     HarvestPaths,
     HTTPDomain,
     PermutePaths,
@@ -28,15 +28,15 @@ from opfor.scenarios.attacksurface.assets.domain.capabilities.specs import (
     ProbeSpec,
 )
 from opfor.scenarios.attacksurface.assets.domain.capabilities.storage import BucketScan
-from opfor.scenarios.attacksurface.assets.domain.capabilities.tls import TLSSecurity
+from opfor.scenarios.attacksurface.assets.domain.capabilities.tls import ProbeTLSPosture
 
 __all__ = [
     "BackupScan",
     "BucketScan",
     "CVELookup",
     "DiscoverDomains",
-    "DNSEmailSecurity",
-    "Endpoints",
+    "ProbeDNSEmailPosture",
+    "ProbeEndpoints",
     "ExpandSpec",
     "GraphQLIntrospect",
     "HarvestPaths",
@@ -48,6 +48,6 @@ __all__ = [
     "ResolveDomain",
     "SecretScan",
     "SourceMapScan",
-    "Subdomains",
-    "TLSSecurity",
+    "EnumerateSubdomains",
+    "ProbeTLSPosture",
 ]

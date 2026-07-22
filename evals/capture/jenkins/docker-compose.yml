@@ -3,7 +3,7 @@
 # Run on a machine with Docker, not in CI. Bring the versions up, capture each, tear down:
 #
 #   docker compose -f evals/capture/jenkins/docker-compose.yml up -d
-#   python -m evals.capture.capture --product Jenkins --version 2.462.3 --url http://localhost:8462
+#   python -m evals.capture.record --product Jenkins --version 2.462.3 --url http://localhost:8462
 #   docker compose -f evals/capture/jenkins/docker-compose.yml down
 #
 # Each capture probes the instance exactly as opfor would and writes evals/corpus/jenkins/<version>.json.

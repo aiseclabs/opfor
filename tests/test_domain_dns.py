@@ -146,7 +146,7 @@ def test_dns_email_posture_reads_spf_dmarc_caa_and_dnssec(monkeypatch):
 
 def test_dns_email_capability_reports_records_and_fails_loud_on_error():
     from opfor.core import Done, Failed, Node, Task, World
-    from opfor.scenarios.attacksurface.assets.domain.capabilities.dns import DNSEmailSecurity
+    from opfor.scenarios.attacksurface.assets.domain.capabilities.dns import ProbeDNSEmailPosture
     from opfor.scenarios.attacksurface.assets.domain.types import DomainData
 
     world = World()
@@ -154,7 +154,7 @@ def test_dns_email_capability_reports_records_and_fails_loud_on_error():
                    payload=DomainData(name="example.com", root="example.com", source="hint")))
     task = Task(capability="dns_email", node="domain:example.com")
 
-    ok = DNSEmailSecurity(lambda d: {"spf": ("v=spf1 -all",), "dmarc": "", "caa": (), "dnssec": True})
+    ok = ProbeDNSEmailPosture(lambda d: {"spf": ("v=spf1 -all",), "dmarc": "", "caa": (), "dnssec": True})
     out = ok.run(task, world)
     assert isinstance(out, Done)
     assert out.facts[0].payload.spf == ("v=spf1 -all",)
@@ -164,4 +164,4 @@ def test_dns_email_capability_reports_records_and_fails_loud_on_error():
         raise RuntimeError("dns down")
 
     # a lookup that fails is a loud Failed, never a silent clean absence of records
-    assert isinstance(DNSEmailSecurity(boom).run(task, world), Failed)
+    assert isinstance(ProbeDNSEmailPosture(boom).run(task, world), Failed)

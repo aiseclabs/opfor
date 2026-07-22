@@ -86,7 +86,7 @@ def test_endpoint_probe_records_a_coverage_gap_on_a_transport_failure_not_only_a
 
 def test_endpoint_probe_reports_truncation_when_the_candidate_cap_is_hit():
     from opfor.core import Done, Task
-    from opfor.scenarios.attacksurface.assets.domain.capabilities.http import Endpoints
+    from opfor.scenarios.attacksurface.assets.domain.capabilities.http import ProbeEndpoints
     from opfor.scenarios.attacksurface.assets.domain.types import DomainData
 
     world = World()
@@ -97,7 +97,7 @@ def test_endpoint_probe_reports_truncation_when_the_candidate_cap_is_hit():
         return {"status": 404, "url": f"https://{name}{path}", "content_type": "",
                 "server": "", "title": "", "body": "", "location": ""}
 
-    outcome = Endpoints(fetch).run(
+    outcome = ProbeEndpoints(fetch).run(
         Task(capability="domain_endpoints", node="domain:h", params={"paths": paths}), world)
     assert isinstance(outcome, Done)
     gaps = [f.payload for f in outcome.facts if f.kind == "coverage_gap"]
@@ -106,7 +106,7 @@ def test_endpoint_probe_reports_truncation_when_the_candidate_cap_is_hit():
 
 def test_endpoint_probe_flags_when_the_baseline_cannot_be_established():
     from opfor.core import Done, Task
-    from opfor.scenarios.attacksurface.assets.domain.capabilities.http import Endpoints
+    from opfor.scenarios.attacksurface.assets.domain.capabilities.http import ProbeEndpoints
     from opfor.scenarios.attacksurface.assets.domain.types import DomainData
 
     world = World()
@@ -120,7 +120,7 @@ def test_endpoint_probe_flags_when_the_baseline_cannot_be_established():
         return {"status": None, "url": f"https://{name}{path}", "content_type": "",
                 "server": "", "title": "", "body": "", "location": ""}
 
-    outcome = Endpoints(fetch).run(
+    outcome = ProbeEndpoints(fetch).run(
         Task(capability="domain_endpoints", node="domain:h", params={"paths": ["/real"]}), world)
     assert isinstance(outcome, Done)
     gaps = [f.payload for f in outcome.facts if f.kind == "coverage_gap"]
@@ -128,7 +128,7 @@ def test_endpoint_probe_flags_when_the_baseline_cannot_be_established():
     assert gaps and any("baseline" in r for r in gaps[0].reasons)
 
 def test_distinct_treats_a_differing_redirect_location_as_a_real_endpoint():
-    from opfor.scenarios.attacksurface.assets.domain.capabilities.responses import _distinct
+    from opfor.scenarios.attacksurface.assets.domain.responses import _distinct
     # a host that answers a blanket 302 to /login for unknown paths still hides a real /admin
     # that redirects to its own dashboard, so a differing location is distinct
     baseline = {"status": 302, "location": "https://h/login", "content_type": "", "body": ""}
@@ -138,7 +138,7 @@ def test_distinct_treats_a_differing_redirect_location_as_a_real_endpoint():
     assert _distinct(other, baseline) is True
 
 def test_distinct_ignores_a_path_echoing_login_redirect_query():
-    from opfor.scenarios.attacksurface.assets.domain.capabilities.responses import _distinct
+    from opfor.scenarios.attacksurface.assets.domain.responses import _distinct
     # a login wall that echoes the requested path in ?next= gives every path a different raw
     # location, but it is one catch-all, so not distinct
     baseline = {"status": 302, "location": "https://h/login?next=/x", "content_type": "", "body": ""}

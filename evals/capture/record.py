@@ -6,7 +6,7 @@ scenario probes, and records the responses in the same shape opfor's seams retur
 offline backtest replays them faithfully. Only responses that answered with a status are kept,
 a path that 404s is the replay default, so a cassette stays small.
 
-    python -m evals.capture.capture --product Grafana --version 10.4.0 --url http://localhost:3104
+    python -m evals.capture.record --product Grafana --version 10.4.0 --url http://localhost:3104
 
 It reaches a live container, so it needs network and Docker, and is never run in CI. The offline
 backtest that consumes the cassette needs neither.
@@ -21,8 +21,6 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 from urllib.parse import urlsplit
-
-import yaml
 
 from opfor.scenarios.attacksurface.assets.domain import KNOWLEDGE
 from opfor.scenarios.attacksurface.assets.domain.fingerprint import load_services, service_probe_paths
@@ -54,15 +52,10 @@ def _get(url: str) -> dict | None:
 
 
 def _paths() -> list[str]:
-    """The exact path set opfor probes, the generic `paths.yaml` plus the services' own version
-    endpoints, so a service versioned only at an endpoint such as `/api/status` is captured. A
-    capture that read only `paths.yaml` would silently miss those endpoints, invariant 5."""
-    data = yaml.safe_load((KNOWLEDGE / "paths.yaml").read_text(encoding="utf-8")) or {}
-    paths = [str(p) for p in (data.get("paths") or []) if str(p).startswith("/")]
-    for endpoint in service_probe_paths(load_services(KNOWLEDGE / "technologies" / "services")):
-        if endpoint not in paths:
-            paths.append(endpoint)
-    return paths
+    """The exact path set opfor probes for a service, the services' own version endpoints, so a
+    service versioned only at an endpoint such as `/api/status` is captured. A capture that skipped
+    these would silently miss those endpoints, invariant 5."""
+    return list(service_probe_paths(load_services(KNOWLEDGE / "technologies" / "services")))
 
 
 def capture(product: str, version: str, url: str) -> dict:
@@ -90,20 +83,27 @@ def capture(product: str, version: str, url: str) -> dict:
 
 
 def main(argv=None) -> int:
-    parser = argparse.ArgumentParser(prog="evals.capture.capture")
-    parser.add_argument("--product", required=True)
+    parser = argparse.ArgumentParser(prog="evals.capture.record")
+    parser.add_argument("--product", required=True,
+                        help="the product display name stored in the cassette, which must match "
+                             "what the fingerprint identifies, e.g. \"Apache Airflow\"")
+    parser.add_argument("--slug", default="",
+                        help="the corpus directory, default the product lowercased. Name it when "
+                             "the display name is not the slug, e.g. --product \"Apache Airflow\" "
+                             "--slug airflow")
     parser.add_argument("--version", required=True,
                         help="the version the scan is expected to extract, empty for a service that "
                              "exposes none unauthenticated, which then needs an explicit --out")
     parser.add_argument("--url", required=True, help="base URL of the running instance, e.g. http://localhost:3104")
-    parser.add_argument("--out", default="", help="output path, default evals/corpus/<product>/<version>.json")
+    parser.add_argument("--out", default="", help="output path, default evals/corpus/<slug>/<version>.json")
     args = parser.parse_args(argv)
 
     if not args.version and not args.out:
         parser.error("a version-less capture records no scored version, so name the cassette with --out")
     cassette = capture(args.product, args.version, args.url)
+    slug = args.slug or args.product.lower()
     out = Path(args.out) if args.out else (
-        Path(__file__).resolve().parent.parent / "corpus" / args.product.lower() / f"{args.version}.json")
+        Path(__file__).resolve().parent.parent / "corpus" / slug / f"{args.version}.json")
     # A version-less capture carries no scored version, so its real instance version comes from the
     # cassette name, keeping the file's identity unambiguous even when nothing is scored.
     cassette["instance_version"] = args.version or out.stem

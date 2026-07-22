@@ -13,7 +13,7 @@ import threading
 import time
 from concurrent.futures import Future
 
-from opfor.core.providers.base import CompletionResult, Message, Provider
+from opfor.core.providers.contract import CompletionResult, Message, Provider
 
 
 class RetryProvider(Provider):

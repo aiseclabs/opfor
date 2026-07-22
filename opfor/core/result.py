@@ -72,7 +72,7 @@ class Report:
     # The async handles a suspended run is waiting on, the keys to feed results back through.
     pending: tuple[str, ...] = ()
     # The resumable state of a suspended run, live objects rather than a serialized checkpoint,
-    # so `engine.resume` continues it in process. None on a closed or errored run.
+    # so `engine.resume_async` continues it in process. None on a closed or errored run.
     state: "RunState | None" = None
 
     @property

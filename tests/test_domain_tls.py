@@ -69,7 +69,7 @@ def test_tls_probe_is_a_clean_not_reachable_when_the_port_does_not_answer(monkey
 
 def test_tls_capability_reports_posture_and_fails_loud_on_error():
     from opfor.core import Done, Failed, Node, Task, World
-    from opfor.scenarios.attacksurface.assets.domain.capabilities.tls import TLSSecurity
+    from opfor.scenarios.attacksurface.assets.domain.capabilities.tls import ProbeTLSPosture
     from opfor.scenarios.attacksurface.assets.domain.types import DomainData
 
     world = World()
@@ -77,7 +77,7 @@ def test_tls_capability_reports_posture_and_fails_loud_on_error():
                    payload=DomainData(name="h.example.com", root="example.com", source="hint")))
     task = Task(capability="tls", node="domain:h.example.com", scope_target="h.example.com")
 
-    ok = TLSSecurity(lambda n, a: {"reachable": True, "valid": False,
+    ok = ProbeTLSPosture(lambda n, a: {"reachable": True, "valid": False,
                                    "validity_error": "certificate has expired"})
     out = ok.run(task, world)
     assert isinstance(out, Done)
@@ -87,4 +87,4 @@ def test_tls_capability_reports_posture_and_fails_loud_on_error():
     def boom(name, addresses):
         raise RuntimeError("tls down")
 
-    assert isinstance(TLSSecurity(boom).run(task, world), Failed)
+    assert isinstance(ProbeTLSPosture(boom).run(task, world), Failed)

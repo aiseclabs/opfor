@@ -11,7 +11,7 @@ from __future__ import annotations
 import re
 
 from opfor.scenarios.attacksurface.assets.domain import KNOWLEDGE
-from opfor.scenarios.attacksurface.assets.domain.profile import (
+from opfor.scenarios.attacksurface.assets.domain.classifiers import (
     classify_frameworks,
     load_frameworks,
 )

@@ -13,7 +13,7 @@ environment, see `.env.example`.
 
 from __future__ import annotations
 
-from opfor.core.providers.base import CompletionResult, Message, Provider
+from opfor.core.providers.contract import CompletionResult, Message, Provider
 from opfor.core.providers.factory import ProviderConfig, make_provider
 from opfor.core.providers.mock import MockProvider
 

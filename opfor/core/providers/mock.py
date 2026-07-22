@@ -9,7 +9,7 @@ supplies too few responses fails loud instead of masking a missing stub, invaria
 
 from __future__ import annotations
 
-from opfor.core.providers.base import CompletionResult, Message, Provider, require_completion_text
+from opfor.core.providers.contract import CompletionResult, Message, Provider, require_completion_text
 
 
 class MockProvider(Provider):

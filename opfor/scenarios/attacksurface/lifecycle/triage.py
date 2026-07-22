@@ -29,7 +29,7 @@ from urllib.parse import urlparse
 
 from opfor.core import Finding, Message, Provider, SEVERITIES, Triage, World, iter_md_docs
 from opfor.core.json_parse import require_json_object
-from opfor.scenarios.attacksurface.lifecycle import structural
+from opfor.scenarios.attacksurface.lifecycle import completeness
 from opfor.scenarios.attacksurface.render import SurfaceRenderer
 
 SYSTEM = (
@@ -182,7 +182,7 @@ class SurfaceTriage(Triage):
         self._judge_model = judge_model or model
         # The judgment knowledge lives with the asset classes that own it, so triage reads
         # each class's directory and unions the classes, clues, and takeover signatures. A
-        # class that mints only structural findings declares no directory and is absent here.
+        # class that mints only completeness findings declares no directory and is absent here.
         # Fronting and framework classification moved to the profiling capability, which records
         # them in the host_profile fact the renderer reads, so triage no longer loads those tables.
         self._classes = []
@@ -199,14 +199,14 @@ class SurfaceTriage(Triage):
 
     def judge(self, world: World) -> list[Finding]:
         findings: list[Finding] = []
-        # The structural findings live in `structural`, each a deterministic completeness or
+        # The completeness findings live in `completeness`, each a deterministic inventory or
         # inventory rule rather than a semantic verdict, so the judge here stays about the
         # model call. The resolution caveat is control flow, not one of the set, since it also
         # short-circuits the model pass when the resolver is down.
-        for rule in structural.STRUCTURAL:
+        for rule in completeness.COMPLETENESS:
             findings.extend(rule(world))
 
-        caveat = structural.resolution_caveat(world)
+        caveat = completeness.resolution_caveat(world)
         if caveat is not None:
             # The resolver is down, so probing and dangling results are unreliable. Say so
             # and do not ask the model to judge a surface the run could not fairly reach.

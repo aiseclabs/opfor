@@ -1,11 +1,11 @@
-"""The structural findings triage mints outside the model.
+"""The completeness findings triage mints outside the model.
 
 Each is a deterministic run-completeness or inventory rule, not a semantic verdict, so it
 stays in code rather than in the model pass. Gathering them here keeps the set of what triage
 mints without asking the model auditable at a glance, and keeps the triage judge itself about
 the model call. Every function takes the world and returns findings, holding no state.
 
-`STRUCTURAL` is the inventory and coverage set the judge runs unconditionally.
+`COMPLETENESS` is the inventory and coverage set the judge runs unconditionally.
 `resolution_caveat` is separate, since it also short-circuits the model pass when the resolver
 is down, so the judge treats it as control flow rather than one more rule in the set.
 """
@@ -114,4 +114,4 @@ def resolution_caveat(world: World) -> Finding | None:
 
 # The inventory and coverage rules the judge runs unconditionally. Named here so the set of
 # what triage mints outside the model is auditable in one place.
-STRUCTURAL = (wildcards, truncated, coverage_gaps)
+COMPLETENESS = (wildcards, truncated, coverage_gaps)

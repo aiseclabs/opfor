@@ -15,7 +15,7 @@ world.
 
 A run suspended on an async result does not lose its place. The loop drives a `RunState`,
 the world, ledger, budget, the tasks already done, the tasks parked under a handle, and the
-phase it stopped in. On suspend the state rides the report, and `resume` feeds the async
+phase it stopped in. On suspend the state rides the report, and `resume_async` feeds the async
 results back through their handles and drives the same state onward. So the phishing "hours
 later" path resumes the run rather than restarting it, closing the suspend and resume
 invariant rather than only its first half.
@@ -88,7 +88,7 @@ def run(
 
     When `checkpoint_path` is set the run saves its state there as it advances, so a crash resumes
     from the last save rather than from SEED. The file is removed on a clean close and kept on a
-    suspend, so `resume_run` can pick it up.
+    suspend, so `resume_checkpoint` can pick it up.
     """
     ledger = ledger or Ledger()
     ledger.append("run_start", scenario=scenario.name, terminal=scenario.terminal.name)
@@ -103,13 +103,13 @@ def run(
     return _drive(state)
 
 
-def resume_run(state: RunState) -> Report:
+def resume_checkpoint(state: RunState) -> Report:
     """Continue a run restored from a durable checkpoint, to closure or suspension.
 
-    This is the crash-recovery path, distinct from `resume`, which feeds async results. Here the
+    This is the crash-recovery path, distinct from `resume_async`, which feeds async results. Here the
     state was rebuilt from a saved checkpoint and simply driven onward from the phase it recorded.
     """
-    state.ledger.append("resume_run", reached=state.reached.name)
+    state.ledger.append("resume_checkpoint", reached=state.reached.name)
     return _drive(state)
 
 
@@ -129,7 +129,7 @@ def _save(state: RunState, phase: Phase) -> None:
     os.replace(tmp, path)
 
 
-def resume(state: RunState, results: dict[str, Iterable[Fact]]) -> Report:
+def resume_async(state: RunState, results: dict[str, Iterable[Fact]]) -> Report:
     """Feed async results back through their handles and drive the suspended run onward.
 
     `results` maps a handle the report named as pending to the facts its async work produced,
@@ -145,7 +145,7 @@ def resume(state: RunState, results: dict[str, Iterable[Fact]]) -> Report:
         task = state.pending.pop(handle, None)
         facts = tuple(raw)
         if task is None:
-            state.notes.append(f"resume: no parked task for handle {handle!r}")
+            state.notes.append(f"resume_async: no parked task for handle {handle!r}")
             state.ledger.append("resume_unknown", handle=handle)
             continue
         if not facts:
@@ -157,7 +157,7 @@ def resume(state: RunState, results: dict[str, Iterable[Fact]]) -> Report:
             continue
         state.world.absorb(facts)
         state.done.add(task.id)
-        state.ledger.append("resume", handle=handle, task=task.id, facts=len(facts))
+        state.ledger.append("resume_async", handle=handle, task=task.id, facts=len(facts))
     return _drive(state)
 
 
@@ -229,7 +229,7 @@ def _run_phase(state: RunState, phase: Phase) -> Report | None:
         return None
 
     while True:
-        if not s.budget.ok():
+        if not s.budget.has_steps():
             s.notes.append(f"budget exhausted in {phase.name}")
             if s.pending:
                 s.notes.append(f"awaiting async results: {len(s.pending)}")

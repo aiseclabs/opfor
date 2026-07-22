@@ -4,10 +4,10 @@
 # to serve the unauthenticated sign-in page a scan sees. Run on a machine with Docker, not in CI:
 #
 #   docker compose -f evals/capture/apache/docker-compose.yml up -d
-#   python -m evals.capture.capture --product Airflow --version 2.9.3 --url http://localhost:8181
+#   python -m evals.capture.record --product "Apache Airflow" --slug airflow --version 2.9.3 --url http://localhost:8181
 #   docker compose -f evals/capture/apache/docker-compose.yml down -v
 #
-# Each capture probes the instance exactly as opfor would and writes evals/corpus/<product>/<version>.json.
+# Each capture probes the instance exactly as opfor would and writes evals/corpus/<slug>/<version>.json.
 
 services:
   airflow-2-9:

@@ -18,7 +18,7 @@ from opfor.scenarios.attacksurface.assets.domain.fingerprint import (
     load_services,
     service_probe_paths,
 )
-from opfor.scenarios.attacksurface.assets.domain.profile import (
+from opfor.scenarios.attacksurface.assets.domain.classifiers import (
     classify_frameworks,
     classify_edge,
     load_frameworks,
@@ -34,8 +34,8 @@ from opfor.scenarios.attacksurface.assets.domain.capabilities import (
     BucketScan,
     CVELookup,
     DiscoverDomains,
-    DNSEmailSecurity,
-    Endpoints,
+    ProbeDNSEmailPosture,
+    ProbeEndpoints,
     PermuteSubdomains,
     ExpandSpec,
     GraphQLIntrospect,
@@ -47,8 +47,8 @@ from opfor.scenarios.attacksurface.assets.domain.capabilities import (
     ResolveDomain,
     SecretScan,
     SourceMapScan,
-    Subdomains,
-    TLSSecurity,
+    EnumerateSubdomains,
+    ProbeTLSPosture,
 )
 
 KNOWLEDGE = Path(__file__).resolve().parent / "knowledge"
@@ -63,15 +63,15 @@ def assemble(*, enumerate_fn, resolve_fn, probe_fn, fetch_fn, fetch_doc_fn,
     when its lookup seam is wired."""
     capabilities = [
         DiscoverDomains(),
-        Subdomains(enumerate_fn),
+        EnumerateSubdomains(enumerate_fn),
         PermuteSubdomains(resolve_fn),
         ResolveDomain(resolve_fn),
-        DNSEmailSecurity(dns_fn),
+        ProbeDNSEmailPosture(dns_fn),
         HTTPDomain(probe_fn),
-        TLSSecurity(tls_fn),
+        ProbeTLSPosture(tls_fn),
         HarvestPaths(fetch_fn, fetch_doc_fn, wayback_fn),
         PermutePaths(),
-        Endpoints(fetch_fn),
+        ProbeEndpoints(fetch_fn),
         ExpandSpec(fetch_doc_fn),
         ProbeSpec(fetch_fn),
         GraphQLIntrospect(introspect_fn),

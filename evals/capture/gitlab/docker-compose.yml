@@ -4,7 +4,7 @@
 # capturing. Run on a machine with Docker, not in CI:
 #
 #   docker compose -f evals/capture/gitlab/docker-compose.yml up -d
-#   python -m evals.capture.capture --product GitLab --version 16.11.10 --url http://localhost:8929
+#   python -m evals.capture.record --product GitLab --version 16.11.10 --url http://localhost:8929
 #   docker compose -f evals/capture/gitlab/docker-compose.yml down -v
 #
 # Each capture probes the instance exactly as opfor would and writes evals/corpus/gitlab/<version>.json.

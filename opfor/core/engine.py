@@ -95,7 +95,8 @@ def run(
     # Author the run's authorization envelope, the tier ceiling and whether intrusive acts
     # were signed off, so the ledger alone proves what the run was allowed to do, not only
     # what it later denied.
-    ledger.append("authorization", max_tier=scope.max_tier, authorized=scope.authorized)
+    ledger.append("authorization", max_tier=scope.max_tier, authorized=scope.authorized,
+                  exploit_authorized=scope.exploit_authorized)
     state = RunState(scenario=scenario, world=world, scope=scope, budget=budget,
                      ledger=ledger, max_workers=max_workers, max_retries=max_retries,
                      task_timeout=task_timeout, retry_backoff=retry_backoff,

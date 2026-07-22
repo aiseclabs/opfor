@@ -182,7 +182,8 @@ def checkpoint(state, *, resume_from: Phase | None = None) -> Checkpoint:
         pending={handle: _task_to_dict(task) for handle, task in state.pending.items()},
         budget={"max_steps": state.budget.max_steps, "steps": state.budget.steps},
         scope={"max_tier": state.scope.max_tier, "matcher": state.scope.matcher.to_dict(),
-               "authorized": state.scope.authorized},
+               "authorized": state.scope.authorized,
+               "exploit_authorized": state.scope.exploit_authorized},
         notes=tuple(state.notes),
         ledger=[{"kind": e.kind, "fields": e.fields} for e in state.ledger.events()],
         findings=[_finding_to_dict(f) for f in state.findings],
@@ -225,7 +226,8 @@ def restore(cp: Checkpoint, scenario: Scenario):
     # The matcher rule lives in the scenario, so the scenario rebuilds it from the stored data.
     scope = Scope(max_tier=cp.scope["max_tier"],
                   matcher=scenario.scope_matcher(cp.scope["matcher"]),
-                  authorized=cp.scope["authorized"])
+                  authorized=cp.scope["authorized"],
+                  exploit_authorized=cp.scope.get("exploit_authorized", False))
 
     pending = {handle: Task(capability=t["capability"], node=t["node"], params=t["params"],
                             scope_target=t["scope_target"])

@@ -4,8 +4,11 @@ Every task is authorized before it runs. A passive recon-tier lookup of a public
 waved through as osint. Anything else must name a target the scenario's matcher places in
 scope, and must not exceed the campaign's tier ceiling. The intrusive tier additionally
 requires an explicit, recorded authorization, so the engine can run on its own yet only ever
-send a payload inside a deliberate envelope a human declared. An unauthorized task fails loud,
-the loop never silently proceeds.
+send a payload inside a deliberate envelope a human declared. The exploit tier, a state
+changing act such as a write or an injected payload beyond a safe read, requires a separate
+and stronger authorization, so authorizing a read-only reproduction never implies consent to
+change the target's state. Exploit consent implies intrusive consent, since it is the broader
+envelope. An unauthorized task fails loud, the loop never silently proceeds.
 
 The kernel judges the tier and the intrusive envelope, both generic. Whether a target is in
 scope is the scenario's rule, since what a target even is, a host, an account, a person, is
@@ -19,8 +22,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Mapping, Protocol, runtime_checkable
 
-TIERS = ("recon", "intrusive")
+TIERS = ("recon", "intrusive", "exploit")
 _INTRUSIVE = TIERS.index("intrusive")
+_EXPLOIT = TIERS.index("exploit")
 
 
 def tier_rank(tier: str) -> int:
@@ -71,6 +75,11 @@ class Scope:
     `osint` marks a capability as a passive read of a public source, so a recon-tier osint task
     needs no per-target authorization. Every other task is denied unless its target is in scope
     by the matcher and its tier is within the ceiling.
+
+    `authorized` is the intrusive envelope. `exploit_authorized` is the stronger, separate
+    consent a state-changing exploit tier task needs, and it implies the intrusive envelope, so
+    a run set up to exploit may also run a read-only reproduction, but a run authorized only for
+    the intrusive tier can never fire a state-changing exploit.
     """
 
     def __init__(
@@ -79,6 +88,7 @@ class Scope:
         max_tier: str = "recon",
         matcher: ScopeMatcher | None = None,
         authorized: bool = False,
+        exploit_authorized: bool = False,
     ) -> None:
         tier_rank(max_tier)
         self.max_tier = max_tier
@@ -86,6 +96,7 @@ class Scope:
         # osint, the mock reference for one, wires no matcher and every non-osint task is denied.
         self.matcher: ScopeMatcher = matcher if matcher is not None else ExactScope()
         self.authorized = authorized
+        self.exploit_authorized = exploit_authorized
 
     def authorize(self, tier: str, *, osint: bool, target: str | None = None) -> ScopeDecision:
         if osint and tier_rank(tier) == 0:
@@ -94,8 +105,14 @@ class Scope:
             return ScopeDecision(allowed=False, reason="task names no target")
         if not self.matcher.in_scope(target):
             return ScopeDecision(allowed=False, reason=f"target out of scope: {target!r}")
-        if tier_rank(tier) > tier_rank(self.max_tier):
+        rank = tier_rank(tier)
+        if rank > tier_rank(self.max_tier):
             return ScopeDecision(allowed=False, reason=f"tier {tier} exceeds ceiling {self.max_tier}")
-        if tier_rank(tier) >= _INTRUSIVE and not self.authorized:
+        if rank >= _EXPLOIT and not self.exploit_authorized:
+            return ScopeDecision(
+                allowed=False,
+                reason="exploit tier requires explicit state-changing authorization")
+        # Exploit consent is the broader envelope, so it also satisfies the intrusive gate.
+        if rank >= _INTRUSIVE and not (self.authorized or self.exploit_authorized):
             return ScopeDecision(allowed=False, reason="intrusive tier requires explicit authorization")
         return ScopeDecision(allowed=True, reason="in scope")

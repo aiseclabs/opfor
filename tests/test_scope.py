@@ -64,6 +64,32 @@ def test_intrusive_tier_requires_explicit_authorization():
         "intrusive", osint=False, target="example.com").allowed
 
 
+def test_exploit_tier_needs_its_own_authorization_not_the_intrusive_one():
+    # the safety crux: authorizing a read-only reproduction, the intrusive envelope, must never
+    # imply consent to change the target's state, so an intrusive-authorized run is denied exploit
+    matcher = ExactScope(("example.com",))
+    intrusive_only = Scope(max_tier="exploit", matcher=matcher, authorized=True)
+    assert not intrusive_only.authorize("exploit", osint=False, target="example.com").allowed
+    exploiting = Scope(max_tier="exploit", matcher=matcher, exploit_authorized=True)
+    assert exploiting.authorize("exploit", osint=False, target="example.com").allowed
+
+
+def test_exploit_authorization_implies_the_intrusive_envelope():
+    # exploit consent is the broader envelope, so a run set up to exploit may also run the
+    # read-only intrusive reproduction, no separate intrusive flag needed
+    matcher = ExactScope(("example.com",))
+    exploiting = Scope(max_tier="exploit", matcher=matcher, exploit_authorized=True)
+    assert exploiting.authorize("intrusive", osint=False, target="example.com").allowed
+
+
+def test_the_ceiling_binds_exploit_independently_of_authorization():
+    # even with state-changing consent, an intrusive ceiling forbids an exploit task, so the
+    # ceiling and the authorization are two independent gates, both required
+    matcher = ExactScope(("example.com",))
+    capped = Scope(max_tier="intrusive", matcher=matcher, exploit_authorized=True)
+    assert not capped.authorize("exploit", osint=False, target="example.com").allowed
+
+
 def test_an_unknown_tier_fails_loud_rather_than_widening_scope():
     import pytest
 

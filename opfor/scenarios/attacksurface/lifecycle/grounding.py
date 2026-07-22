@@ -172,8 +172,8 @@ class FindingGrounder(Grounding):
             if recipe is None:
                 continue
             url = f"{parts.scheme or 'https'}://{authority}{recipe.path}"
-            expect = (f"the {recipe.cve} reproduction succeeds when the response body carries "
-                      f"{recipe.expect!r}")
+            expect = (f"the {recipe.cve} reproduction is confirmed when the live response "
+                      f"satisfies: {recipe.expect}")
             return {"method": recipe.method, "url": url, "expect": expect,
                     "source": f"reproduction:{recipe.cve}"}
         return None

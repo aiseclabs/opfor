@@ -27,6 +27,7 @@ from pathlib import Path
 
 from opfor.core.markdown_docs import iter_md_docs
 from opfor.scenarios.attacksurface.assets.domain import KNOWLEDGE, KnowledgePaths
+from opfor.scenarios.attacksurface.assets.domain.nuclei import NucleiTemplate, parse_template
 
 CORPUS = Path(__file__).resolve().parent / "corpus"
 
@@ -63,14 +64,15 @@ def scan_knowledge(root: Path = KNOWLEDGE) -> dict[str, KnowledgeItem]:
                              f"{path}, rename one so refs stay flat")
         items[ref] = KnowledgeItem(ref=ref, kind=kind, path=path)
 
-    for path, meta, _body in iter_md_docs(paths.products):
+    for path, _meta, _body in iter_md_docs(paths.products):
         add(f"product:{path.stem}", DETECTION, path)
-        # A product file carries its identification ref plus a reproduction ref per read-only CVE
-        # recipe its frontmatter surfaces, so both are enumerated from the one file, told apart by
-        # the ref kind, the same shape a finding file uses for its class and payload refs.
-        for repro in meta.get("reproductions") or []:
-            if repro.get("id"):
-                add(f"repro:{_slug(repro['id'])}", DETECTION, path)
+    # A reproduction is one CVE's read-only check, a vendored Nuclei template opfor consumes as
+    # data. Each supported template is a `repro:<cve>` detection claim owing a backtest case, and an
+    # unsupported one is skipped here, so coverage counts only what opfor can actually drive.
+    for template_path in sorted(paths.nuclei.glob("*.yaml")):
+        parsed = parse_template(template_path.read_text(encoding="utf-8"))
+        if isinstance(parsed, NucleiTemplate) and parsed.cve:
+            add(f"repro:{_slug(parsed.cve)}", DETECTION, template_path)
     for path, _meta, _body in iter_md_docs(paths.frameworks):
         add(f"framework:{path.stem}", DETECTION, path)
     # A finding file carries the class judgment ref plus the deterministic payload refs its

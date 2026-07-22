@@ -12,7 +12,8 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 
 from opfor.scenarios.attacksurface.assets.base import ClassBundle
-from opfor.scenarios.attacksurface.lifecycle.grounding import load_reproductions
+from opfor.scenarios.attacksurface.lifecycle.grounding import ReproductionRecipe, load_reproductions
+from opfor.scenarios.attacksurface.assets.domain import nuclei
 from opfor.scenarios.attacksurface.assets.domain import planner
 from opfor.scenarios.attacksurface.assets.domain.fingerprint import (
     fingerprint,
@@ -65,15 +66,37 @@ class KnowledgePaths:
     products: Path
     frameworks: Path
     findings: Path
+    nuclei: Path
 
     @classmethod
     def under(cls, root: Path) -> "KnowledgePaths":
         fingerprints = root / "fingerprints"
         return cls(root=root, products=fingerprints / "products",
-                   frameworks=fingerprints / "frameworks", findings=root / "findings")
+                   frameworks=fingerprints / "frameworks", findings=root / "findings",
+                   nuclei=root / "nuclei")
 
 
 PATHS = KnowledgePaths.under(KNOWLEDGE)
+
+
+def _template_recipes(nuclei_dir) -> tuple[ReproductionRecipe, ...]:
+    """Read-only reproduction recipes derived from the vendored Nuclei templates, so the recipe
+    data is a real published template opfor consumes, not a hand-typed one. A state-changing
+    template is skipped here, it is the exploit tier's job, not a read-only reproduction. A
+    template's matcher summary rides as the recipe's expectation, so the confirm judge sees the
+    template's full fire condition. Only the first candidate path is grounded for now, the read-only
+    reproduce replays one request, iterating a template's path list is a later increment."""
+    supported, _unsupported = nuclei.load_templates(nuclei_dir)
+    recipes: list[ReproductionRecipe] = []
+    for template in supported:
+        if template.writes:
+            continue
+        request = template.requests[0]
+        path = request.paths[0].replace("{{BaseURL}}", "").replace("{{RootURL}}", "")
+        recipes.append(ReproductionRecipe(
+            cve=template.cve, method=request.method, path=path,
+            expect=nuclei.matcher_summary(request)))
+    return tuple(recipes)
 
 
 def assemble(*, enumerate_fn, resolve_fn, probe_fn, fetch_fn, fetch_doc_fn,
@@ -144,5 +167,5 @@ def assemble(*, enumerate_fn, resolve_fn, probe_fn, fetch_fn, fetch_doc_fn,
         enrich_rules=tuple(planner.enrich_rules(
             config, with_profile=True, with_cve=cve_fn is not None)),
         knowledge_dir=KNOWLEDGE,
-        reproductions=load_reproductions(PATHS.products),
+        reproductions=load_reproductions(PATHS.products) + _template_recipes(PATHS.nuclei),
     )

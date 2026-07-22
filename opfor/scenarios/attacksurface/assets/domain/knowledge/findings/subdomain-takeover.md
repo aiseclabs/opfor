@@ -167,6 +167,4 @@ the unclaimed page or a `dig <name>` showing the CNAME to the released target, a
 that an operator should confirm the dangling record before claiming the resource. Do not
 claim it here.
 
-A host line tagged `edge vendor` points at third-party hosting, so it is the natural place
-for this risk: the subdomain rides on a provider resource the org may have released. Weigh a
-`edge vendor` host that also reads dangling or unclaimed as a takeover candidate.
+A CNAME pointing at third-party hosting, a `herokudns.com`, `netlify.app`, `vercel-dns.com`, `github.io`, or similar provider target, is the natural place for this risk: the subdomain rides on a provider resource the org may have released. Weigh such a host that also reads dangling or unclaimed as a takeover candidate.

@@ -1,16 +1,13 @@
-"""Deterministic host classification from a probe's evidence: the front-end framework a host
-reveals and how it is fronted.
+"""Deterministic host classification from a probe's evidence: the front-end framework a host reveals.
 
-Both are pure functions over a host's already-gathered facts and an injected reference table, so
-a capability can profile a host without reading knowledge itself, and the report renders the
-stored result rather than recomputing it. The table shapes match the loaders in the triage layer:
-a framework table maps a name to its lowercased body and header markers and a compiled version
-pattern, a provider table maps a category to its CNAME suffixes, server tokens, and marker headers.
+It is a pure function over a host's already-gathered facts and an injected reference table, so a
+capability can profile a host without reading knowledge itself, and the report renders the stored
+result rather than recomputing it. The framework table maps a name to its lowercased body and header
+markers and a compiled version pattern.
 """
 
 from __future__ import annotations
 
-import ipaddress
 import json
 import re
 from pathlib import Path
@@ -18,20 +15,6 @@ from urllib.parse import urlparse
 
 from opfor.core import iter_md_docs
 from opfor.scenarios.attacksurface.assets.domain.sources.parsers import info_from_openapi
-
-
-def load_providers(directory: Path) -> dict:
-    """The provider signatures, one `fingerprints/providers/<category>.md` unit each, its
-    `category` frontmatter the fronting class and its CNAME suffixes, server tokens, and marker
-    headers lowercased for matching. A missing directory is an empty table."""
-    out: dict = {}
-    for _path, meta, _body in iter_md_docs(Path(directory)):
-        category = str(meta.get("category", "")).strip()
-        if not category:
-            continue
-        out[category] = {key: [str(s).lower() for s in (meta.get(key) or [])]
-                         for key in ("cnames", "servers", "headers")}
-    return out
 
 
 _TITLE = re.compile(r"^#\s+(.+)$", re.MULTILINE)
@@ -110,15 +93,6 @@ def _spec_info(world, node, endpoint) -> tuple[str, str]:
         return "", ""
 
 
-def is_ip(name: str) -> bool:
-    """Whether a host name is a bare IP address, so a named host is never guessed as direct."""
-    try:
-        ipaddress.ip_address(name)
-        return True
-    except ValueError:
-        return False
-
-
 def classify_frameworks(http, table) -> list[str]:
     """The front-end frameworks a live host's response reveals, each with a version when the
     framework publishes one plainly. Deterministic from the body and headers already gathered, a
@@ -139,30 +113,3 @@ def classify_frameworks(http, table) -> list[str]:
                 version = match.group(1)
         found.append(f"{name} {version}".strip())
     return found
-
-
-def classify_providers(name, resolved, http, table) -> tuple[str, str] | None:
-    """The edge category of a host and the evidence for it, or None when nothing names it.
-
-    A CNAME to a known suffix is the strongest signal, then a server token or marker header on a
-    live host. A bare IP with no name is direct. A host that matches none is left unclassified, an
-    unrecognized front is not proof there is none, so an honest gap beats a wrong guess.
-    """
-    cnames = [c.lower().rstrip(".") for c in (resolved.cnames if resolved else ())]
-    for category, sig in table.items():
-        for suffix in sig.get("cnames", ()):
-            if any(c == suffix or c.endswith("." + suffix) for c in cnames):
-                return category, f"CNAME to {suffix}"
-    if http is not None:
-        server = (http.server or "").lower()
-        header_names = {n.lower() for n, _ in http.headers}
-        for category, sig in table.items():
-            for token in sig.get("servers", ()):
-                if token in server:
-                    return category, f"server {http.server}"
-            for header in sig.get("headers", ()):
-                if header.lower() in header_names:
-                    return category, f"header {header}"
-    if is_ip(name):
-        return "direct", "a bare IP with no edge name"
-    return None

@@ -17,11 +17,11 @@ The tree:
   evidence, that evidence too, its clues, takeover signatures, secret patterns, or backup templates.
   So a concept is one file, its judgment and the detection it rests on read together, and the
   backtest scores the class by model judgment and each embedded payload by an exact match, apart.
-- `fingerprints/` deterministic technology identification, the data that names what fronts or runs a
-  host, read to identify and enrich rather than to mint a finding. `services/` open-source products
+- `fingerprints/` deterministic technology identification, the data that names what runs a host,
+  read to identify and enrich rather than to mint a finding. `services/` open-source products
   identified by markers, each with a version and a `cpe` that drives the CVE lookup. `frameworks/`
-  front-end frameworks detected as context tags, no version lookup. `providers/` how a host is
-  fronted, a CDN, cloud, or vendor, classified by CNAME, server, and header signals.
+  front-end frameworks detected as context tags, no version lookup. How a host is fronted, a CDN,
+  cloud, or vendor, is left to the judge, which reads the raw CNAME and headers on the surface.
 
 A finding file's frontmatter fields:
 

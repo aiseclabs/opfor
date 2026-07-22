@@ -20,9 +20,7 @@ from opfor.scenarios.attacksurface.assets.domain.fingerprint import (
 )
 from opfor.scenarios.attacksurface.assets.domain.classifiers import (
     classify_frameworks,
-    classify_providers,
     load_frameworks,
-    load_providers,
 )
 from opfor.scenarios.attacksurface.assets.domain.capabilities.specs import (
     SPEC_PROBE_PATHS,
@@ -65,15 +63,13 @@ class KnowledgePaths:
     root: Path
     services: Path
     frameworks: Path
-    providers: Path
     findings: Path
 
     @classmethod
     def under(cls, root: Path) -> "KnowledgePaths":
         fingerprints = root / "fingerprints"
         return cls(root=root, services=fingerprints / "services",
-                   frameworks=fingerprints / "frameworks",
-                   providers=fingerprints / "providers", findings=root / "findings")
+                   frameworks=fingerprints / "frameworks", findings=root / "findings")
 
 
 PATHS = KnowledgePaths.under(KNOWLEDGE)
@@ -117,21 +113,16 @@ def assemble(*, enumerate_fn, resolve_fn, probe_fn, fetch_fn, fetch_doc_fn,
         def identify_fn(evidence):
             return fingerprint(evidence, fingerprints) or model_identify(evidence)
     # ProfileHost is the single place a host's identity is derived: the product via the composed
-    # identify seam, and the front-end frameworks and edge via the injected deterministic
-    # classifiers, so the capability reads no knowledge. It emits one host_profile fact the CVE
-    # lookup and the report both read, so identity survives a CVE-lookup failure and exists even
-    # with no CVE seam wired. Frameworks and edge are deterministic, so it runs with or without
-    # a model identify seam.
+    # identify seam, and the front-end frameworks via the injected deterministic classifier, so the
+    # capability reads no knowledge. It emits one host_profile fact the CVE lookup and the report
+    # both read, so identity survives a CVE-lookup failure and exists even with no CVE seam wired.
+    # Framework classification is deterministic, so it runs with or without a model identify seam.
     frameworks_table = load_frameworks(PATHS.frameworks)
-    provider_table = load_providers(PATHS.providers)
 
     def framework_fn(http):
         return classify_frameworks(http, frameworks_table)
 
-    def provider_fn(name, resolved, http):
-        return classify_providers(name, resolved, http, provider_table)
-
-    capabilities.append(ProfileHost(identify_fn, framework_fn, provider_fn))
+    capabilities.append(ProfileHost(identify_fn, framework_fn))
     if cve_fn is not None:
         capabilities.append(CVELookup(cve_fn))
     # The plan config is loaded here, at assemble time, not at planner import, so the content root

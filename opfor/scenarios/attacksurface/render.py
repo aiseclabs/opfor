@@ -108,14 +108,11 @@ class SurfaceRenderer:
             bits.append("does not resolve, seen only passively")
         if resolved_data is not None and resolved_data.cnames:
             bits.append("CNAME to " + ", ".join(resolved_data.cnames))
-        # The host profile carries what the host is, derived once and read here. The edge tag
-        # lets the judge read a finding as the edge or the origin and tell the org's own server
-        # from a third-party's, and the framework tag says what a bespoke host is built on. Both
-        # are context, not findings.
+        # The host profile carries what the host is, derived once and read here. The framework tag
+        # says what a bespoke host is built on, context for the judge, not a finding. Whether the
+        # host is fronted is left to the judge, which reads the raw CNAME and headers above.
         profile = world.latest("host_profile", node.id)
         profile_data = profile.payload if profile is not None else None
-        if profile_data is not None and profile_data.edge:
-            bits.append(f"edge {profile_data.edge}, {profile_data.edge_evidence}")
         if profile_data is not None and profile_data.frameworks:
             bits.append("tech: " + ", ".join(profile_data.frameworks))
         line = ", ".join(bits)

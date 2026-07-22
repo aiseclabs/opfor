@@ -1,26 +1,18 @@
 """Deterministic host classification helpers: the shared source functions the report and the
-profiling capability both use, so framework and edge detection has one implementation.
+profiling capability both use, so framework detection has one implementation.
 """
 
 from __future__ import annotations
 
 import re
 
-from opfor.scenarios.attacksurface.assets.domain.classifiers import (
-    classify_frameworks,
-    classify_providers,
-    is_ip,
-)
-from opfor.scenarios.attacksurface.assets.domain.types import HTTP, Resolved
+from opfor.scenarios.attacksurface.assets.domain.classifiers import classify_frameworks
+from opfor.scenarios.attacksurface.assets.domain.types import HTTP
 
 _FRAMEWORKS = {
     "Next.js": {"body": ['id="__next"'], "headers": ["x-powered-by: next.js"], "version": None},
     "Angular": {"body": ["ng-version="], "headers": [],
                 "version": re.compile(r'ng-version="([0-9]+\.[0-9]+\.[0-9]+)"', re.IGNORECASE)},
-}
-_FRONTING = {
-    "cdn": {"cnames": ["cloudflare.net"], "servers": ["cloudflare"], "headers": ["cf-ray"]},
-    "vendor": {"cnames": ["github.io"], "servers": [], "headers": []},
 }
 
 
@@ -40,23 +32,7 @@ def test_classify_frameworks_is_empty_for_no_response_or_no_match():
     assert classify_frameworks(_http(server="nginx", body="<html>hi</html>"), _FRAMEWORKS) == []
 
 
-def test_classify_edge_prefers_cname_then_marker_then_bare_ip():
-    resolved = Resolved(resolvable=True, addresses=("1.2.3.4",), cnames=("x.cloudflare.net",))
-    assert classify_providers("www.h", resolved, _http(), _FRONTING) == ("cdn", "CNAME to cloudflare.net")
-    assert classify_providers("api.h", None, _http(headers=(("cf-ray", "1"),)), _FRONTING)[0] == "cdn"
-    assert classify_providers("203.0.113.5", None, _http(), _FRONTING)[0] == "direct"
-
-
-def test_classify_edge_leaves_an_unrecognized_named_host_untagged():
-    assert classify_providers("app.h", None, _http(server="nginx"), _FRONTING) is None
-
-
-def test_is_ip():
-    assert is_ip("203.0.113.5") and is_ip("2606:4700::1")
-    assert not is_ip("example.com")
-
-
-def test_profile_host_records_product_frameworks_and_edge_in_one_fact():
+def test_profile_host_records_product_and_frameworks_in_one_fact():
     from opfor.core import Fact, Node, Task, World
     from opfor.scenarios.attacksurface.assets.domain.capabilities import ProfileHost
     from opfor.scenarios.attacksurface.assets.domain.types import DomainData, Resolved
@@ -69,16 +45,15 @@ def test_profile_host_records_product_frameworks_and_edge_in_one_fact():
     world.absorb([Fact(kind="http", about="domain:h", payload=_http(server="grafana"))])
 
     identify = lambda evidence: {"product": "Grafana", "version": "9.3.2", "cpe": "grafana:grafana"}
-    out = ProfileHost(identify, lambda http: ["Next.js"], lambda n, r, h: ("cdn", "CNAME x")).run(
+    out = ProfileHost(identify, lambda http: ["Next.js"]).run(
         Task(capability="domain_profile", node="domain:h"), world)
     profile = out.facts[0].payload
     assert out.facts[0].kind == "host_profile"
     assert profile.product == "Grafana" and profile.version == "9.3.2"
     assert profile.frameworks == ("Next.js",)
-    assert profile.edge == "cdn"
 
 
-def test_report_renders_product_tech_and_edge_from_the_host_profile_fact():
+def test_report_renders_product_and_tech_from_the_host_profile_fact():
     from opfor.core import Fact, Node, World
     from opfor.scenarios.attacksurface.render import SurfaceRenderer
     from opfor.scenarios.attacksurface.assets.domain.types import DomainData, HostProfile, Resolved
@@ -89,10 +64,8 @@ def test_report_renders_product_tech_and_edge_from_the_host_profile_fact():
                        payload=Resolved(resolvable=True, addresses=("1.2.3.4",)))])
     world.absorb([Fact(kind="http", about="domain:h", payload=_http(server="nginx"))])
     world.absorb([Fact(kind="host_profile", about="domain:h", payload=HostProfile(
-        product="Grafana", version="9.3.2", frameworks=("Next.js",),
-        edge="cdn", edge_evidence="CNAME to cloudflare.net"))])
+        product="Grafana", version="9.3.2", frameworks=("Next.js",)))])
     report = "\n".join(SurfaceRenderer([], []).units(world))
-    assert "edge cdn, CNAME to cloudflare.net" in report
     assert "tech: Next.js" in report
     assert "product: Grafana 9.3.2" in report
 

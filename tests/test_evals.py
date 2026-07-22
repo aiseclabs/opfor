@@ -34,7 +34,6 @@ def test_knowledge_inventory_enumerates_every_claim_by_ref_and_kind():
     # without a backtest shows up as an uncovered ref rather than being invisible
     assert by_ns["service"] == 6
     assert by_ns["framework"] == 2
-    assert by_ns["provider"] == 3
     assert by_ns["class"] == 19
     assert by_ns["clue"] >= 15 and by_ns["secret"] >= 5 and by_ns["signature"] >= 20
     # a finding class is judgment, its embedded detection payloads are detection, so the two

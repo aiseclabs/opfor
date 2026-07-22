@@ -39,6 +39,10 @@ def _validate_secret_patterns(patterns) -> None:
 from opfor.core import Task, World, each, parse_frontmatter
 from opfor.scenarios.attacksurface.assets import class_enabled
 
+# The asset class this planner belongs to, the single source of the class name the enable gate and
+# the bundle share, so the class does not self-reference by a repeated string literal.
+CLASS = "domain"
+
 # Static-asset denoise, the suffixes and prefixes the endpoint probe treats as assets rather than
 # interfaces, so a hashed bundle does not bury the real routes. This is mechanical probe config, not
 # attack knowledge, so it lives in code here, not the knowledge tree.
@@ -300,7 +304,7 @@ def _bucket_rule(world: World) -> list[Task]:
         return []
     tasks: list[Task] = []
     for node in world.nodes("org"):
-        if not class_enabled(node.payload, "domain"):
+        if not class_enabled(node.payload, CLASS):
             continue
         if world.has_fact(node.id, "buckets"):
             continue
@@ -367,7 +371,7 @@ def map_rules():
     run maps exactly the roots the operator supplied, no more."""
     return [
         each("org", run="discover_domains", unless_fact="domains_discovered",
-             where=lambda p: class_enabled(p, "domain")),
+             where=lambda p: class_enabled(p, CLASS)),
         each("domain", run="domain_subdomains", unless_fact="enumerated",
              where=lambda p: p.name == p.root),
         _permute_rule,

@@ -154,7 +154,7 @@ def assemble(*, enumerate_fn, resolve_fn, probe_fn, fetch_fn, fetch_doc_fn,
     if extra_paths:
         config = replace(config, probe_paths=config.probe_paths + extra_paths)
     return ClassBundle(
-        name="domain",
+        name=planner.CLASS,
         capabilities=tuple(capabilities),
         map_rules=tuple(planner.map_rules()),
         enrich_rules=tuple(planner.enrich_rules(

@@ -38,11 +38,21 @@ def _http(code):
     return urllib.error.HTTPError("u", code, "m", {}, None)
 
 
-def test_is_transient_classifies_blips_not_real_errors():
-    assert is_transient(_http(429)) and is_transient(_http(503))
-    assert not is_transient(_http(404))
+def test_is_transient_classifies_transport_blips_not_real_errors():
+    # the kernel check names only the standard-library transport exceptions, no protocol codes
     assert is_transient(TimeoutError()) and is_transient(ConnectionResetError())
     assert not is_transient(ValueError("real"))
+    # an HTTP status is protocol knowledge the kernel does not carry, so a raw HTTPError is not
+    # transient to the kernel, the web layer classifies that, see the domain _web_transient test
+    assert not is_transient(_http(429))
+
+
+def test_web_transient_classifies_http_try_again_codes():
+    from opfor.scenarios.attacksurface.assets.domain.failures import _web_transient
+    # the HTTP retry-me statuses live in the web class, composed onto the kernel transport check
+    assert _web_transient(_http(429)) and _web_transient(_http(503))
+    assert not _web_transient(_http(404))
+    assert _web_transient(TimeoutError()) and not _web_transient(ValueError("real"))
 
 
 def test_a_transient_failure_is_retried_then_succeeds():

@@ -111,9 +111,9 @@ def assemble(*, enumerate_fn, resolve_fn, probe_fn, fetch_fn, fetch_doc_fn,
         capabilities.append(CVELookup(cve_fn))
     # The plan config is loaded here, at assemble time, not at planner import, so the content root
     # stays swappable and importing the class triggers no file IO. The probe set is composed from
-    # the owners of each path rather than one global list: the services' own identification and
-    # version endpoints, the spec-discovery locations owned by ExpandSpec, and the GraphQL endpoint
-    # owned by the introspector, all joining the remaining generic paths.
+    # the owners of each path rather than one global guessed list: the services' own identification
+    # and version endpoints, the spec-discovery locations owned by ExpandSpec, the GraphQL endpoint
+    # owned by the introspector, and the disclosure files owned by the harvester.
     config = planner.load_plan_config(KNOWLEDGE)
     owned = (service_probe_paths(fingerprints) + SPEC_PROBE_PATHS
              + GRAPHQL_PROBE_PATHS + DISCLOSURE_PROBE_PATHS)

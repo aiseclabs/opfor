@@ -6,11 +6,12 @@ run across all hosts, then expands any exposed API specification or open introsp
 The rules gate on facts rather than task dependencies, so a name that does not resolve is
 never probed, and each rule that touches the target carries the host for scope.
 
-This module reads two capability action-config files, the probe path list and the static-
-asset lists, so the planner hands them to the endpoint probe rather than the capability
-reading a knowledge file. They are the domain class's own data, so they live under its
-knowledge tree. The files are loaded once at assemble time into a `DomainPlanConfig`, not at
-import, so the content root stays swappable and importing the module triggers no file IO.
+This module composes the capability action-config the planner hands the endpoint probe, so the
+capability reads no knowledge file. The secret and backup name templates come from the finding
+units they serve, and the probe path set is composed by the class from the owners of each path
+rather than a global guessed list. The config is loaded once at assemble time into a
+`DomainPlanConfig`, not at import, so the content root stays swappable and importing the module
+triggers no file IO.
 """
 
 from __future__ import annotations
@@ -19,8 +20,6 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import urlparse
-
-import yaml
 
 
 def _validate_secret_patterns(patterns) -> None:
@@ -50,10 +49,12 @@ _STATIC_PREFIXES = ("/_next/static/", "/static/", "/assets/", "/_nuxt/")
 
 @dataclass(frozen=True, kw_only=True)
 class DomainPlanConfig:
-    """The domain class's capability action-config, the paths to probe, the static-asset
-    templates, and the secret and backup name templates the planner hands each capability so
-    the capability reads no knowledge file, invariant 1. This is action config, not triage
-    knowledge. Loaded once at assemble time by `load_plan_config`, so import triggers no IO."""
+    """The domain class's capability action-config, the paths to probe, the static-asset templates,
+    and the secret and backup name templates the planner hands each capability so the capability
+    reads no knowledge file, invariant 1. This is action config, not triage knowledge. Loaded once
+    at assemble time by `load_plan_config`, so import triggers no IO. `probe_paths` starts empty and
+    the class composes it from the owners of each path, the services' own version endpoints and the
+    spec and introspection locations, so there is no global guessed path list."""
 
     probe_paths: tuple[str, ...] = ()
     static_suffixes: tuple[str, ...] = ()
@@ -67,8 +68,6 @@ class DomainPlanConfig:
 def load_plan_config(knowledge: Path) -> DomainPlanConfig:
     """Load the domain plan config from the class's knowledge tree, once, at build time. So
     the file IO the planner needs happens when a scenario is assembled, never at import."""
-    paths_yaml = knowledge / "paths.yaml"
-    paths = (yaml.safe_load(paths_yaml.read_text(encoding="utf-8")) or {}) if paths_yaml.exists() else {}
     # The secret patterns and backup templates live in the frontmatter of the finding units they
     # serve, secret-in-code and sensitive-file-exposure, so the planner reads them from there.
     findings = {path.stem: meta for path, meta, _body in iter_md_docs(knowledge / "findings")}
@@ -76,7 +75,6 @@ def load_plan_config(knowledge: Path) -> DomainPlanConfig:
     _validate_secret_patterns(secret_patterns)
     backups = findings.get("sensitive-file-exposure", {}).get("backups") or {}
     return DomainPlanConfig(
-        probe_paths=tuple(str(p) for p in (paths.get("paths") or [])),
         static_suffixes=_STATIC_SUFFIXES,
         static_prefixes=_STATIC_PREFIXES,
         secret_patterns=secret_patterns,

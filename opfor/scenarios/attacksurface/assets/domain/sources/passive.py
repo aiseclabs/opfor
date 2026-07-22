@@ -1,4 +1,4 @@
-"""Domain-class passive sources: certificate transparency, passive DNS, reverse-WHOIS, cves.
+"""Domain-class passive sources: certificate transparency, passive DNS, cves.
 
 All standard library, no installed tool. Certificate transparency names hosts from a public
 log without touching the target, an osint read. Every source here is a public read that

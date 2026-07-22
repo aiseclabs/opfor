@@ -1,8 +1,8 @@
 """Domain-class sources facade, re-exporting the dns, http, tls, passive, parsers, javascript,
 and storage modules. These are the external-data adapters and low-level parsers a capability
 acts through. Identification logic that reads the knowledge tables, the service fingerprint and
-the framework and edge classifiers, lives one level up in `domain/fingerprint.py` and
-`domain/profile.py`, not here.
+the framework and provider classifiers, lives one level up in `domain/fingerprint.py` and
+`domain/classifiers.py`, not here.
 
 Resolution, the shared network constants, and address filtering live in `dns`, HTTP transport
 in `http`, the TLS posture in `tls`, passive OSINT source clients in `passive`, body and document

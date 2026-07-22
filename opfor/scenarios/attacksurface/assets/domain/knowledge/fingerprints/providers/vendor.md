@@ -24,6 +24,6 @@ servers:
   - netlify
 ---
 
-# VENDOR
+# Vendor
 
 A third-party SaaS vendor hosts this host, a help desk, status page, or site builder under the vendor's own domain, so the judge reads it as the vendor's surface and a released name here is also a subdomain-takeover lead.

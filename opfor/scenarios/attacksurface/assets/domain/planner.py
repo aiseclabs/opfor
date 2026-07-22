@@ -36,7 +36,7 @@ def _validate_secret_patterns(patterns) -> None:
                 f"invalid secret pattern regex for {pattern.get('id', '?')!r}: {exc}") from exc
 
 from opfor.core import Task, World, each, iter_md_docs
-from opfor.scenarios.attacksurface.assets import class_enabled
+from opfor.scenarios.attacksurface.assets.base import class_enabled
 
 # The asset class this planner belongs to, the single source of the class name the enable gate and
 # the bundle share, so the class does not self-reference by a repeated string literal.

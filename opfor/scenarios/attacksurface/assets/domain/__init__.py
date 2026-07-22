@@ -11,7 +11,7 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from pathlib import Path
 
-from opfor.scenarios.attacksurface.assets import ClassBundle
+from opfor.scenarios.attacksurface.assets.base import ClassBundle
 from opfor.scenarios.attacksurface.assets.domain import planner
 from opfor.scenarios.attacksurface.assets.domain.fingerprint import (
     fingerprint,

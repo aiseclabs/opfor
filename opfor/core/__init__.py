@@ -19,12 +19,14 @@ from opfor.core.markdown_docs import iter_md_docs, parse_frontmatter
 from opfor.core.phase import Phase
 from opfor.core.post_triage import PostTriage
 from opfor.core.providers import CompletionResult, Message, MockProvider, Provider, make_provider
+from opfor.core.providers.factory import default_model
 from opfor.core.result import Finding, Report
 from opfor.core.rules import Planner, Rule, RuleSet, each
 from opfor.core.scenario import Scenario
 from opfor.core.scope import ScopeDecision, ExactScope, Scope, ScopeMatcher
 from opfor.core.severity import SEVERITIES
-from opfor.core.triage import Triage
+from opfor.core.transient import is_transient
+from opfor.core.triage import Triage, role_model, triage_mode
 from opfor.core.world import Fact, Node, World
 
 __all__ = [
@@ -62,8 +64,10 @@ __all__ = [
     "Triage",
     "World",
     "checkpoint",
+    "default_model",
     "each",
     "extract_json_object",
+    "is_transient",
     "iter_md_docs",
     "make_provider",
     "parse_frontmatter",
@@ -71,5 +75,7 @@ __all__ = [
     "restore",
     "resume_async",
     "resume_checkpoint",
+    "role_model",
     "run",
+    "triage_mode",
 ]

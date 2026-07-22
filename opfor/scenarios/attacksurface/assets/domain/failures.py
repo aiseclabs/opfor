@@ -8,8 +8,7 @@ or bounded rather than silent, invariant 5.
 
 from __future__ import annotations
 
-from opfor.core.capability import Failed
-from opfor.core.transient import is_transient
+from opfor.core import Failed, is_transient
 from opfor.scenarios.attacksurface.assets.domain.types import CoverageGap
 
 _MAX_GAP_REASONS = 5

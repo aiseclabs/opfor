@@ -27,8 +27,8 @@ from dataclasses import replace
 from pathlib import Path
 from urllib.parse import urlparse
 
-from opfor.core import Finding, Message, Provider, SEVERITIES, Triage, World, iter_md_docs
-from opfor.core.json_parse import require_json_object
+from opfor.core import (Finding, Message, Provider, SEVERITIES, Triage, World, iter_md_docs,
+                        require_json_object)
 from opfor.scenarios.attacksurface.lifecycle import completeness
 from opfor.scenarios.attacksurface.render import SurfaceRenderer
 

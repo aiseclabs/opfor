@@ -3,6 +3,22 @@ a changed environment is not frozen."""
 
 from __future__ import annotations
 
+import re
+from pathlib import Path
+
+
+def test_scenarios_import_the_core_only_through_its_facade():
+    """The kernel contract, stated in `opfor/core/__init__.py`: a scenario imports from
+    `opfor.core` and never reaches into a submodule. This enforces it, so a new reach past the
+    facade fails here rather than silently eroding the boundary. If a symbol is missing from the
+    facade, export it from `opfor.core`, do not deepen the import."""
+    scenarios = Path(__file__).resolve().parent.parent / "opfor" / "scenarios"
+    reach = re.compile(r"^\s*from opfor\.core\.\w[\w.]* import", re.MULTILINE)
+    offenders = []
+    for path in scenarios.rglob("*.py"):
+        for line in reach.findall(path.read_text(encoding="utf-8")):
+            offenders.append(f"{path.relative_to(scenarios.parent.parent)}: {line.strip()}")
+    assert not offenders, "scenarios must import from the opfor.core facade, not its submodules:\n" + "\n".join(offenders)
 
 
 def test_importing_the_scenario_builds_nothing_until_requested():

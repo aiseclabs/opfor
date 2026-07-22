@@ -18,8 +18,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 
-from opfor.core import Confirm, Finding, Message, Provider, SEVERITIES, World
-from opfor.core.json_parse import require_json_object
+from opfor.core import Confirm, Finding, Message, Provider, SEVERITIES, World, require_json_object
 
 SYSTEM = (
     "You are the confirmation judge of an authorized offensive-security reconnaissance run. "

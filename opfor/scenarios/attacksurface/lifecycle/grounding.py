@@ -22,7 +22,7 @@ from dataclasses import replace
 from urllib.parse import parse_qsl, urlencode, urljoin, urlsplit
 
 from opfor.core import Finding, Node, World
-from opfor.core.post_triage import PostTriage
+from opfor.core import PostTriage
 from opfor.scenarios.attacksurface.lifecycle.reproduce import FindingClaim, PoCRequest
 
 _URL_RE = re.compile(r"https?://[^\s;'\"`)>]+")

@@ -1,4 +1,5 @@
-"""The kernel provider layer: json parsing, markdown docs, and provider selection.
+"""The kernel provider layer: the mock, subscription, and vendor backends, and the factory
+that selects one.
 
 Every test runs offline. The subscription provider takes an injected runner so no real
 `claude` is spawned, and the factory is exercised through the environment with no key.
@@ -8,96 +9,12 @@ from __future__ import annotations
 
 import pytest
 
-from opfor.core import (
-    CompletionResult,
-    Message,
-    MockProvider,
-    extract_json_object,
-    parse_frontmatter,
-    require_json_object,
-)
-from opfor.core.json_parse import require_json_object as _require
-from opfor.core.markdown_docs import iter_md_docs
+from opfor.core import CompletionResult, Message, MockProvider
 from opfor.core.providers.anthropic import AnthropicProvider
 from opfor.core.providers.claude_agent import ClaudeAgentProvider, _envelope_error, _fold_prompt
 from opfor.core.providers.factory import ProviderConfig, make_provider
 from opfor.core.providers.openai import OpenAIProvider
 from opfor.core.providers.retry import RetryProvider
-
-
-# --- json parsing ----------------------------------------------------------------------
-
-
-def test_direct_object_parses():
-    assert extract_json_object('{"a": 1}') == {"a": 1}
-
-
-def test_fenced_object_parses():
-    assert extract_json_object('here it is:\n```json\n{"a": 1}\n```\n') == {"a": 1}
-
-
-def test_balanced_span_is_string_aware():
-    # a brace inside a string value must not throw off the depth count
-    text = 'noise {"desc": "a {curly} brace", "n": 2} trailing'
-    assert extract_json_object(text) == {"desc": "a {curly} brace", "n": 2}
-
-
-def test_no_object_yields_none():
-    assert extract_json_object("no json here at all") is None
-
-
-def test_a_preamble_object_does_not_mask_the_object_carrying_the_key():
-    # a chatty model emits a note object before the real one, the required key still wins
-    text = '{"note": "analyzing"}\n{"findings": [1, 2]}'
-    assert extract_json_object(text, required_key="findings") == {"findings": [1, 2]}
-    # with no key required, the first object is still returned
-    assert extract_json_object(text) == {"note": "analyzing"}
-
-
-def test_a_non_object_top_level_does_not_short_circuit_recovery():
-    # a top-level array used to make recovery give up, the trailing keyed object is now found
-    text = '[1, 2, 3]\n{"findings": []}'
-    assert extract_json_object(text, required_key="findings") == {"findings": []}
-
-
-def test_require_raises_without_the_key():
-    class Boom(RuntimeError):
-        pass
-
-    with pytest.raises(Boom):
-        _require('{"other": 1}', required_key="findings", error=Boom, message="no findings")
-
-
-def test_require_returns_the_object_with_the_key():
-    obj = require_json_object('{"findings": []}', required_key="findings", error=RuntimeError, message="x")
-    assert obj == {"findings": []}
-
-
-# --- markdown docs ---------------------------------------------------------------------
-
-
-def test_frontmatter_splits_meta_and_body():
-    meta, body = parse_frontmatter("---\ntitle: T\nimpact: HIGH\n---\n# Heading\ntext")
-    assert meta == {"title": "T", "impact": "HIGH"}
-    assert body.startswith("# Heading")
-
-
-def test_frontmatter_absent_yields_empty_meta():
-    meta, body = parse_frontmatter("# no frontmatter\ntext")
-    assert meta == {}
-    assert body == "# no frontmatter\ntext"
-
-
-def test_iter_md_docs_reads_a_tree(tmp_path):
-    (tmp_path / "a.md").write_text("---\ntitle: A\n---\nbody a", encoding="utf-8")
-    (tmp_path / "index.md").write_text("skip me", encoding="utf-8")
-    docs = list(iter_md_docs(tmp_path))
-    assert [p.stem for p, _, _ in docs] == ["a"]
-    assert docs[0][1] == {"title": "A"}
-
-
-def test_iter_md_docs_on_missing_directory_yields_nothing(tmp_path):
-    assert list(iter_md_docs(tmp_path / "nope")) == []
 
 
 # --- mock provider ---------------------------------------------------------------------

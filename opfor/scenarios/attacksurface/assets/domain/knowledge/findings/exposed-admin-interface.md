@@ -1,5 +1,5 @@
 ---
-title: Interesting non-production or admin surface
+title: Exposed non-production or admin interface
 impact: MEDIUM
 always: true
 triggers:
@@ -8,7 +8,7 @@ triggers:
 - internal
 ---
 
-# Interesting Non-Production Or Admin Surface
+# Exposed Non-Production Or Admin Interface
 
 A live, internet-facing host whose nature makes it a foothold worth reducing even before a
 specific flaw is found: an administrative console, a staging or test deployment, an

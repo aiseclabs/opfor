@@ -190,7 +190,7 @@ def test_secret_scan_flags_a_key_in_a_bundle_and_redacts_it():
         return Response(body="")
 
     report, _scenario, world = _run_capturing(fetch_doc_fn=fetch_doc)
-    # the planner hands the real patterns from findings/secret-in-code.md, which includes the aws
+    # the planner hands the real patterns from detections/secret-patterns.md, which includes the aws
     # key shape, so the scan matches without the test injecting patterns
     hits = [f.payload for f in world.facts("secrets_in_js") if f.payload.matches]
     assert hits, "expected a secrets_in_js fact carrying a match"

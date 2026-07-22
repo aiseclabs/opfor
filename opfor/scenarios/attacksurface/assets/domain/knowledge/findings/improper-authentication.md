@@ -1,5 +1,5 @@
 ---
-title: Zero-trust proxy
+title: Improper authentication
 impact: INFO
 triggers:
   - redirect to
@@ -10,7 +10,12 @@ triggers:
   - okta
 ---
 
-# Zero-Trust Proxy Fronting
+# Improper Authentication
+
+This class judges whether a host's perimeter authentication actually covers it. A per-request
+zero-trust proxy such as Google IAP, Cloudflare Access, or Azure AD Application Proxy that
+fronts every path is the target doing the right thing. The finding is when that gate is
+absent, weaker than it looks, or bypassable, so an interface answers without it.
 
 A host can sit behind a gate that stands in front of the service. Two kinds of gate exist
 and they do not carry the same assurance, so the judge must tell them apart.

@@ -28,4 +28,4 @@ secrets:
 
 # Secret Patterns
 
-Regex patterns the planner hands the secret scan, so a leaked credential in a served bundle is found for the `secret-in-code` finding. The capability reads no knowledge, it acts on the patterns it is given.
+Regex patterns the planner hands the secret scan, so a leaked credential in a served bundle is found for the `hardcoded-secret` finding. The capability reads no knowledge, it acts on the patterns it is given.

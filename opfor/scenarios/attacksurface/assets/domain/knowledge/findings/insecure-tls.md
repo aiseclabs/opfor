@@ -1,11 +1,11 @@
 ---
-title: TLS certificate hygiene
+title: Insecure TLS certificate
 impact: MEDIUM
 triggers:
   - tls certificate
 ---
 
-# TLS Certificate Hygiene
+# Insecure TLS Certificate
 
 A host whose TLS certificate is expired, untrusted, or wrong for the name it serves, or that
 is close to expiry. The surface report carries a `TLS certificate:` line per live host, either

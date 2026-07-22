@@ -11,4 +11,4 @@ clues:
 
 # Interesting Surface Clues
 
-Matchers that surface an enumerable listing for the `interesting-surface` finding.
+Matchers that surface an enumerable listing for the `exposed-admin-interface` finding.

@@ -42,10 +42,10 @@ def test_dangling_cname_target_is_surfaced_for_takeover_judgment():
     assert "CNAME to old-app.herokuapp.com" in p
 
 
-def test_interesting_surface_class_is_always_present_with_the_admin_host():
+def test_exposed_admin_interface_class_is_always_present_with_the_admin_host():
     _, sc, _ = _run_capturing()
     assert "https://admin.example.com/admin" in _prompt(sc)
-    assert "Interesting Non-Production" in _knowledge(sc)
+    assert "Exposed Non-Production" in _knowledge(sc)
 
 
 def test_exposed_git_clue_and_class_are_surfaced():
@@ -222,7 +222,7 @@ def test_tls_posture_is_probed_on_live_hosts_and_surfaced_for_the_judge():
     assert live and all(world.latest("tls", n.id) is not None for n in live)
     prompt = _prompt(sc)
     assert "TLS certificate: valid" in prompt
-    assert "TLS Certificate Hygiene" in _knowledge(sc)
+    assert "Insecure TLS Certificate" in _knowledge(sc)
 
 
 def test_insecure_cookie_flags_are_surfaced_and_the_class_is_selected():
@@ -250,7 +250,7 @@ def test_dns_email_posture_is_read_on_roots_only_and_surfaced_for_the_judge():
             assert world.latest("dns_email", node.id) is None
     prompt = _prompt(sc)
     assert "email/DNS security: SPF absent" in prompt
-    assert "Weak Email Authentication" in _knowledge(sc)
+    assert "Spoofable Email Domain" in _knowledge(sc)
 
 
 def test_system_prompts_frame_target_text_as_untrusted():

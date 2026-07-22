@@ -1,11 +1,11 @@
 ---
-title: Secret in client code
+title: Hardcoded secret in client code
 impact: HIGH
 triggers:
 - secret in
 ---
 
-# Secret In Client Code
+# Hardcoded Secret In Client Code
 
 A credential-shaped string found in a JavaScript bundle a host serves, an API key, a token,
 or a private key. A pattern match is a lead, not a verdict, since a bundle also carries

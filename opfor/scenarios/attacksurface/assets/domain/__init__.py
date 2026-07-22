@@ -67,12 +67,21 @@ class KnowledgePaths:
     edge: Path
     findings: Path
     detections: Path
+    clues: Path
+    takeover_signatures: Path
+    secret_patterns: Path
+    backup_templates: Path
 
     @classmethod
     def under(cls, root: Path) -> "KnowledgePaths":
         tech = root / "technologies"
+        detections = root / "detections"
         return cls(root=root, services=tech / "services", frameworks=tech / "frameworks",
-                   edge=root / "edge", findings=root / "findings", detections=root / "detections")
+                   edge=root / "edge", findings=root / "findings", detections=detections,
+                   clues=detections / "clues",
+                   takeover_signatures=detections / "takeover-signatures.md",
+                   secret_patterns=detections / "secret-patterns.md",
+                   backup_templates=detections / "backup-templates.md")
 
 
 PATHS = KnowledgePaths.under(KNOWLEDGE)
@@ -138,7 +147,7 @@ def assemble(*, enumerate_fn, resolve_fn, probe_fn, fetch_fn, fetch_doc_fn,
     # the owners of each path rather than one global guessed list: the services' own identification
     # and version endpoints, the spec-discovery locations owned by ExpandSpec, the GraphQL endpoint
     # owned by the introspector, and the disclosure files owned by the harvester.
-    config = planner.load_plan_config(KNOWLEDGE)
+    config = planner.load_plan_config(PATHS)
     owned = (service_probe_paths(fingerprints) + SPEC_PROBE_PATHS
              + GRAPHQL_PROBE_PATHS + DISCLOSURE_PROBE_PATHS)
     extra_paths = tuple(p for p in owned if p not in config.probe_paths)

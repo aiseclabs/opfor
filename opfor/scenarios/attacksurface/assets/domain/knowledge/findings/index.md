@@ -24,21 +24,8 @@ prose and decides, so a new phrasing or a non-English page is judged on meaning 
 than missed by a list. Adding a class is a new file here, never an engine or triage code
 change.
 
-Deterministic detection payloads:
-
-A few classes also carry deterministic detection data in their frontmatter, the raw signal that
-surfaces the evidence the class then judges. These are not judgment, they are the fingerprint that
-gets the evidence in front of the model, so they live with the class they serve rather than apart
-from it. Each is read by a narrow consumer and scored by an exact backtest, apart from the model
-judgment above:
-
-- `clues`, path plus `body_contains` or `body_regex` matchers the surface renderer annotates, so a
-  reachable `/.git/config` carrying `[core]` is marked as an exposed-git clue for the judge to weigh.
-- `signatures`, the unclaimed-service page patterns the takeover renderer matches.
-- `secrets`, the regex patterns the planner hands the secret scan, so the capability reads no
-  knowledge and only acts on the patterns it is given.
-- `backups`, the twin rules the planner hands the backup scan the same way.
-
-So a finding file is a bundle: one judgment class, plus zero or more detection payloads. The
-backtest covers it at payload granularity, the class by model judgment and each detection payload
-by an exact match against a recorded case.
+A finding file here is judgment only, prose the model reads. The deterministic detection payloads
+that surface the evidence a class judges, the clues, takeover signatures, secret patterns, and
+backup templates, live under `detections/`, so this directory stays one mechanism. A clue names the
+class it serves, so the tie is kept by reference rather than by sharing a file. The backtest scores
+each class by model judgment and each detection payload by an exact match, apart.

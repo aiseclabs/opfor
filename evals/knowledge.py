@@ -12,8 +12,9 @@ Each ref is one claim, and its `kind` fixes how it is scored:
 - judgment, a finding class the triage model reads to decide if a signal is real and how severe.
   Scored by a threshold backtest against labeled cases, since a model is not exactly reproducible.
 
-A finding file is a bundle: one judgment class plus zero or more detection payloads, so a single
-file can contribute several refs of different kinds, which is why coverage is per ref not per file.
+Judgment classes live under findings/ and the deterministic payloads they surface live under
+detections/, so each file is one mechanism, and coverage is per ref so the two regimes are scored
+apart even when a clue and the class it serves are related.
 """
 
 from __future__ import annotations
@@ -67,8 +68,12 @@ def scan_knowledge(root: Path = KNOWLEDGE) -> dict[str, KnowledgeItem]:
         if category:
             add(f"edge:{category}", DETECTION, path)
 
-    for path, meta, _body in iter_md_docs(paths.findings):
+    for path, _meta, _body in iter_md_docs(paths.findings):
         add(f"class:{path.stem}", JUDGMENT, path)
+
+    # The deterministic detection payloads live under detections/, apart from the judgment prose
+    # they serve. Each contributes its own detection refs.
+    for path, meta, _body in iter_md_docs(paths.detections):
         for clue in meta.get("clues") or []:
             if clue.get("id"):
                 add(f"clue:{clue['id']}", DETECTION, path)

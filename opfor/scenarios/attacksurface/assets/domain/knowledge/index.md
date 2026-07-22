@@ -18,9 +18,11 @@ The tree:
   lookup. See its index.
 - `edge/` detection. How a host is fronted, a CDN, cloud, or vendor proxy, classified by CNAME,
   server, and header signals. See its index.
-- `findings/` judgment, with some detection embedded. One file per finding class the model may
-  mint, and a few of those files also carry deterministic detection payloads (clues, signatures,
-  secrets, backups) that surface the evidence the class judges. See its index.
+- `findings/` judgment. One file per finding class the triage model may mint, prose only. See its
+  index.
+- `detections/` detection. The raw clues, takeover signatures, secret patterns, and backup
+  templates that surface the evidence a finding class judges, held apart from that judgment prose.
+  See its index.
 
 Every unit is meant to be backtested, so a detection marker that stops matching or a judgment class
 no case exercises is a visible gap rather than a silent one. Adding knowledge is a new or extended

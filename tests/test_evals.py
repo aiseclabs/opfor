@@ -41,8 +41,11 @@ def test_knowledge_inventory_enumerates_every_claim_by_ref_and_kind():
     # regimes are told apart by the ref's kind
     assert items["class:sensitive-file-exposure"].kind == JUDGMENT
     assert items["clue:exposed-git"].kind == DETECTION
-    # the clue and the class live in the same file, the bundle, but are distinct refs
-    assert items["clue:exposed-git"].path == items["class:sensitive-file-exposure"].path
+    # judgment prose lives under findings/, the detection payload it surfaces lives under
+    # detections/, so the two are separate files told apart by mechanism, not one bundle
+    assert items["clue:exposed-git"].path != items["class:sensitive-file-exposure"].path
+    assert "findings" in items["class:sensitive-file-exposure"].path.parts
+    assert "detections" in items["clue:exposed-git"].path.parts
 
 
 def test_gate_blocks_an_empty_corpus():

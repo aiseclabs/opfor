@@ -169,7 +169,7 @@ def test_shipped_secret_patterns_do_not_backtrack_on_a_hostile_bundle():
     from opfor.scenarios.attacksurface.assets.domain import planner
     from opfor.scenarios.attacksurface.assets.domain.sources.javascript import secrets_in_text
 
-    patterns = [dict(p) for p in planner.load_plan_config(domain_class.KNOWLEDGE).secret_patterns]
+    patterns = [dict(p) for p in planner.load_plan_config(domain_class.PATHS).secret_patterns]
     hostile = "eyJ" * 300_000
     assert secrets_in_text(hostile, patterns) == []
     # a real JWT is still caught
@@ -207,14 +207,14 @@ def test_secret_scan_reports_multiple_distinct_matches_not_only_the_first():
     assert len(found) == 2 and len({f["sample"] for f in found}) == 2
 
 def test_a_malformed_secret_pattern_fails_loud_at_load(tmp_path):
-    from opfor.scenarios.attacksurface.assets.domain import planner
-    findings = tmp_path / "findings"
-    findings.mkdir()
-    (findings / "secret-in-code.md").write_text(
+    from opfor.scenarios.attacksurface.assets.domain import KnowledgePaths, planner
+    paths = KnowledgePaths.under(tmp_path)
+    paths.secret_patterns.parent.mkdir(parents=True)
+    paths.secret_patterns.write_text(
         "---\nsecrets:\n  - id: bad\n    regex: '([unclosed'\n    note: broken\n---\n# X\n", encoding="utf-8")
     # a broken regex must fail the run at load, not silently disable the whole secret class
     with pytest.raises(RuntimeError):
-        planner.load_plan_config(tmp_path)
+        planner.load_plan_config(paths)
 
 def test_backup_candidates_derives_twins_and_skips_directories():
     from opfor.scenarios.attacksurface.assets.domain import sources as domains
@@ -286,7 +286,7 @@ def test_backup_scan_records_a_coverage_gap_when_a_twin_errors():
 def test_sql_dump_clue_covers_every_probed_sql_path():
     from opfor.scenarios.attacksurface.assets import domain as domain_class
     from opfor.scenarios.attacksurface.lifecycle.triage import _load_clues
-    clues = _load_clues(domain_class.KNOWLEDGE / "findings")
+    clues = _load_clues(domain_class.KNOWLEDGE / "detections" / "clues")
     sql = [c for c in clues if c.get("id") == "exposed-sql-dump"]
     # a suffix path so /dump.sql, /db.sql, /database.sql all match, not only /backup.sql
     assert sql and sql[0]["path"] == ".sql"

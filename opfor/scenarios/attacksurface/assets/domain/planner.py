@@ -36,7 +36,7 @@ def _validate_secret_patterns(patterns) -> None:
             raise RuntimeError(
                 f"invalid secret pattern regex for {pattern.get('id', '?')!r}: {exc}") from exc
 
-from opfor.core import Task, World, each, iter_md_docs
+from opfor.core import Task, World, each, parse_frontmatter
 from opfor.scenarios.attacksurface.assets import class_enabled
 
 # Static-asset denoise, the suffixes and prefixes the endpoint probe treats as assets rather than
@@ -65,15 +65,23 @@ class DomainPlanConfig:
     backup_swap: tuple[str, ...] = ()
 
 
-def load_plan_config(knowledge: Path) -> DomainPlanConfig:
-    """Load the domain plan config from the class's knowledge tree, once, at build time. So
-    the file IO the planner needs happens when a scenario is assembled, never at import."""
-    # The secret patterns and backup templates live in the frontmatter of the finding units they
-    # serve, secret-in-code and sensitive-file-exposure, so the planner reads them from there.
-    findings = {path.stem: meta for path, meta, _body in iter_md_docs(knowledge / "findings")}
-    secret_patterns = tuple(dict(p) for p in (findings.get("secret-in-code", {}).get("secrets") or []))
+def _frontmatter(path: Path) -> dict:
+    """The frontmatter of one knowledge file, empty when the file is absent, so a missing detection
+    unit disables its scan rather than crashing the build."""
+    if not path.exists():
+        return {}
+    return parse_frontmatter(path.read_text(encoding="utf-8"))[0]
+
+
+def load_plan_config(paths) -> DomainPlanConfig:
+    """Load the domain plan config from the class's knowledge tree, once, at build time, so the
+    file IO the planner needs happens when a scenario is assembled, never at import. `paths` is the
+    class's `KnowledgePaths`. The secret patterns and backup templates are deterministic detection
+    payloads under `detections/`, handed to their capabilities as params so the capability reads no
+    knowledge, invariant 1."""
+    secret_patterns = tuple(dict(p) for p in (_frontmatter(paths.secret_patterns).get("secrets") or []))
     _validate_secret_patterns(secret_patterns)
-    backups = findings.get("sensitive-file-exposure", {}).get("backups") or {}
+    backups = _frontmatter(paths.backup_templates).get("backups") or {}
     return DomainPlanConfig(
         static_suffixes=_STATIC_SUFFIXES,
         static_prefixes=_STATIC_PREFIXES,

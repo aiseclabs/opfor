@@ -65,26 +65,49 @@ class ConfirmTriage(Confirm):
         self._max_tokens = max_tokens
 
     def reconfirm(self, world: World, findings: tuple[Finding, ...]) -> list[Finding]:
-        receipts = {fact.about: fact.payload for fact in world.facts("reproduction")}
         out: list[Finding] = []
         for finding in findings:
-            receipt = receipts.get(finding.id)
-            # Bind the receipt to the request this finding was actually grounded on, not to its
-            # id alone. Two distinct findings can share an id, two CVEs on one host, and only
-            # one materializes a claim node and a receipt, so keying on the id would regrade the
-            # other finding against a request it never made. A receipt whose url is not this
-            # finding's grounded url is not its receipt, so the finding is left as judged.
             poc = finding.data.get("poc_request") or {}
-            if receipt is None or not poc.get("url") or poc.get("url") != receipt.url:
+            # Bind receipts to the request this finding was grounded on, its seed url, not to its
+            # id alone. Two distinct findings can share an id, two CVEs on one host, and only one
+            # materializes a claim node, so keying on the id would regrade the other finding
+            # against a request it never made. The reproduce loop may run several Attempts per
+            # finding, each a variant of the seed, so binding is by the receipt's seed_url which is
+            # constant across variants, and the receipt judged is the one that bore the marker,
+            # else the last attempt.
+            facts = self._receipts_for(world, finding, poc)
+            if not facts:
                 out.append(finding)
                 continue
+            receipt = self._best(facts)
+            attempts = len(facts)
+            hit = any(getattr(f.payload, "hit", False) for f in facts)
             try:
                 verdict, severity, reason = self._confirm(finding, receipt)
             except Exception as exc:
-                out.append(self._degraded(finding, receipt, exc))
+                out.append(self._degraded(finding, receipt, exc, attempts))
                 continue
-            out.append(self._apply(finding, receipt, verdict, severity, reason))
+            out.append(self._apply(finding, receipt, verdict, severity, reason, attempts, hit))
         return out
+
+    @staticmethod
+    def _receipts_for(world: World, finding: Finding, poc: dict) -> list:
+        """The reproduction facts that belong to this finding, bound by seed url. A fact predating
+        the loop carries no seed_url, so its url is used, keeping older receipts bindable."""
+        url = poc.get("url")
+        if not url:
+            return []
+        return [f for f in world.facts("reproduction", finding.id)
+                if (getattr(f.payload, "seed_url", "") or f.payload.url) == url]
+
+    @staticmethod
+    def _best(facts: list):
+        """The receipt to judge, the first Attempt that bore the marker, else the last attempt, so
+        a variant that reached the target is judged over the seed that did not."""
+        for fact in facts:
+            if getattr(fact.payload, "hit", False):
+                return fact.payload
+        return facts[-1].payload
 
     def _confirm(self, finding: Finding, receipt) -> tuple[str, str, str]:
         result = self._provider.complete(
@@ -136,17 +159,34 @@ class ConfirmTriage(Confirm):
                 "size": receipt.size, "error": receipt.error}
 
     def _apply(self, finding: Finding, receipt, verdict: str, severity: str,
-               reason: str) -> Finding:
-        """The finding regraded, carrying the verdict and the receipt so the report shows what
-        the replay returned. A frozen Finding is replaced, not mutated."""
+               reason: str, attempts: int = 1, hit: bool = True) -> Finding:
+        """The finding regraded, carrying the verdict, the receipt, and the loop's honesty so the
+        report shows what the replay returned. A frozen Finding is replaced, not mutated.
+
+        `reproduction_status` is the honest reproduction outcome layered over the model verdict. A
+        confirmed verdict is confirmed. A version-matched known vulnerability the loop attempted
+        across every variant without once bearing its marker is suspected, vulnerable version
+        identified but not reproduced on this deployment, which is the truth rather than a bare
+        refuted. Anything else keeps the model verdict."""
         data = {**finding.data, "reproduction_verdict": verdict,
-                "reproduction_reason": reason, "receipt": self._receipt_data(receipt)}
+                "reproduction_reason": reason, "receipt": self._receipt_data(receipt),
+                "reproduction_attempts": attempts,
+                "reproduction_status": self._status(finding, verdict, attempts, hit)}
         return replace(finding, severity=severity, data=data)
 
-    def _degraded(self, finding: Finding, receipt, exc: Exception) -> Finding:
+    @staticmethod
+    def _status(finding: Finding, verdict: str, attempts: int, hit: bool) -> str:
+        if verdict == "confirmed":
+            return "confirmed"
+        if finding.data.get("kind") == "known-vulnerability" and attempts and not hit:
+            return "suspected"
+        return verdict
+
+    def _degraded(self, finding: Finding, receipt, exc: Exception, attempts: int = 1) -> Finding:
         """A finding whose confirm call failed. It keeps its judged severity and says the
         confirmation failed, so a failed regrade is loud, never a quiet confirmation."""
         data = {**finding.data, "reproduction_verdict": "confirm-failed",
                 "reproduction_reason": f"the confirm call failed, {type(exc).__name__}: {exc}",
-                "receipt": self._receipt_data(receipt)}
+                "receipt": self._receipt_data(receipt), "reproduction_attempts": attempts,
+                "reproduction_status": "confirm-failed"}
         return replace(finding, data=data)

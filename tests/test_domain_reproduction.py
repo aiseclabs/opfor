@@ -291,3 +291,85 @@ def test_a_multi_step_chain_does_not_fire_without_exploit_authorization():
     report = run(scenario, world, scope=scope, budget=Budget(5000), retry_backoff=0.0)
     assert report.closed
     assert world.facts("reproduction") == ()
+
+
+# The traversal read succeeds only two segments deeper than the recipe wrote, so the seed misses and
+# only the depth+2 variant reaches the file, a deployment whose document root sits at a depth the
+# published recipe did not assume.
+_DEEPER = "/public/plugins/alertlist/" + "../" * 21 + "etc/passwd"
+
+
+def _reproduce_only_deeper(url):
+    if _DEEPER in url:
+        return Response(status=200, url=url, content_type="text/plain", body=_PASSWD)
+    return Response(status=404, url=url)
+
+
+def test_the_reproduce_loop_adapts_traversal_depth_when_the_seed_misses():
+    # the closed loop, the real-capability case: the recipe as written does not reproduce, so the
+    # loop tries bounded variations and one of them, a deeper traversal, bears the marker
+    provider = ChainProvider()
+    scenario = _make(confirm=True, identify_fn=_identify_grafana, cve_fn=_cves_version_matched,
+                     provider=provider, reproduce_fetch_fn=_reproduce_only_deeper)
+    world = _seed()
+    scope = Scope(max_tier="intrusive", matcher=HostScope(hosts=(ROOT,)), authorized=True)
+    report = run(scenario, world, scope=scope, budget=Budget(5000), retry_backoff=0.0)
+    assert report.closed and report.reached == Phase.CONFIRM
+
+    finding = _known_vuln(report)
+    assert finding is not None
+    facts = world.facts("reproduction", finding.id)
+    # the seed was tried and missed, then a depth variant reached the file
+    assert len(facts) >= 2
+    seed = next(f.payload for f in facts if f.payload.variant == "seed")
+    assert seed.hit is False
+    hit = next((f.payload for f in facts if f.payload.hit), None)
+    assert hit is not None and hit.variant.startswith("depth")
+    assert "root:x:0:0" in hit.excerpt
+    # confirm judged the winning variant, the version-matched CVE reproduced after adaptation
+    assert finding.data["reproduction_status"] == "confirmed"
+
+
+_REFUTED = json.dumps({"verdict": "refuted", "severity": "INFO",
+                       "reason": "the response bore no /etc/passwd marker"})
+
+
+class _HonestConfirmProvider(ChainProvider):
+    """Triage mints the known-vulnerability finding, but the confirm judge refutes a receipt that
+    bears no marker, so a run whose every variant missed is judged honestly rather than confirmed."""
+
+    def complete(self, *, system, messages, model, max_tokens, cache=False):
+        self.calls.append({"system": system, "content": messages[0].content})
+        if "confirmation judge" in system:
+            return CompletionResult(text=_REFUTED)
+        if TARGET in messages[0].content:
+            return CompletionResult(text=_KNOWN_VULN_FINDING)
+        return CompletionResult(text='{"findings": []}')
+
+
+def _reproduce_never(url):
+    # the traversal never reads the file, whatever the depth or encoding, so every variant misses
+    return Response(status=404, url=url)
+
+
+def test_the_reproduce_loop_exhausts_and_reports_suspected_when_no_variant_hits():
+    # the honest not-reproduced case: the version matches the CVE, the loop tries every variation,
+    # none bears the marker, so the finding is suspected rather than dressed as confirmed or dropped
+    provider = _HonestConfirmProvider()
+    scenario = _make(confirm=True, identify_fn=_identify_grafana, cve_fn=_cves_version_matched,
+                     provider=provider, reproduce_fetch_fn=_reproduce_never)
+    world = _seed()
+    scope = Scope(max_tier="intrusive", matcher=HostScope(hosts=(ROOT,)), authorized=True)
+    report = run(scenario, world, scope=scope, budget=Budget(5000), retry_backoff=0.0)
+    assert report.closed and report.reached == Phase.CONFIRM
+
+    finding = _known_vuln(report)
+    assert finding is not None
+    facts = world.facts("reproduction", finding.id)
+    # the loop tried several variants, none bore the marker
+    assert len(facts) >= 2
+    assert all(f.payload.hit is False for f in facts)
+    # the honest outcome, version matched the CVE but it did not reproduce on this deployment
+    assert finding.data["reproduction_verdict"] == "refuted"
+    assert finding.data["reproduction_status"] == "suspected"
+    assert finding.data["reproduction_attempts"] >= 2

@@ -1,15 +1,18 @@
-"""Read-only reproduce: replay a finding's grounded safe-read GET under authorization.
+"""Read-only reproduce: run a finding's grounded safe-read Attempts under authorization.
 
-The spine reserves EXPLOIT and CONFIRM for the intrusive half. This module fills EXPLOIT
-with a single read-only step. It replays the exact GET a triage finding was grounded in and
-records the live receipt, so a finding stops being only what a model judged and becomes what
-a request just returned. It never sends a write, and it runs only when the operator raises
-the terminal to EXPLOIT and authorizes the intrusive tier, so the default run is unchanged.
+The spine reserves EXPLOIT and CONFIRM for the intrusive half. This module fills EXPLOIT. A finding
+grounded on an observed read replays that one request. A finding grounded on a recipe that names a
+marker is a reproduction loop, it runs the seed request as written and then bounded, generic
+variations of it until an Attempt bears the marker or the variation set is exhausted, so a recipe
+that does not fit a deployment as written can still reproduce, and one that never reproduces is
+recorded as tried rather than dressed as confirmed. It never sends a write, and it runs only when
+the operator raises the terminal to EXPLOIT and authorizes the intrusive tier, so the default run is
+unchanged.
 
-The request is not the model's prose, it is the finding's grounded `poc_request`, a request
-the surface already observed. So this replays a known request rather than probing anew, and
-a request no capability made is never reproducible, the strict-grounding guarantee triage
-enforces before a finding node is ever created here.
+Grounding stays honest under the loop. A probe is not the model's prose, it is a bounded variation
+of the finding's grounded recipe, every Attempt is authorized against scope and the intrusive tier,
+its proof is benign, and whether it bore the marker is a deterministic loop signal, never the
+verdict, which stays the confirm judge's on the live receipt.
 """
 
 from __future__ import annotations
@@ -20,6 +23,12 @@ from urllib.parse import urlparse
 
 from opfor.core import Capability, Done, Fact, Failed, Outcome, Phase, Task, World
 from opfor.scenarios.attacksurface.assets.domain.nuclei_chain import execute_chain
+from opfor.scenarios.attacksurface.lifecycle.technique import (
+    Variant,
+    has_marker,
+    marker_hit,
+    plan_variants,
+)
 
 # Only a read method is ever replayed, so the step cannot change state.
 _READ_METHODS = ("GET", "HEAD", "OPTIONS")
@@ -88,6 +97,14 @@ class Reproduction:
     # What the request returned when triage observed it, carried from the grounded request so
     # confirm compares the live receipt against the original observation, not against prose.
     expect: str = ""
+    # The variant that produced this receipt, `seed` for the recipe as written, else the variator
+    # label, so a receipt records which adaptation reached the target. `seed_url` is the finding's
+    # original grounded url, unchanged across variants, so confirm binds a variant receipt to the
+    # finding it descends from. `hit` is the deterministic marker oracle, the loop's stop signal,
+    # never the verdict, which stays with confirm.
+    variant: str = "seed"
+    seed_url: str = ""
+    hit: bool = False
 
 
 _SECRET = re.compile(
@@ -100,6 +117,51 @@ def scrub(text: str) -> str:
     credential. A generic scrubber, a safety rail rather than attack knowledge, so it lives
     in code and reads no data file."""
     return _SECRET.sub(lambda m: m.group(1) + "[REDACTED]", text or "")
+
+
+def _variants_for(request, world: World) -> tuple[Variant, ...]:
+    """The variation set for a finding's seed request, seed first, then the generic depth and
+    encoding adaptations. The capability and the rule both call this, so both agree on which variant
+    a label names. A path rebase is not planned here yet, it awaits a reliable proxy-prefix signal,
+    so `world` is unused for now and kept for that next change."""
+    return plan_variants(request)
+
+
+def _pick_variant(request, world: World, label: str) -> Variant:
+    """The variant a task names, or the seed when the label is unknown, so a capability replays the
+    exact request the rule proposed."""
+    for variant in _variants_for(request, world):
+        if variant.label == label:
+            return variant
+    return Variant(label="seed", url=request.url, method=(request.method or "GET").upper(),
+                   body=getattr(request, "body", "") or "")
+
+
+def _next_attempt(node, request, world: World, capability: str) -> Task | None:
+    """The next Attempt to run for one finding, or None when the loop is done.
+
+    A finding whose recipe names a marker is a reproduction loop. It stops when an attempt bore the
+    marker, or when the variation set is exhausted, otherwise it proposes the next untried variant.
+    A finding with no marker, one grounded on an observed read, keeps its single-shot behavior, one
+    attempt then the confirm judge. The seed attempt carries no params so its task id is unchanged,
+    a variant carries the label so the engine sees distinct work and does not dedupe it away.
+    """
+    facts = world.facts("reproduction", node.id)
+    if has_marker(request.expect):
+        if any(getattr(f.payload, "hit", False) for f in facts):
+            return None
+        tried = {getattr(f.payload, "variant", "") for f in facts}
+        nxt = next((v for v in _variants_for(request, world) if v.label not in tried), None)
+        if nxt is None:
+            return None
+        label = nxt.label
+    else:
+        if facts:
+            return None
+        label = "seed"
+    host = urlparse(request.url).hostname or ""
+    params = {} if label == "seed" else {"variant": label}
+    return Task(capability=capability, node=node.id, params=params, scope_target=host)
 
 
 class ReproduceFinding(Capability):
@@ -128,34 +190,40 @@ class ReproduceFinding(Capability):
         method = (request.method or "").upper()
         if method not in _READ_METHODS:
             return Failed(reason=f"non-read method {method!r} is never replayed")
+        label = task.params.get("variant", "seed")
+        variant = _pick_variant(request, world, label)
         try:
-            result = self._fetch(request.url)
+            result = self._fetch(variant.url)
         except Exception as exc:
             return Failed(reason=f"reproduce fetch {type(exc).__name__}: {exc}")
         status = result.status
         body = result.body
         repro = Reproduction(
-            method=method, url=request.url, status=status,
+            method=method, url=variant.url, status=status,
             content_type=result.content_type, size=len(body),
             excerpt=_marker_excerpt(self._redact(body), request.expect),
             location=result.location, expect=request.expect,
+            variant=label, seed_url=request.url, hit=marker_hit(body, request.expect),
             error="" if status is not None else "no response")
         return Done(facts=(Fact(kind="reproduction", about=task.node, payload=repro),))
 
 
 def reproduce_rule(world: World) -> list[Task]:
-    """Propose a reproduce task for each finding node grounded in a read request and not yet
-    reproduced. The task carries the request host, so scope gates it against the campaign and
-    the intrusive tier still demands the recorded authorization."""
+    """Propose the next read Attempt for each finding grounded in a read request.
+
+    A recipe-grounded finding, one whose expect names a marker, is a reproduction loop, it proposes
+    the seed first and then bounded variations until an attempt bears the marker or the variation
+    set is exhausted. A finding grounded on an observed read keeps its single-shot behavior. The
+    task carries the request host, so scope gates it and the intrusive tier still demands the
+    recorded authorization."""
     tasks: list[Task] = []
     for node in world.nodes("finding"):
         request = node.payload.request
         if request.method.upper() not in _READ_METHODS:
             continue
-        if world.has_fact(node.id, "reproduction"):
-            continue
-        host = urlparse(request.url).hostname or ""
-        tasks.append(Task(capability="reproduce_finding", node=node.id, scope_target=host))
+        task = _next_attempt(node, request, world, "reproduce_finding")
+        if task is not None:
+            tasks.append(task)
     return tasks
 
 
@@ -188,25 +256,31 @@ class ExploitFinding(Capability):
         method = (request.method or "").upper()
         if method in _READ_METHODS:
             return Failed(reason=f"read method {method!r} is not an exploit, use reproduce")
+        label = task.params.get("variant", "seed")
+        variant = _pick_variant(request, world, label)
         try:
-            result = self._fetch(request.url, method, request.body)
+            result = self._fetch(variant.url, method, variant.body)
         except Exception as exc:
             return Failed(reason=f"exploit fetch {type(exc).__name__}: {exc}")
         status = result.status
         body = result.body
         repro = Reproduction(
-            method=method, url=request.url, status=status,
+            method=method, url=variant.url, status=status,
             content_type=result.content_type, size=len(body),
             excerpt=_marker_excerpt(self._redact(body), request.expect),
             location=result.location, expect=request.expect,
+            variant=label, seed_url=request.url, hit=marker_hit(body, request.expect),
             error="" if status is not None else "no response")
         return Done(facts=(Fact(kind="reproduction", about=task.node, payload=repro),))
 
 
 def exploit_rule(world: World) -> list[Task]:
-    """Propose an exploit task for each finding node grounded in a state-changing request and not
-    yet reproduced. The task carries the request host, so scope gates it, and the exploit tier
-    demands the explicit state-changing authorization before the task runs."""
+    """Propose the next state-changing Attempt for each finding grounded in a write request.
+
+    Like the read loop, a recipe-grounded write proposes the seed first and then bounded variations
+    until it bears the marker or is exhausted, and a finding with no marker stays single-shot. The
+    task carries the request host, so scope gates it, and the exploit tier demands the explicit
+    state-changing authorization before the task runs."""
     tasks: list[Task] = []
     for node in world.nodes("finding"):
         # A multi-step chain is driven by exploit_chain, not the single-request replay, so it is
@@ -216,10 +290,9 @@ def exploit_rule(world: World) -> list[Task]:
         request = node.payload.request
         if request.method.upper() in _READ_METHODS:
             continue
-        if world.has_fact(node.id, "reproduction"):
-            continue
-        host = urlparse(request.url).hostname or ""
-        tasks.append(Task(capability="exploit_finding", node=node.id, scope_target=host))
+        task = _next_attempt(node, request, world, "exploit_finding")
+        if task is not None:
+            tasks.append(task)
     return tasks
 
 

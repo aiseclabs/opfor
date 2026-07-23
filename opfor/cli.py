@@ -127,8 +127,13 @@ def _print_report(report, world=None) -> None:
             detail = f"HTTP {repro.status} {repro.content_type}".strip()
             note = f" [{repro.error}]" if repro.error else ""
             print(f"      reproduced: {repro.method} {repro.url} -> {detail}{note}")
+        status = finding.data.get("reproduction_status")
         verdict = finding.data.get("reproduction_verdict")
-        if verdict:
+        attempts = finding.data.get("reproduction_attempts", 1)
+        if status == "suspected":
+            print(f"      suspected: version matched but not reproduced on this deployment "
+                  f"after {attempts} attempt(s) (severity {finding.severity})")
+        elif verdict:
             reason = finding.data.get("reproduction_reason", "")
             print(f"      confirmed: {verdict} (severity {finding.severity})"
                   + (f" {reason}" if reason else ""))
@@ -208,8 +213,13 @@ def _report_md(report, world=None) -> str:
             detail = f"HTTP {repro.status} {repro.content_type}".strip()
             note = f" [{repro.error}]" if repro.error else ""
             lines.append(f"- reproduced: {repro.method} {repro.url} -> {detail}{note}")
+        status = finding.data.get("reproduction_status")
         verdict = finding.data.get("reproduction_verdict")
-        if verdict:
+        attempts = finding.data.get("reproduction_attempts", 1)
+        if status == "suspected":
+            lines.append(f"- suspected: version matched but not reproduced on this deployment "
+                         f"after {attempts} attempt(s) (severity {finding.severity})")
+        elif verdict:
             reason = finding.data.get("reproduction_reason", "")
             lines.append(f"- confirmed: {verdict} (severity {finding.severity})"
                          + (f" {reason}" if reason else ""))

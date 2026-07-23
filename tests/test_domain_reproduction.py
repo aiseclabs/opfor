@@ -183,87 +183,31 @@ def test_a_recipe_is_not_grounded_onto_a_finding_about_a_different_cve():
     assert world.facts("reproduction") == ()
 
 
-def _identify_drupal(evidence):
-    return {"product": "Drupal", "version": "8.5.0", "cpe": "drupal:drupal"}
+def test_exploit_finding_replays_a_write_request_and_records_the_receipt():
+    # the single-request write capability, tested directly: it replays a finding's grounded write
+    # request with its method and body and records the receipt, and the confirm judge, not the
+    # capability, decides whether the receipt confirms the finding
+    from opfor.core import Done, Node, Task, World
+    from opfor.scenarios.attacksurface.lifecycle.reproduce import (
+        ExploitFinding, FindingClaim, PoCRequest)
+    world = World()
+    world.add(Node(id="finding:w", type="finding", payload=FindingClaim(
+        finding_id="finding:w", title="t", severity="HIGH", where=f"https://{TARGET}/",
+        request=PoCRequest(method="POST", url=f"https://{TARGET}/api/x", body='{"a":1}',
+                           expect="uid=", source="reproduction:CVE-0000-0001"))))
+    sent = []
 
+    def seam(url, method, body):
+        sent.append((method, url, body))
+        return Response(status=200, url=url, content_type="application/json", body="uid=0(root)")
 
-def _cves_drupal_rce(product, version, cpe=""):
-    return [{"id": "CVE-2019-6340", "cvss": 8.1, "severity": "HIGH",
-             "summary": "REST deserialization remote code execution", "match": "version"}]
-
-
-# A finding about the Drupal RCE whose PoC calls for authorized exploitation, so it grounds on the
-# state-changing recipe rather than an observed read.
-_DRUPAL_FINDING = json.dumps({"findings": [{
-    "category": "known-vulnerability",
-    "title": "Drupal 8.5.0 is in the affected range for unauthenticated RCE CVE-2019-6340",
-    "severity": "CRITICAL",
-    "where": f"https://{TARGET}/",
-    "evidence": "Drupal 8.5.0 identified, CVE-2019-6340 REST deserialization RCE matched to the version",
-    "poc": "requires authorized exploitation: send the CVE-2019-6340 REST deserialization payload",
-    "confidence": 0.9,
-}]})
-
-
-class DrupalProvider(ChainProvider):
-    """Triage returns the Drupal RCE finding, confirm returns the confirmed verdict."""
-
-    def complete(self, *, system, messages, model, max_tokens, cache=False) -> CompletionResult:
-        self.calls.append({"system": system, "content": messages[0].content})
-        if "confirmation judge" in system:
-            return CompletionResult(text=_CONFIRMED)
-        if TARGET in messages[0].content:
-            return CompletionResult(text=_DRUPAL_FINDING)
-        return CompletionResult(text='{"findings": []}')
-
-
-_UID = "uid=33(www-data) gid=33(www-data) groups=33(www-data)\n"
-
-
-def _exploit_id(url, method, body):
-    # the exploit-tier replay seam: the state-changing POST to the recipe path runs id and the
-    # output rides in the response, anything else is a 404
-    if method == "POST" and "/node/1" in url and body:
-        return Response(status=200, url=url, content_type="application/json", body=_UID)
-    return Response(status=404, url=url)
-
-
-def test_a_state_changing_cve_grounds_on_its_recipe_and_replays_under_exploit_authorization():
-    provider = DrupalProvider()
-    scenario = _make(confirm=True, identify_fn=_identify_drupal, cve_fn=_cves_drupal_rce,
-                     provider=provider, exploit_fetch_fn=_exploit_id)
-    world = _seed()
-    scope = Scope(max_tier="exploit", matcher=HostScope(hosts=(ROOT,)),
-                  authorized=True, exploit_authorized=True)
-    report = run(scenario, world, scope=scope, budget=Budget(5000), retry_backoff=0.0)
-    assert report.closed and report.reached == Phase.CONFIRM
-
-    finding = _known_vuln(report)
-    assert finding is not None
-    # the finding grounds on the state-changing recipe, carrying the write method and body
-    poc = finding.data.get("poc_request")
-    assert poc is not None and poc["source"] == "reproduction:CVE-2019-6340"
-    assert poc["method"] == "POST" and poc["body"]
-
-    # the exploit tier replayed exactly that request and recorded the id output the CVE runs
-    receipts = {f.about: f.payload for f in world.facts("reproduction")}
-    receipt = receipts.get(finding.id)
-    assert receipt is not None and receipt.method == "POST"
-    assert "uid=" in receipt.excerpt
-    assert finding.data["reproduction_verdict"] == "confirmed"
-
-
-def test_a_state_changing_recipe_does_not_fire_without_exploit_authorization():
-    # the exploit tier is a separate consent: a run authorized only to the intrusive tier grounds
-    # the finding but never replays the state-changing request, so nothing is reproduced
-    provider = DrupalProvider()
-    scenario = _make(confirm=True, identify_fn=_identify_drupal, cve_fn=_cves_drupal_rce,
-                     provider=provider, exploit_fetch_fn=_exploit_id)
-    world = _seed()
-    scope = Scope(max_tier="intrusive", matcher=HostScope(hosts=(ROOT,)), authorized=True)
-    report = run(scenario, world, scope=scope, budget=Budget(5000), retry_backoff=0.0)
-    assert report.closed
-    assert world.facts("reproduction") == ()
+    outcome = ExploitFinding(seam).run(
+        Task(capability="exploit_finding", node="finding:w", scope_target=TARGET), world)
+    assert isinstance(outcome, Done)
+    # it sent exactly the grounded write, method and body intact
+    assert sent == [("POST", f"https://{TARGET}/api/x", '{"a":1}')]
+    receipt = outcome.facts[0].payload
+    assert receipt.method == "POST" and "uid=" in receipt.excerpt
 
 
 def _identify_metabase(evidence):

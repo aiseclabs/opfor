@@ -117,9 +117,9 @@ def _seams(base: str, host: str) -> dict:
                         server=r["server"], title=_title(r["body"]), body=r["body"].lower(),
                         location=r["location"], headers=tuple(tuple(h) for h in r["headers"]))
 
-    def fetch_fn(name, addresses, path):
+    def fetch_fn(name, addresses, path, *, body_limit=_HEAD):
         url = base.rstrip("/") + path
-        r = _get(base, path, _HEAD)
+        r = _get(base, path, body_limit)
         if r is None:
             return Response(status=None, url=url, reason="unreachable")
         return Response(status=r["status"], url=url, content_type=r["content_type"],
@@ -181,8 +181,16 @@ def _gate(world, report, host: str, expect_cve: str) -> list[tuple[bool, str]]:
     checks.append((expect_cve in ids and basis == "version",
                    f"NVD tied {expect_cve} to the running version (match {basis or 'none'})"))
 
-    vuln = next((f for f in report.findings
-                 if f.data.get("kind") == "known-vulnerability" and host in f.where), None)
+    # A host with several fitting CVEs yields one known-vulnerability finding per distinct CVE, so
+    # the gate targets the finding for the CVE this lane expects, the one grounded on its recipe or
+    # naming it, not merely the first known-vulnerability finding on the host.
+    known = [f for f in report.findings
+             if f.data.get("kind") == "known-vulnerability" and host in f.where]
+    vuln = next((f for f in known
+                 if (f.data.get("poc_request") or {}).get("source") == f"reproduction:{expect_cve}"),
+                None)
+    if vuln is None:
+        vuln = next((f for f in known if expect_cve in f.title or expect_cve in f.evidence), None)
     poc = (vuln.data.get("poc_request") or {}) if vuln is not None else {}
     checks.append((poc.get("source") == f"reproduction:{expect_cve}",
                    f"finding grounded on the {expect_cve} recipe ({poc.get('source') or 'ungrounded'})"))

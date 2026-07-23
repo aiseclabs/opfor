@@ -64,6 +64,31 @@ def test_directory_listing_body_raises_the_exposure_clue():
     assert any("directory-listing" in clue for clue in renderer._exposure_clues(endpoint))
 
 
+def test_render_flags_a_cve_the_scenario_carries_a_reproduction_recipe_for():
+    from opfor.core import Fact
+    from opfor.scenarios.attacksurface.assets.domain.types import CVE, CVEScan, DomainData, HTTP as HTTPData
+    from opfor.scenarios.attacksurface.render import SurfaceRenderer
+
+    # a version-matched scan carrying a severe CVE with no recipe and a lower one that has a recipe
+    world = World()
+    world.add(Node(id="domain:h.example.com", type="domain",
+                   payload=DomainData(name="h.example.com", root="example.com", source="hint")))
+    world.absorb((
+        Fact(kind="http", about="domain:h.example.com",
+             payload=HTTPData(alive=True, status=200, url="https://h.example.com/")),
+        Fact(kind="cve_scanned", about="domain:h.example.com",
+             payload=CVEScan(product="Metabase", version="0.40.4", match="version", cves=(
+                 CVE(id="CVE-2099-0001", cvss=9.8, severity="CRITICAL", summary="unauth RCE"),
+                 CVE(id="CVE-2021-41277", cvss=7.5, severity="HIGH", summary="geojson file read"),
+             ))),
+    ))
+    text = "\n".join(SurfaceRenderer([], [], recipe_cves=("CVE-2021-41277",)).units(world))
+    # only the CVE with a recipe is flagged as demonstrable here, so triage can surface it apart
+    assert "CVE-2021-41277" in text and "read-only reproduction recipe available" in text
+    rce, repro = text.index("CVE-2099-0001"), text.index("CVE-2021-41277")
+    assert "read-only reproduction recipe available" not in text[rce:repro]
+
+
 def test_render_shows_an_invalid_tls_certificate_with_its_reason():
     from opfor.core import Fact
     from opfor.scenarios.attacksurface.assets.domain.types import DomainData, HTTP as HTTPData, TLSPosture

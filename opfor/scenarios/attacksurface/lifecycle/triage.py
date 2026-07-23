@@ -169,7 +169,8 @@ class SurfaceTriage(Triage):
     def __init__(self, knowledge_dirs, *, provider: Provider, model: str,
                  max_tokens: int = 8192, max_chunk_chars: int = _MAX_CHUNK_CHARS,
                  challenger: Provider | None = None, challenger_model: str | None = None,
-                 judge: Provider | None = None, judge_model: str | None = None) -> None:
+                 judge: Provider | None = None, judge_model: str | None = None,
+                 recipe_cves=()) -> None:
         self._provider = provider
         self._model = model
         self._max_tokens = max_tokens
@@ -196,7 +197,7 @@ class SurfaceTriage(Triage):
             self._takeover.extend(_load_takeover(directory / "findings"))
         self._class_ids = frozenset(c["id"] for c in self._classes)
         self._class_impact = {c["id"]: c["impact"] for c in self._classes}
-        self._renderer = SurfaceRenderer(self._clues, self._takeover)
+        self._renderer = SurfaceRenderer(self._clues, self._takeover, recipe_cves=recipe_cves)
 
     def judge(self, world: World) -> list[Finding]:
         findings: list[Finding] = []

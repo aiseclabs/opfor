@@ -55,6 +55,32 @@ class ChainProvider(Provider):
         return CompletionResult(text='{"findings": []}')
 
 
+# The Metabase shape: triage headlines a more severe CVE the recipe set does not cover, while the
+# lookup also tied a reproducible CVE to the version. The file read recipe must not be stapled onto
+# this finding, which the confirm judge would then rightly weaken.
+_RCE_FINDING = json.dumps({"findings": [{
+    "category": "known-vulnerability",
+    "title": "Grafana 8.3.0 is in the affected range for unauthenticated RCE CVE-2099-0001",
+    "severity": "CRITICAL",
+    "where": f"https://{TARGET}/",
+    "evidence": "Grafana 8.3.0 identified, CVE-2099-0001 unauthenticated RCE matched to the version",
+    "poc": "requires authorized exploitation: exploit the CVE-2099-0001 remote code execution",
+    "confidence": 0.9,
+}]})
+
+
+class RCEProvider(ChainProvider):
+    """Triage headlines a CVE the recipe set does not cover, so grounding must not fire on it."""
+
+    def complete(self, *, system, messages, model, max_tokens, cache=False) -> CompletionResult:
+        self.calls.append({"system": system, "content": messages[0].content})
+        if "confirmation judge" in system:
+            return CompletionResult(text=_CONFIRMED)
+        if TARGET in messages[0].content:
+            return CompletionResult(text=_RCE_FINDING)
+        return CompletionResult(text='{"findings": []}')
+
+
 def _identify_grafana(evidence):
     return {"product": "Grafana", "version": "8.3.0", "cpe": "grafana:grafana"}
 
@@ -124,5 +150,34 @@ def test_a_product_wide_match_does_not_fire_the_recipe():
 
     finding = _known_vuln(report)
     assert finding is not None
+    assert "poc_request" not in finding.data
+    assert world.facts("reproduction") == ()
+
+
+def _cves_rce_and_reproducible(product, version, cpe=""):
+    # the Metabase shape: a severe CVE with no recipe and a reproducible one, both version-matched
+    return [{"id": "CVE-2099-0001", "cvss": 9.8, "severity": "CRITICAL",
+             "summary": "unauthenticated remote code execution", "match": "version"},
+            {"id": "CVE-2021-43798", "cvss": 7.5, "severity": "HIGH",
+             "summary": "arbitrary file read via path traversal", "match": "version"}]
+
+
+def test_a_recipe_is_not_grounded_onto_a_finding_about_a_different_cve():
+    # the Metabase shape: triage headlines a severe CVE the recipe set does not cover, while the
+    # lookup also tied a reproducible CVE to the running version. The file read recipe must not be
+    # stapled onto the RCE finding, which the confirm judge would then rightly weaken, so it stays
+    # ungrounded and the intrusive phase reproduces nothing for it.
+    provider = RCEProvider()
+    scenario = _make(confirm=True, identify_fn=_identify_grafana, cve_fn=_cves_rce_and_reproducible,
+                     provider=provider, reproduce_fetch_fn=_reproduce_passwd)
+    world = _seed()
+    scope = Scope(max_tier="intrusive", matcher=HostScope(hosts=(ROOT,)), authorized=True)
+    report = run(scenario, world, scope=scope, budget=Budget(5000), retry_backoff=0.0)
+    assert report.closed and report.reached == Phase.CONFIRM
+
+    finding = _known_vuln(report)
+    assert finding is not None
+    # the finding names CVE-2099-0001, which has no recipe, so the CVE-2021-43798 file read recipe is
+    # not grounded onto it, and the intrusive phase replays nothing for it
     assert "poc_request" not in finding.data
     assert world.facts("reproduction") == ()

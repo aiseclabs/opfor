@@ -29,9 +29,14 @@ _CVE_MATCH = {
 
 
 class SurfaceRenderer:
-    def __init__(self, clues, takeover) -> None:
+    def __init__(self, clues, takeover, recipe_cves=()) -> None:
         self._clues = clues
         self._takeover = takeover
+        # The CVE ids the scenario carries a read-only reproduction recipe for, upper-cased, so the
+        # rendered surface tells the judge which CVEs are demonstrable here by a safe read. That is
+        # what lets triage surface a reproducible CVE as its own finding rather than fold it into a
+        # more severe one it cannot demonstrate.
+        self._recipe_cves = frozenset(c.upper() for c in recipe_cves)
 
     def units(self, world: World) -> list[str]:
         """Render the enriched world into one report block per host, so the surface can be
@@ -137,6 +142,9 @@ class SurfaceRenderer:
                             key=lambda c: c.cvss if c.cvss is not None else -1.0, reverse=True)
             for cve in ranked[:_MAX_CVES]:
                 line += f"\n  CVE {cve.id} CVSS {cve.cvss} {cve.severity}: {cve.summary}"
+                if cve.id.upper() in self._recipe_cves:
+                    line += ("\n    read-only reproduction recipe available, so this CVE is "
+                             "demonstrable here by a safe read and is its own finding")
                 if cve.references:
                     line += f"\n    refs: {', '.join(cve.references)}"
             if len(ranked) > _MAX_CVES:

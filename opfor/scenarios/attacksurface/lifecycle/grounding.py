@@ -27,6 +27,15 @@ from opfor.core import Grounding
 from opfor.scenarios.attacksurface.lifecycle.reproduce import FindingClaim, PoCRequest
 
 _URL_RE = re.compile(r"https?://[^\s;'\"`)>]+")
+# The CVE ids a finding names, so a recipe is grounded only on the finding that actually claims its
+# CVE, never stapled onto a more severe finding about a different CVE it cannot demonstrate.
+_CVE_RE = re.compile(r"CVE-\d{4}-\d{4,7}", re.IGNORECASE)
+
+
+def _cited_cves(finding) -> set[str]:
+    """The CVE ids a finding names across its title, evidence, and PoC, upper-cased."""
+    text = " ".join((finding.title, finding.evidence, finding.poc))
+    return {match.group(0).upper() for match in _CVE_RE.finditer(text)}
 
 # The one finding class a recipe reproduces, so the grounder matches a recipe only against the
 # known-vulnerability finding that names a CVE, never against an unrelated class.
@@ -152,8 +161,9 @@ class FindingGrounder(Grounding):
         running version, since a recipe is never replayed against a product-wide or name-only match.
         The request url is built from the recipe path against the host's observed scheme and
         authority, not normalized, so the traversal the recipe encodes reaches the target as written
-        rather than being collapsed away. Only the first matching CVE on a host is grounded, since a
-        finding materializes one claim node under one id."""
+        rather than being collapsed away. The recipe is grounded only on a CVE the finding itself
+        names, so a file read recipe is never stapled onto a finding claiming a different, more
+        severe CVE it cannot demonstrate, which the confirm judge would then rightly weaken."""
         if not self._recipes or finding.data.get("kind") != _KNOWN_VULN:
             return None
         host = urlsplit(finding.where).hostname or finding.where.split("/", 1)[0].split(":", 1)[0]
@@ -163,11 +173,14 @@ class FindingGrounder(Grounding):
         scan = world.latest("cve_scanned", node.id)
         if scan is None or scan.payload.match != _VERSION_MATCH:
             return None
+        cited = _cited_cves(finding)
         http = world.latest("http", node.id)
         base = getattr(http.payload, "url", "") if http is not None else ""
         parts = urlsplit(base or f"https://{host}/")
         authority = parts.netloc or host
         for cve in scan.payload.cves:
+            if cve.id.upper() not in cited:
+                continue
             recipe = self._recipes.get(cve.id.upper())
             if recipe is None:
                 continue

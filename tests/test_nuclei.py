@@ -44,6 +44,55 @@ def test_the_vendored_grafana_template_parses_into_opfor_shapes():
     assert not t.writes and t.tier == "intrusive"
 
 
+def test_the_vendored_druid_raw_template_parses_into_opfor_shapes():
+    # a single raw request template, the Druid RCE, parses into the same shapes as a structured one
+    t = parse_template((PATHS.nuclei / "CVE-2021-25646.yaml").read_text(encoding="utf-8"))
+    assert isinstance(t, NucleiTemplate)
+    assert t.cve == "CVE-2021-25646"
+    req = t.requests[0]
+    assert req.method == "POST"
+    # the bare raw path is rebased onto BaseURL so it flows through concrete_paths like a structured one
+    assert req.paths[0] == "{{BaseURL}}/druid/indexer/v1/sampler"
+    # the Host header is dropped, opfor's seam sets it, other headers and the body survive
+    assert dict(req.headers).get("Content-Type") == "application/json"
+    assert "host" not in {k.lower() for k, _ in req.headers}
+    assert req.body and "firehose" in req.body
+    # a state-changing method, so it needs the exploit tier and its published proof body
+    assert t.writes and t.tier == "exploit"
+
+
+_RAW_TMPL = """
+id: CVE-2099-0001
+info:
+  name: raw test
+  severity: high
+  classification:
+    cve-id: CVE-2099-0001
+http:
+  - raw:
+      - |
+        POST /x/y HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/json
+
+        {"a":1}
+    matchers:
+      - type: word
+        words: ["ok"]
+"""
+
+
+def test_a_single_raw_request_parses_and_rejects_an_unknown_placeholder():
+    t = parse_template(_RAW_TMPL)
+    assert isinstance(t, NucleiTemplate)
+    req = t.requests[0]
+    assert req.method == "POST" and req.paths[0] == "{{BaseURL}}/x/y" and req.body == '{"a":1}'
+    # a raw request naming a placeholder the single consumer does not fill is a loud coverage gap
+    bad = _RAW_TMPL.replace('{"a":1}', '{"a":"{{interactsh-url}}"}')
+    result = parse_template(bad)
+    assert isinstance(result, UnsupportedTemplate) and "placeholder" in result.reason
+
+
 def test_the_template_matcher_fires_on_a_real_file_read_response():
     req = _grafana_template().requests[0]
     # the affected instance returns /etc/passwd with a text/plain content type and 200

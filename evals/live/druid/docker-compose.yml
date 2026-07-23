@@ -1,0 +1,20 @@
+# Apache Druid at a version with an unauthenticated RCE, for the live reproduction lane.
+#
+# Run on a machine with Docker, not in CI. Bring it up, run the lane, tear it down:
+#
+#   docker compose -f evals/live/druid/docker-compose.yml up -d
+#   python -m evals.live.run --url http://localhost:8888 --expect-cve CVE-2021-25646
+#   docker compose -f evals/live/druid/docker-compose.yml down
+#
+# Apache Druid 0.20.0 carries CVE-2021-25646, an unauthenticated remote code execution. A crafted
+# sampler task enables per-request JavaScript even when the server disables it globally, so a POST to
+# /druid/indexer/v1/sampler runs code, and the published proof reads an /etc/passwd line. The image
+# is the real vulnerable Druid 0.20.0 at its default configuration, packaged as one container that
+# starts the micro-quickstart, so the lane reproduces the CVE against a realistic default deployment
+# rather than a target tuned to make the proof trivial. The lane identifies the version, looks its
+# CVEs up in NVD, replays the recipe at the exploit tier under authorization, and confirms it on the
+# live receipt, its benign proof.
+services:
+  druid:
+    image: vulhub/apache-druid:0.20.0
+    ports: ["8888:8888"]

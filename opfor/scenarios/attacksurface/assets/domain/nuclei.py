@@ -7,11 +7,12 @@ judges the result. Reading the template as data rather than running the tool is 
 community template from ever steering opfor at a target its scope did not name, since the target is
 opfor's, only the shape is the template's.
 
-Only a tractable subset is consumed, the http protocol with status, word, and regex matchers. A
-template that reaches beyond it, another protocol, a payload sweep, a raw request, or a dsl matcher,
-is reported unsupported with the reason, never silently half-loaded, so coverage stays honest,
-invariant 5. A `code` or `javascript` protocol is refused outright, since consuming it would run
-template-authored code on the scanner.
+Only a tractable subset is consumed, the http protocol with status, word, and regex matchers, over a
+structured request block or a single raw request. A template that reaches beyond it, another
+protocol, a payload sweep, a multi-step raw chain, or a dsl matcher, is reported unsupported with the
+reason, never silently half-loaded, so coverage stays honest, invariant 5. A multi-step raw chain is
+driven by the separate `nuclei_chain` consumer. A `code` or `javascript` protocol is refused
+outright, since consuming it would run template-authored code on the scanner.
 """
 
 from __future__ import annotations
@@ -29,6 +30,42 @@ _READ_METHODS = ("GET", "HEAD", "OPTIONS")
 # template carrying any non-http protocol is refused rather than partially read.
 _NON_HTTP_PROTOCOLS = ("dns", "tcp", "network", "ssl", "headless", "code", "javascript", "flow",
                        "file", "whois", "websocket")
+# The only placeholders the single-request consumer fills, the in-scope target. A raw request naming
+# any other placeholder, an interactsh callback or a helper function, is a coverage gap, not driven.
+_ALLOWED_VARS = ("BaseURL", "RootURL", "Hostname")
+
+
+def _raw_request(raw: str) -> tuple[str, str, tuple[tuple[str, str], ...], str] | str:
+    """Parse one raw http request into a method, a `{{BaseURL}}` path, headers, and a body, or return
+    a reason string when it names a placeholder opfor does not fill.
+
+    The Host header is dropped, opfor's own seam sets it from the in-scope target. A bare path is
+    rebased onto `{{BaseURL}}` so it flows through `concrete_paths` like a structured path, so a raw
+    request and a structured one reach the target the same way.
+    """
+    lines = raw.replace("\r\n", "\n").split("\n")
+    start = next((i for i, line in enumerate(lines) if line.strip()), None)
+    if start is None:
+        return "raw request is empty"
+    request_line = lines[start].split()
+    if len(request_line) < 2:
+        return "raw request line names no method and path"
+    method, path = request_line[0].upper(), request_line[1]
+    headers: list[tuple[str, str]] = []
+    cursor = start + 1
+    while cursor < len(lines) and lines[cursor].strip():
+        key, sep, value = lines[cursor].partition(":")
+        if sep and key.strip().lower() != "host":
+            headers.append((key.strip(), value.strip()))
+        cursor += 1
+    body = "\n".join(lines[cursor + 1:]).strip("\n") if cursor < len(lines) else ""
+    blob = path + body + "".join(v for _, v in headers)
+    for var in re.findall(r"\{\{\s*([A-Za-z0-9_]+)", blob):
+        if var not in _ALLOWED_VARS:
+            return f"raw request needs a placeholder {{{{{var}}}}} the single consumer does not fill"
+    if not path.startswith("http") and "{{BaseURL}}" not in path and "{{RootURL}}" not in path:
+        path = "{{BaseURL}}" + (path if path.startswith("/") else "/" + path)
+    return method, path, tuple(headers), body
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -119,11 +156,22 @@ def parse_template(text: str) -> NucleiTemplate | UnsupportedTemplate:
     for block in blocks:
         if block.get("payloads"):
             return unsupported("uses a payload sweep, not consumed yet")
-        if block.get("raw"):
-            return unsupported("uses raw requests, not consumed yet")
-        paths = tuple(str(p) for p in (block.get("path") or []))
-        if not paths:
-            return unsupported("a request block has no path")
+        raw_list = block.get("raw")
+        if raw_list:
+            if len(raw_list) > 1:
+                return unsupported("a multi-step raw chain, driven by nuclei_chain not this consumer")
+            parsed = _raw_request(str(raw_list[0]))
+            if isinstance(parsed, str):
+                return unsupported(parsed)
+            method, path, headers, body = parsed
+            paths: tuple[str, ...] = (path,)
+        else:
+            paths = tuple(str(p) for p in (block.get("path") or []))
+            if not paths:
+                return unsupported("a request block has no path")
+            method = str(block.get("method", "GET")).upper()
+            headers = tuple((str(k), str(v)) for k, v in (block.get("headers") or {}).items())
+            body = str(block.get("body", "") or "")
         matchers: list[Matcher] = []
         for m in (block.get("matchers") or []):
             mtype = str(m.get("type", ""))
@@ -137,10 +185,8 @@ def parse_template(text: str) -> NucleiTemplate | UnsupportedTemplate:
                 values = tuple(str(x) for x in (m.get("regex") or []))
             matchers.append(Matcher(type=mtype, part=str(m.get("part", "body")),
                                     values=values, condition=str(m.get("condition", "or"))))
-        headers = tuple((str(k), str(v)) for k, v in (block.get("headers") or {}).items())
         requests.append(TemplateRequest(
-            method=str(block.get("method", "GET")).upper(), paths=paths, headers=headers,
-            body=str(block.get("body", "") or ""),
+            method=method, paths=paths, headers=headers, body=body,
             stop_at_first_match=bool(block.get("stop-at-first-match", True)),
             matchers_condition=str(block.get("matchers-condition", "and")),
             matchers=tuple(matchers)))

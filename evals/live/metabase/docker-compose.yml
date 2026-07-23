@@ -1,0 +1,16 @@
+# Metabase instance at a version with a read-only reproducible CVE, for the live reproduction lane.
+#
+# Run on a machine with Docker, not in CI. Bring it up, run the lane, tear it down:
+#
+#   docker compose -f evals/live/metabase/docker-compose.yml up -d
+#   python -m evals.live.run --url http://localhost:3040 --expect-cve CVE-2021-41277
+#   docker compose -f evals/live/metabase/docker-compose.yml down
+#
+# Metabase 0.40.4 carries CVE-2021-41277, an unauthenticated local file read through the custom
+# GeoJSON map loader, so its reproduction recipe is a read-only GET whose response bears an
+# /etc/passwd root: line when the instance is affected. The lane identifies the version, looks its
+# CVEs up in NVD, replays the recipe under authorization, and confirms it on the live receipt.
+services:
+  metabase-0-40-4:
+    image: metabase/metabase:v0.40.4
+    ports: ["3040:3000"]

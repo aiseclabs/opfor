@@ -14,6 +14,7 @@ Source: `projectdiscovery/nuclei-templates`, MIT licensed. Each file keeps its u
 original path is recorded below, so a sync is a diff against the same upstream file.
 
 - `CVE-2021-43798.yaml`, upstream `http/cves/2021/CVE-2021-43798.yaml`, Grafana arbitrary file read.
+- `CVE-2021-41277.yaml`, upstream `http/cves/2021/CVE-2021-41277.yaml`, Metabase GeoJSON local file read.
 
 To sync: refresh a file from the same upstream path, re-run the eval that verifies it against a live
 instance, and only then commit the update.

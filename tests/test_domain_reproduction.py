@@ -181,3 +181,169 @@ def test_a_recipe_is_not_grounded_onto_a_finding_about_a_different_cve():
     # not grounded onto it, and the intrusive phase replays nothing for it
     assert "poc_request" not in finding.data
     assert world.facts("reproduction") == ()
+
+
+def _identify_drupal(evidence):
+    return {"product": "Drupal", "version": "8.5.0", "cpe": "drupal:drupal"}
+
+
+def _cves_drupal_rce(product, version, cpe=""):
+    return [{"id": "CVE-2019-6340", "cvss": 8.1, "severity": "HIGH",
+             "summary": "REST deserialization remote code execution", "match": "version"}]
+
+
+# A finding about the Drupal RCE whose PoC calls for authorized exploitation, so it grounds on the
+# state-changing recipe rather than an observed read.
+_DRUPAL_FINDING = json.dumps({"findings": [{
+    "category": "known-vulnerability",
+    "title": "Drupal 8.5.0 is in the affected range for unauthenticated RCE CVE-2019-6340",
+    "severity": "CRITICAL",
+    "where": f"https://{TARGET}/",
+    "evidence": "Drupal 8.5.0 identified, CVE-2019-6340 REST deserialization RCE matched to the version",
+    "poc": "requires authorized exploitation: send the CVE-2019-6340 REST deserialization payload",
+    "confidence": 0.9,
+}]})
+
+
+class DrupalProvider(ChainProvider):
+    """Triage returns the Drupal RCE finding, confirm returns the confirmed verdict."""
+
+    def complete(self, *, system, messages, model, max_tokens, cache=False) -> CompletionResult:
+        self.calls.append({"system": system, "content": messages[0].content})
+        if "confirmation judge" in system:
+            return CompletionResult(text=_CONFIRMED)
+        if TARGET in messages[0].content:
+            return CompletionResult(text=_DRUPAL_FINDING)
+        return CompletionResult(text='{"findings": []}')
+
+
+_UID = "uid=33(www-data) gid=33(www-data) groups=33(www-data)\n"
+
+
+def _exploit_id(url, method, body):
+    # the exploit-tier replay seam: the state-changing POST to the recipe path runs id and the
+    # output rides in the response, anything else is a 404
+    if method == "POST" and "/node/1" in url and body:
+        return Response(status=200, url=url, content_type="application/json", body=_UID)
+    return Response(status=404, url=url)
+
+
+def test_a_state_changing_cve_grounds_on_its_recipe_and_replays_under_exploit_authorization():
+    provider = DrupalProvider()
+    scenario = _make(confirm=True, identify_fn=_identify_drupal, cve_fn=_cves_drupal_rce,
+                     provider=provider, exploit_fetch_fn=_exploit_id)
+    world = _seed()
+    scope = Scope(max_tier="exploit", matcher=HostScope(hosts=(ROOT,)),
+                  authorized=True, exploit_authorized=True)
+    report = run(scenario, world, scope=scope, budget=Budget(5000), retry_backoff=0.0)
+    assert report.closed and report.reached == Phase.CONFIRM
+
+    finding = _known_vuln(report)
+    assert finding is not None
+    # the finding grounds on the state-changing recipe, carrying the write method and body
+    poc = finding.data.get("poc_request")
+    assert poc is not None and poc["source"] == "reproduction:CVE-2019-6340"
+    assert poc["method"] == "POST" and poc["body"]
+
+    # the exploit tier replayed exactly that request and recorded the id output the CVE runs
+    receipts = {f.about: f.payload for f in world.facts("reproduction")}
+    receipt = receipts.get(finding.id)
+    assert receipt is not None and receipt.method == "POST"
+    assert "uid=" in receipt.excerpt
+    assert finding.data["reproduction_verdict"] == "confirmed"
+
+
+def test_a_state_changing_recipe_does_not_fire_without_exploit_authorization():
+    # the exploit tier is a separate consent: a run authorized only to the intrusive tier grounds
+    # the finding but never replays the state-changing request, so nothing is reproduced
+    provider = DrupalProvider()
+    scenario = _make(confirm=True, identify_fn=_identify_drupal, cve_fn=_cves_drupal_rce,
+                     provider=provider, exploit_fetch_fn=_exploit_id)
+    world = _seed()
+    scope = Scope(max_tier="intrusive", matcher=HostScope(hosts=(ROOT,)), authorized=True)
+    report = run(scenario, world, scope=scope, budget=Budget(5000), retry_backoff=0.0)
+    assert report.closed
+    assert world.facts("reproduction") == ()
+
+
+def _identify_metabase(evidence):
+    return {"product": "Metabase", "version": "0.40.4", "cpe": "metabase:metabase"}
+
+
+def _cves_metabase_rce(product, version, cpe=""):
+    return [{"id": "CVE-2023-38646", "cvss": 9.8, "severity": "CRITICAL",
+             "summary": "H2 pre-auth remote code execution", "match": "version"}]
+
+
+# A finding about the Metabase RCE, grounded on the multi-step chain the vendored template declares.
+_METABASE_RCE_FINDING = json.dumps({"findings": [{
+    "category": "known-vulnerability",
+    "title": "Metabase 0.40.4 is in the affected range for unauthenticated RCE CVE-2023-38646",
+    "severity": "CRITICAL",
+    "where": f"https://{TARGET}/",
+    "evidence": "Metabase 0.40.4 identified, CVE-2023-38646 H2 pre-auth RCE matched to the version",
+    "poc": "requires authorized exploitation: drive the CVE-2023-38646 H2 setup chain",
+    "confidence": 0.9,
+}]})
+
+
+class MetabaseRCEProvider(ChainProvider):
+    """Triage returns the Metabase RCE finding, confirm returns the confirmed verdict."""
+
+    def complete(self, *, system, messages, model, max_tokens, cache=False) -> CompletionResult:
+        self.calls.append({"system": system, "content": messages[0].content})
+        if "confirmation judge" in system:
+            return CompletionResult(text=_CONFIRMED)
+        if TARGET in messages[0].content:
+            return CompletionResult(text=_METABASE_RCE_FINDING)
+        return CompletionResult(text='{"findings": []}')
+
+
+_SETUP_TOKEN = "aaaabbbb-cccc-dddd"
+_SQL_ERROR = '{"errors":{"dbname":"No matching clause: Syntax error in SQL statement PK..."}}'
+
+
+def _chain_fetch(method, url, headers, body):
+    # the chain seam: step 1 hands out a setup token, step 2 fires the H2 injection only when that
+    # token was extracted and spent, so the chaining is exercised, and errors as the CVE does
+    if method == "GET" and "session/properties" in url:
+        return {"status": 200, "content_type": "application/json", "location": "",
+                "body": json.dumps({"setup-token": _SETUP_TOKEN})}
+    if method == "POST" and "setup/validate" in url and _SETUP_TOKEN in body:
+        return {"status": 400, "content_type": "application/json", "location": "", "body": _SQL_ERROR}
+    return {"status": 404, "content_type": "", "location": "", "body": ""}
+
+
+def test_a_multi_step_chain_grounds_and_replays_under_exploit_authorization():
+    provider = MetabaseRCEProvider()
+    scenario = _make(confirm=True, identify_fn=_identify_metabase, cve_fn=_cves_metabase_rce,
+                     provider=provider, chain_fetch_fn=_chain_fetch)
+    world = _seed()
+    scope = Scope(max_tier="exploit", matcher=HostScope(hosts=(ROOT,)),
+                  authorized=True, exploit_authorized=True)
+    report = run(scenario, world, scope=scope, budget=Budget(5000), retry_backoff=0.0)
+    assert report.closed and report.reached == Phase.CONFIRM
+
+    finding = _known_vuln(report)
+    assert finding is not None
+    poc = finding.data.get("poc_request")
+    assert poc is not None and poc["source"] == "reproduction:CVE-2023-38646"
+
+    # the exploit chain read the setup token from step 1, spent it in step 2, and recorded the
+    # final response, whose SQL error is the marker the chain's dsl matcher names
+    receipts = {f.about: f.payload for f in world.facts("reproduction")}
+    receipt = receipts.get(finding.id)
+    assert receipt is not None and receipt.status == 400
+    assert "Syntax error in SQL statement" in receipt.excerpt
+    assert finding.data["reproduction_verdict"] == "confirmed"
+
+
+def test_a_multi_step_chain_does_not_fire_without_exploit_authorization():
+    provider = MetabaseRCEProvider()
+    scenario = _make(confirm=True, identify_fn=_identify_metabase, cve_fn=_cves_metabase_rce,
+                     provider=provider, chain_fetch_fn=_chain_fetch)
+    world = _seed()
+    scope = Scope(max_tier="intrusive", matcher=HostScope(hosts=(ROOT,)), authorized=True)
+    report = run(scenario, world, scope=scope, budget=Budget(5000), retry_backoff=0.0)
+    assert report.closed
+    assert world.facts("reproduction") == ()

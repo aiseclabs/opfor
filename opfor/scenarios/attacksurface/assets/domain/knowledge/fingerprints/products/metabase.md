@@ -25,3 +25,9 @@ reads an arbitrary file. Its read-only reproduction is not written here, it is t
 template `knowledge/nuclei/CVE-2021-41277.yaml`, which opfor consumes as data. The recipe fires only
 for a CVE the lookup tied to the running version, only under the intrusive EXPLOIT phase, and only
 as a read.
+
+Metabase before 0.46.6.1 also carries CVE-2023-38646, an unauthenticated command execution through
+the H2 database setup endpoint. Its reproduction is a multi-step chain, the vendored template
+`knowledge/nuclei/CVE-2023-38646.yaml`, which reads the setup token from one response and spends it
+in the next. It is a state-changing exploit, so it is driven whole only at the exploit tier under the
+explicit authorization, and it is confirmed on the H2 error its injection returns.

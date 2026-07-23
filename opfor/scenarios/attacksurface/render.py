@@ -32,10 +32,10 @@ class SurfaceRenderer:
     def __init__(self, clues, takeover, recipe_cves=()) -> None:
         self._clues = clues
         self._takeover = takeover
-        # The CVE ids the scenario carries a read-only reproduction recipe for, upper-cased, so the
-        # rendered surface tells the judge which CVEs are demonstrable here by a safe read. That is
-        # what lets triage surface a reproducible CVE as its own finding rather than fold it into a
-        # more severe one it cannot demonstrate.
+        # The CVE ids the scenario carries a reproduction for, a read-only recipe or an exploit
+        # chain, upper-cased, so the rendered surface tells the judge which CVEs opfor can
+        # demonstrate here. That is what lets triage surface a reproducible CVE as its own finding
+        # rather than fold it into a more severe one it cannot demonstrate.
         self._recipe_cves = frozenset(c.upper() for c in recipe_cves)
 
     def units(self, world: World) -> list[str]:
@@ -143,8 +143,8 @@ class SurfaceRenderer:
             for cve in ranked[:_MAX_CVES]:
                 line += f"\n  CVE {cve.id} CVSS {cve.cvss} {cve.severity}: {cve.summary}"
                 if cve.id.upper() in self._recipe_cves:
-                    line += ("\n    read-only reproduction recipe available, so this CVE is "
-                             "demonstrable here by a safe read and is its own finding")
+                    line += ("\n    opfor carries a reproduction for this CVE, so it is demonstrable "
+                             "here and is reported as its own finding")
                 if cve.references:
                     line += f"\n    refs: {', '.join(cve.references)}"
             if len(ranked) > _MAX_CVES:

@@ -20,7 +20,9 @@ from opfor.scenarios.attacksurface.assets.domain.sources.dns import (
     resolve_host,
 )
 from opfor.scenarios.attacksurface.assets.domain.sources.http import (
+    chain_fetch,
     fetch_document,
+    fetch_exploit,
     fetch_public_url,
     fetch_readonly,
     fetch_url,
@@ -100,7 +102,9 @@ __all__ = [
     "cves_from_nvd",
     "dns_email_posture",
     "dnsdumpster_subdomains",
+    "chain_fetch",
     "fetch_document",
+    "fetch_exploit",
     "fetch_public_url",
     "fetch_readonly",
     "fetch_url",

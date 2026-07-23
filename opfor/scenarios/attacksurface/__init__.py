@@ -29,7 +29,14 @@ from opfor.scenarios.attacksurface.assets.domain import sources as domain_src
 from opfor.scenarios.attacksurface.lifecycle.triage import SurfaceTriage
 from opfor.scenarios.attacksurface.lifecycle.confirm import ConfirmTriage
 from opfor.scenarios.attacksurface.lifecycle.grounding import FindingGrounder
-from opfor.scenarios.attacksurface.lifecycle.reproduce import ReproduceFinding, reproduce_rule
+from opfor.scenarios.attacksurface.lifecycle.reproduce import (
+    ExploitChain,
+    ExploitFinding,
+    ReproduceFinding,
+    exploit_chain_rule,
+    exploit_rule,
+    reproduce_rule,
+)
 from opfor.scenarios.attacksurface.seed import Org
 
 NAME = "attacksurface"
@@ -110,6 +117,8 @@ def build(
     reproduce: bool = False,
     confirm: bool = False,
     reproduce_fetch_fn=domain_src.fetch_readonly,
+    exploit_fetch_fn=domain_src.fetch_exploit,
+    chain_fetch_fn=domain_src.chain_fetch,
 ) -> Scenario:
     # Triage is model-backed. Build the provider and model the environment selects, keyless on
     # the operator's Claude Code subscription by default, and let a test inject its own.
@@ -141,6 +150,7 @@ def build(
     enrich_rules = [rule for bundle in bundles for rule in bundle.enrich_rules]
     knowledge_dirs = [bundle.knowledge_dir for bundle in bundles if bundle.knowledge_dir]
     reproductions = tuple(r for bundle in bundles for r in bundle.reproductions)
+    chains = tuple(c for bundle in bundles for c in bundle.chains)
 
     # Confirm regrades findings against the reproduction receipts, so it needs the receipts
     # the EXPLOIT phase records, so confirm implies reproduce.
@@ -149,8 +159,11 @@ def build(
     # The read-only reproduce step and its rule are always registered but dormant, the
     # EXPLOIT phase runs only when the operator raises the terminal with reproduce. It is
     # intrusive tier, so scope still demands the recorded authorization even when enabled.
-    capabilities = capabilities + (ReproduceFinding(reproduce_fetch_fn),)
-    rules = {Phase.MAP: map_rules, Phase.ENRICH: enrich_rules, Phase.EXPLOIT: [reproduce_rule]}
+    capabilities = capabilities + (ReproduceFinding(reproduce_fetch_fn),
+                                   ExploitFinding(exploit_fetch_fn),
+                                   ExploitChain(chain_fetch_fn))
+    rules = {Phase.MAP: map_rules, Phase.ENRICH: enrich_rules,
+             Phase.EXPLOIT: [reproduce_rule, exploit_rule, exploit_chain_rule]}
 
     terminal = _terminal_phase(reproduce=reproduce, confirm=confirm)
 
@@ -162,8 +175,9 @@ def build(
         triage=SurfaceTriage(knowledge_dirs, provider=provider, model=model,
                              challenger=challenger, challenger_model=challenger_model,
                              judge=judge, judge_model=judge_model,
-                             recipe_cves=tuple(r.cve for r in reproductions)),
-        grounding=FindingGrounder(reproductions=reproductions),
+                             recipe_cves=tuple(r.cve for r in reproductions)
+                             + tuple(c.cve for c in chains)),
+        grounding=FindingGrounder(reproductions=reproductions, chains=chains),
         confirm=ConfirmTriage(provider=provider, model=model) if confirm else None,
         payloads=_payloads(),
         scope_matcher=HostScope.from_dict,

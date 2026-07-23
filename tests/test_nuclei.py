@@ -76,9 +76,16 @@ def test_the_matcher_summary_is_faithful_not_a_lossy_substring():
 
 
 def test_load_templates_splits_supported_from_unsupported():
+    from opfor.scenarios.attacksurface.assets.domain.nuclei_chain import parse_chain, ChainTemplate
     supported, unsupported = load_templates(PATHS.nuclei)
     assert any(t.cve == "CVE-2021-43798" for t in supported)
-    assert unsupported == []
+    # every vendored template is consumed by one of the two consumers, so nothing is silently
+    # half-loaded, invariant 5. A template the single-request parser cannot express, a raw chain, is
+    # consumed by the chain parser instead, never left as a dangling unsupported gap.
+    for gap in unsupported:
+        path = PATHS.nuclei / f"{gap.id}.yaml"
+        assert isinstance(parse_chain(path.read_text(encoding="utf-8")), ChainTemplate), \
+            f"{gap.id} is unsupported by both the single-request and the chain consumer"
 
 
 def test_a_code_protocol_template_is_refused_outright():

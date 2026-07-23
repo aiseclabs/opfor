@@ -25,6 +25,7 @@ from urllib.parse import parse_qsl, urlencode, urljoin, urlsplit
 from opfor.core import Finding, Node, World, iter_md_docs
 from opfor.core import Grounding
 from opfor.scenarios.attacksurface.lifecycle.reproduce import FindingClaim, PoCRequest
+from opfor.scenarios.attacksurface.assets.domain.nuclei_chain import chain_summary
 
 _URL_RE = re.compile(r"https?://[^\s;'\"`)>]+")
 # The CVE ids a finding names, so a recipe is grounded only on the finding that actually claims its
@@ -37,6 +38,17 @@ def _cited_cves(finding) -> set[str]:
     text = " ".join((finding.title, finding.evidence, finding.poc))
     return {match.group(0).upper() for match in _CVE_RE.finditer(text)}
 
+
+def _primary_cve(finding) -> str:
+    """The CVE a finding is chiefly about, its title's first CVE, else its first cited one. Grounding
+    binds to this, so a recipe matches the finding's own claim and a secondary CVE mentioned in the
+    evidence cannot hijack the finding onto a different recipe, a file read stapled onto an RCE."""
+    in_title = _CVE_RE.findall(finding.title)
+    if in_title:
+        return in_title[0].upper()
+    cited = sorted(_cited_cves(finding))
+    return cited[0] if cited else ""
+
 # The one finding class a recipe reproduces, so the grounder matches a recipe only against the
 # known-vulnerability finding that names a CVE, never against an unrelated class.
 _KNOWN_VULN = "known-vulnerability"
@@ -48,15 +60,18 @@ _VERSION_MATCH = "version"
 
 @dataclass(frozen=True, kw_only=True)
 class ReproductionRecipe:
-    """One CVE's recorded read-only reproduction, the exact request that demonstrates it and the
-    marker its response bears when the instance is affected. It is data read from a
-    known-vulnerability finding's frontmatter, so adding one is a knowledge change and no attack
+    """One CVE's recorded reproduction, the exact request that demonstrates it and the marker its
+    response bears when the instance is affected. A read-only recipe is a GET, a state-changing one
+    carries a write method and a body and is replayed only at the exploit tier. It is data read from
+    a vendored template or a product's frontmatter, so adding one is a knowledge change and no attack
     decision lives in code, invariant 1."""
 
     cve: str
     method: str
     path: str
     expect: str
+    # The request body a state-changing recipe carries, empty for a read-only GET recipe.
+    body: str = ""
 
 
 def load_reproductions(directory) -> tuple[ReproductionRecipe, ...]:
@@ -73,7 +88,8 @@ def load_reproductions(directory) -> tuple[ReproductionRecipe, ...]:
             out.append(ReproductionRecipe(
                 cve=cve, method=str(entry.get("method", "GET")).strip() or "GET",
                 path=str(entry.get("path", "")).strip(),
-                expect=str(entry.get("expect", "")).strip()))
+                expect=str(entry.get("expect", "")).strip(),
+                body=str(entry.get("body", "")).strip()))
     return tuple(out)
 
 
@@ -110,9 +126,11 @@ class FindingGrounder(Grounding):
     only observed reads.
     """
 
-    def __init__(self, reproductions: tuple[ReproductionRecipe, ...] = ()) -> None:
+    def __init__(self, reproductions: tuple[ReproductionRecipe, ...] = (),
+                 chains: tuple = ()) -> None:
         # Keyed by upper-cased CVE id, so a lookup record and a recipe match regardless of case.
         self._recipes = {r.cve.upper(): r for r in reproductions}
+        self._chains = {c.cve.upper(): c for c in chains}
 
     def run(self, world: World, findings: tuple[Finding, ...]) -> list[Finding]:
         observed = self._observed_gets(world)
@@ -121,8 +139,11 @@ class FindingGrounder(Grounding):
             # Prefer an observed safe read, the recon-tier ground. Fall to a recipe only when the
             # finding names a known vulnerability whose CVE the lookup tied to the running version.
             request = self._poc_request(finding, observed)
+            chain = None
             if request is None:
                 request = self._recipe_request(finding, world)
+            if request is None:
+                request, chain = self._chain_request(finding, world)
             if request is None:
                 out.append(finding)
                 continue
@@ -131,7 +152,7 @@ class FindingGrounder(Grounding):
             # ungrounded claim. The node is materialized here, never inside triage.
             world.add(Node(id=grounded.id, type="finding", payload=FindingClaim(
                 finding_id=grounded.id, title=grounded.title, severity=grounded.severity,
-                where=grounded.where, request=PoCRequest(**request))))
+                where=grounded.where, request=PoCRequest(**request), chain=chain)))
             out.append(grounded)
         return out
 
@@ -173,23 +194,54 @@ class FindingGrounder(Grounding):
         scan = world.latest("cve_scanned", node.id)
         if scan is None or scan.payload.match != _VERSION_MATCH:
             return None
-        cited = _cited_cves(finding)
+        primary = _primary_cve(finding)
+        recipe = self._recipes.get(primary)
+        if recipe is None or primary not in {c.id.upper() for c in scan.payload.cves}:
+            return None
         http = world.latest("http", node.id)
         base = getattr(http.payload, "url", "") if http is not None else ""
         parts = urlsplit(base or f"https://{host}/")
         authority = parts.netloc or host
-        for cve in scan.payload.cves:
-            if cve.id.upper() not in cited:
-                continue
-            recipe = self._recipes.get(cve.id.upper())
-            if recipe is None:
-                continue
-            url = f"{parts.scheme or 'https'}://{authority}{recipe.path}"
-            expect = (f"the {recipe.cve} reproduction is confirmed when the live response "
-                      f"satisfies: {recipe.expect}")
-            return {"method": recipe.method, "url": url, "expect": expect,
-                    "source": f"reproduction:{recipe.cve}"}
-        return None
+        url = f"{parts.scheme or 'https'}://{authority}{recipe.path}"
+        expect = (f"the {recipe.cve} reproduction is confirmed when the live response "
+                  f"satisfies: {recipe.expect}")
+        return {"method": recipe.method, "url": url, "body": recipe.body, "expect": expect,
+                "source": f"reproduction:{recipe.cve}"}
+
+    def _chain_request(self, finding: Finding, world: World):
+        """The multi-step exploit chain a known-vulnerability finding grounds on, as a poc_request
+        describing its final step and the chain itself, or (None, None). Like the single recipe it
+        fires only for a CVE the finding names and the lookup tied to the running version, and only
+        at the exploit tier. The chain is driven whole by the exploit_chain capability, the
+        poc_request's url is its final step, so confirm binds the receipt to it."""
+        if not self._chains or finding.data.get("kind") != _KNOWN_VULN:
+            return None, None
+        host = urlsplit(finding.where).hostname or finding.where.split("/", 1)[0].split(":", 1)[0]
+        node = next((n for n in world.nodes("domain") if n.payload.name == host), None)
+        if node is None:
+            return None, None
+        scan = world.latest("cve_scanned", node.id)
+        if scan is None or scan.payload.match != _VERSION_MATCH:
+            return None, None
+        primary = _primary_cve(finding)
+        chain = self._chains.get(primary)
+        if chain is None or primary not in {c.id.upper() for c in scan.payload.cves}:
+            return None, None
+        http = world.latest("http", node.id)
+        base = getattr(http.payload, "url", "") if http is not None else ""
+        parts = urlsplit(base or f"https://{host}/")
+        authority = parts.netloc or host
+        scheme = parts.scheme or "https"
+        last = chain.steps[-1]
+        path = re.sub(r"^https?://[^/]+", "",
+                      last.path.replace("{{BaseURL}}", "").replace("{{RootURL}}", ""))
+        if not path.startswith("/"):
+            path = "/" + path
+        request = {"method": last.method.upper(), "url": f"{scheme}://{authority}{path}",
+                   "body": "", "expect": (f"the {chain.cve} reproduction is confirmed when the "
+                                          f"live chain satisfies: {chain_summary(chain)}"),
+                   "source": f"reproduction:{chain.cve}"}
+        return request, chain
 
     def _observed_gets(self, world: World) -> dict:
         """Every GET the surface recorded, keyed by normalized url, so a finding's proof of

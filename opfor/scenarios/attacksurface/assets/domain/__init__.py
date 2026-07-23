@@ -80,23 +80,36 @@ PATHS = KnowledgePaths.under(KNOWLEDGE)
 
 
 def _template_recipes(nuclei_dir) -> tuple[ReproductionRecipe, ...]:
-    """Read-only reproduction recipes derived from the vendored Nuclei templates, so the recipe
-    data is a real published template opfor consumes, not a hand-typed one. A state-changing
-    template is skipped here, it is the exploit tier's job, not a read-only reproduction. A
+    """Reproduction recipes derived from the vendored Nuclei templates, so the recipe data is a real
+    published template opfor consumes, not a hand-typed one. A read-only template grounds a GET
+    recipe replayed at the intrusive tier, a state-changing template grounds a recipe carrying its
+    write method and body, replayed only at the exploit tier under the explicit authorization. A
     template's matcher summary rides as the recipe's expectation, so the confirm judge sees the
-    template's full fire condition. Only the first candidate path is grounded for now, the read-only
-    reproduce replays one request, iterating a template's path list is a later increment."""
+    template's full fire condition. Only the first candidate request is grounded for now, the replay
+    runs one request, iterating a template's request list is a later increment."""
     supported, _unsupported = nuclei.load_templates(nuclei_dir)
     recipes: list[ReproductionRecipe] = []
     for template in supported:
-        if template.writes:
-            continue
         request = template.requests[0]
         path = request.paths[0].replace("{{BaseURL}}", "").replace("{{RootURL}}", "")
         recipes.append(ReproductionRecipe(
             cve=template.cve, method=request.method, path=path,
-            expect=nuclei.matcher_summary(request)))
+            expect=nuclei.matcher_summary(request), body=request.body))
     return tuple(recipes)
+
+
+def _template_chains(nuclei_dir) -> tuple:
+    """Multi-step exploit chains derived from the vendored Nuclei templates, a raw request chain
+    with extractors and a dsl matcher the single-request consumer cannot express. Each is driven
+    whole at the exploit tier under the explicit authorization. A template that is not a raw chain
+    is left to the single-request consumer, so the two never ground the same CVE twice."""
+    from opfor.scenarios.attacksurface.assets.domain import nuclei_chain
+    chains = []
+    for path in sorted(Path(nuclei_dir).glob("*.yaml")):
+        result = nuclei_chain.parse_chain(path.read_text(encoding="utf-8"))
+        if isinstance(result, nuclei_chain.ChainTemplate):
+            chains.append(result)
+    return tuple(chains)
 
 
 def assemble(*, enumerate_fn, resolve_fn, probe_fn, fetch_fn, fetch_doc_fn,
@@ -171,4 +184,5 @@ def assemble(*, enumerate_fn, resolve_fn, probe_fn, fetch_fn, fetch_doc_fn,
             config, with_profile=True, with_cve=cve_fn is not None)),
         knowledge_dir=KNOWLEDGE,
         reproductions=load_reproductions(PATHS.products) + _template_recipes(PATHS.nuclei),
+        chains=_template_chains(PATHS.nuclei),
     )

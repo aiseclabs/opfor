@@ -27,8 +27,9 @@ class ClassBundle:
     """One asset class's contribution to a scenario. `map_rules` and `enrich_rules` are the
     rules the class adds to those phases, `knowledge_dir` is where its triage knowledge
     lives, or None when the class mints only structural findings and reads no knowledge, and
-    `reproductions` are the read-only CVE reproduction recipes its knowledge carries, which the
-    scenario grounder reads to reproduce a known vulnerability."""
+    `reproductions` are the CVE reproduction recipes its knowledge carries, which the scenario
+    grounder reads to reproduce a known vulnerability, and `chains` are its multi-step exploit
+    chains, driven whole at the exploit tier."""
 
     name: str
     capabilities: tuple[Capability, ...]
@@ -36,6 +37,7 @@ class ClassBundle:
     enrich_rules: tuple = ()
     knowledge_dir: Path | None = None
     reproductions: tuple = ()
+    chains: tuple = ()
 
 
 def class_enabled(org, name: str) -> bool:

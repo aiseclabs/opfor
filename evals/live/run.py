@@ -63,10 +63,11 @@ def _load_env(path: str = ".env") -> None:
         os.environ.setdefault(key.strip(), value.strip().strip('"').strip("'"))
 
 
-def _get(base: str, path: str, limit: int) -> dict | None:
-    """One GET against the container, honoring its port and sending the path unnormalized, so a
-    traversal path reaches the server as written. Returns None on a transport error, so a probe of
-    an absent path is a clean miss rather than a crash."""
+def _req(base: str, method: str, path: str, headers=(), body: str = "",
+         limit: int = _DOC) -> dict | None:
+    """One request against the container, honoring its port and sending the path unnormalized, so a
+    traversal path reaches the server as written. Carries the method, headers, and body a chain step
+    or an exploit replay wrote. Returns None on a transport error, a clean miss rather than a crash."""
     parts = urlsplit(base)
     host = parts.hostname or "localhost"
     if parts.scheme == "https":
@@ -76,18 +77,25 @@ def _get(base: str, path: str, limit: int) -> dict | None:
         conn = http.client.HTTPSConnection(host, parts.port or 443, timeout=15, context=context)
     else:
         conn = http.client.HTTPConnection(host, parts.port or 80, timeout=15)
+    sent = {"Host": host, "User-Agent": _UA}
+    sent.update({k: v for k, v in (headers or ())})
     try:
-        conn.request("GET", path or "/", headers={"Host": host, "User-Agent": _UA})
+        conn.request(method, path or "/", body=body or None, headers=sent)
         resp = conn.getresponse()
-        body = resp.read(limit).decode("utf-8", "replace")
+        text = resp.read(limit).decode("utf-8", "replace")
         return {"status": resp.status, "server": resp.getheader("Server", "") or "",
                 "content_type": resp.getheader("Content-Type", "") or "",
-                "location": resp.getheader("Location", "") or "", "body": body,
+                "location": resp.getheader("Location", "") or "", "body": text,
                 "headers": [[k, v] for k, v in resp.getheaders()]}
     except (OSError, http.client.HTTPException):
         return None
     finally:
         conn.close()
+
+
+def _get(base: str, path: str, limit: int) -> dict | None:
+    """One GET against the container, the read-only case of `_req`."""
+    return _req(base, "GET", path, (), "", limit)
 
 
 def _title(body: str) -> str:
@@ -158,10 +166,32 @@ def _seams(base: str, host: str) -> dict:
         return Response(status=r["status"], url=url, content_type=r["content_type"],
                         body=r["body"], location=r["location"])
 
+    def exploit_fetch_fn(url, method, body):
+        parts = urlsplit(url)
+        raw_path = parts.path + (f"?{parts.query}" if parts.query else "")
+        r = _req(f"{parts.scheme}://{parts.netloc}", method, raw_path,
+                 (("Content-Type", "application/json"),), body)
+        if r is None:
+            return Response(status=None, url=url, reason="unreachable")
+        return Response(status=r["status"], url=url, content_type=r["content_type"],
+                        body=r["body"], location=r["location"])
+
+    def chain_fetch_fn(method, url, headers, body):
+        # One step of a multi-step chain against the local container, method, headers, and body as
+        # the chain wrote them, returning the plain dict the chain executor reads.
+        parts = urlsplit(url)
+        raw_path = parts.path + (f"?{parts.query}" if parts.query else "")
+        r = _req(f"{parts.scheme}://{parts.netloc}", method, raw_path, headers, body)
+        if r is None:
+            return {"status": None, "body": "", "content_type": "", "location": ""}
+        return {"status": r["status"], "body": r["body"],
+                "content_type": r["content_type"], "location": r["location"]}
+
     return dict(enumerate_fn=enumerate_fn, resolve_fn=resolve_fn, probe_fn=probe_fn,
                 fetch_fn=fetch_fn, fetch_doc_fn=fetch_doc_fn, introspect_fn=introspect_fn,
                 wayback_fn=wayback_fn, probe_url_fn=probe_url_fn, dns_fn=dns_fn, tls_fn=tls_fn,
-                reproduce_fetch_fn=reproduce_fetch_fn)
+                reproduce_fetch_fn=reproduce_fetch_fn, exploit_fetch_fn=exploit_fetch_fn,
+                chain_fetch_fn=chain_fetch_fn)
 
 
 def _gate(world, report, host: str, expect_cve: str) -> list[tuple[bool, str]]:
@@ -198,9 +228,12 @@ def _gate(world, report, host: str, expect_cve: str) -> list[tuple[bool, str]]:
     receipt = None
     if vuln is not None:
         receipt = {f.about: f.payload for f in world.facts("reproduction")}.get(vuln.id)
-    got_marker = bool(receipt and "root:" in (receipt.excerpt or ""))
-    checks.append((got_marker,
-                   f"read-only replay returned the marker (status {getattr(receipt, 'status', None)})"))
+    # The replay ran and recorded a live receipt. Whether the receipt truly bears the CVE's marker
+    # is the confirm judgment below, so this stays a generic check that the replay ran, one that
+    # fits both a read-only file read replay and a multi-step exploit chain, not a marker string.
+    got_receipt = bool(receipt and receipt.status is not None)
+    checks.append((got_receipt,
+                   f"replay ran and recorded a live receipt (status {getattr(receipt, 'status', None)})"))
 
     verdict = vuln.data.get("reproduction_verdict") if vuln is not None else None
     checks.append((verdict == "confirmed",
@@ -220,8 +253,11 @@ def main(argv=None) -> int:
     host = urlsplit(args.url).hostname or "localhost"
     scenario = build(confirm=True, cve_fn=nvd_cves, **_seams(args.url, host))
     world = seed(host, domains=(host,))
+    # Authorize the exploit tier, the broader envelope, so a state-changing chain lane can fire. It
+    # implies the intrusive envelope, so a read-only file read lane still runs under the same scope.
     report = run(scenario, world,
-                 scope=Scope(max_tier="intrusive", matcher=HostScope(hosts=(host,)), authorized=True),
+                 scope=Scope(max_tier="exploit", matcher=HostScope(hosts=(host,)),
+                             authorized=True, exploit_authorized=True),
                  budget=Budget(args.budget))
 
     print(f"=== live reproduction lane: {args.url} ({args.expect_cve}) ===")

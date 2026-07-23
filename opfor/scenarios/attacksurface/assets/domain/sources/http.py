@@ -211,6 +211,69 @@ def fetch_readonly(url: str) -> Response:
     return empty("unreachable")
 
 
+def fetch_exploit(url: str, method: str, body: str) -> Response:
+    """A single state-changing request for the exploit-tier replay, to a vetted public address.
+
+    The write counterpart of fetch_readonly, holding the same guards, resolve and pin to a public
+    address, verify the certificate, capture a redirect raw, so a repointed name or a man in the
+    middle cannot steer or forge the replay. It sends the recipe's method and body, a known CVE's
+    own published proof, so opfor drives a recorded exploit rather than an authored one. The body's
+    content type rides as `application/json` for now, a per-recipe content type is the increment the
+    first live write lane needs.
+    """
+    parts = urllib.parse.urlsplit(url)
+    host = parts.hostname or ""
+    scheme = parts.scheme or "https"
+    path = parts.path or "/"
+    if parts.query:
+        path = f"{path}?{parts.query}"
+    payload = body.encode("utf-8") if body else None
+    def empty(reason: str) -> Response:
+        return Response(status=None, url=url, reason=reason)
+    public = public_addresses(resolve_host(host).addresses)
+    if not public:
+        return empty("no-public-address")
+    for ip in public:
+        try:
+            status, _server, content_type, resp_body, location, _headers = _connect(
+                host, ip, scheme, path, read_limit=_REPRODUCE_BODY, verify=True,
+                method=method, payload=payload,
+                content_type="application/json" if payload else "")
+        except (OSError, http.client.HTTPException):
+            continue
+        return Response(status=status, url=url, content_type=content_type,
+                        location=location, body=resp_body, reason="")
+    return empty("unreachable")
+
+
+def chain_fetch(method: str, url: str, headers, body: str) -> dict:
+    """One step of a multi-step exploit chain, to a vetted public address. Same guards as the other
+    replay seams, resolve and pin to a public address and verify the certificate. It carries the
+    step's own Content-Type so a json body is accepted, and returns a plain dict the chain executor
+    reads, `status`, `body`, `content_type`, `location`, a null status when no address answered."""
+    parts = urllib.parse.urlsplit(url)
+    host = parts.hostname or ""
+    scheme = parts.scheme or "https"
+    path = parts.path or "/"
+    if parts.query:
+        path = f"{path}?{parts.query}"
+    content_type = next((v for k, v in (headers or ()) if k.lower() == "content-type"), "")
+    payload = body.encode("utf-8") if body else None
+    miss = {"status": None, "body": "", "content_type": "", "location": ""}
+    public = public_addresses(resolve_host(host).addresses)
+    if not public:
+        return miss
+    for ip in public:
+        try:
+            status, _server, ctype, resp_body, location, _headers = _connect(
+                host, ip, scheme, path, read_limit=_REPRODUCE_BODY, verify=True,
+                method=method, payload=payload, content_type=content_type)
+        except (OSError, http.client.HTTPException):
+            continue
+        return {"status": status, "body": resp_body, "content_type": ctype, "location": location}
+    return miss
+
+
 # --- self-declared interfaces: an app maps its own API --------------------
 
 _DOCUMENT_LIMIT = 2_000_000

@@ -84,9 +84,10 @@ def test_render_flags_a_cve_the_scenario_carries_a_reproduction_recipe_for():
     ))
     text = "\n".join(SurfaceRenderer([], [], recipe_cves=("CVE-2021-41277",)).units(world))
     # only the CVE with a recipe is flagged as demonstrable here, so triage can surface it apart
-    assert "CVE-2021-41277" in text and "read-only reproduction recipe available" in text
+    flag = "opfor carries a reproduction for this CVE"
+    assert "CVE-2021-41277" in text and flag in text
     rce, repro = text.index("CVE-2099-0001"), text.index("CVE-2021-41277")
-    assert "read-only reproduction recipe available" not in text[rce:repro]
+    assert flag not in text[rce:repro]
 
 
 def test_render_shows_an_invalid_tls_certificate_with_its_reason():

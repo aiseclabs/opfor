@@ -68,7 +68,9 @@ def _seams(cassette: dict) -> dict:
                         headers=tuple(tuple(h) for h in root.get("headers", ())),
                         reason=root.get("reason", ""))
 
-    def fetch_fn(name, addresses, path):
+    def fetch_fn(name, addresses, path, *, body_limit=None):
+        # The cassette already holds each body at the size it was recorded, a version endpoint at
+        # the larger cap, so the replay honors body_limit implicitly and need not truncate it again.
         d = fetch.get(path)
         if d is None:
             return Response(status=404, url=f"https://{name}{path}")

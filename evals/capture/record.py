@@ -24,6 +24,7 @@ from urllib.parse import urlsplit
 
 from opfor.scenarios.attacksurface.assets.domain import PATHS
 from opfor.scenarios.attacksurface.assets.domain.fingerprint import load_products, product_probe_paths
+from opfor.scenarios.attacksurface.assets.domain.sources.http import _BODY_VERSION
 
 _TITLE = re.compile(r"<title[^>]*>(.*?)</title>", re.I | re.S)
 _UA = "Mozilla/5.0 (compatible; opfor-eval-capture)"
@@ -34,13 +35,13 @@ _OPENER = urllib.request.build_opener(type("_NoRedirect", (urllib.request.HTTPRe
                                           {"redirect_request": lambda *a, **k: None})())
 
 
-def _get(url: str) -> dict | None:
+def _get(url: str, limit: int = _BODY) -> dict | None:
     request = urllib.request.Request(url, headers={"User-Agent": _UA})
     try:
         resp = _OPENER.open(request, timeout=_TIMEOUT)
-        status, headers, raw = resp.status, resp.headers, resp.read(_BODY)
+        status, headers, raw = resp.status, resp.headers, resp.read(limit)
     except urllib.error.HTTPError as exc:
-        status, headers, raw = exc.code, exc.headers, exc.read(_BODY)
+        status, headers, raw = exc.code, exc.headers, exc.read(limit)
     except Exception:
         return None
     body = raw.decode("utf-8", "replace")
@@ -67,8 +68,10 @@ def capture(product: str, version: str, url: str) -> dict:
             "body": root_raw.get("body", ""), "location": root_raw.get("location", ""),
             "headers": root_raw.get("headers", []), "reason": ""}
     fetch: dict = {}
+    # Every interface path here is a version endpoint a product declares, so it is read to the larger
+    # version cap opfor's probe uses for them, else a version deep in a large body is recorded short.
     for path in _paths():
-        r = _get(base + path)
+        r = _get(base + path, _BODY_VERSION)
         if r is None or r.get("status") in (None, 404):
             continue
         fetch[path] = {"status": r["status"], "url": base + path, "content_type": r["content_type"],

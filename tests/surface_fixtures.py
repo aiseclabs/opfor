@@ -94,7 +94,7 @@ ENDPOINTS = {
 }
 
 
-def _fetch(name, addresses, path):
+def _fetch(name, addresses, path, *, body_limit=None):
     url = f"https://{name}{path}"
     if name == "spa.example.com":
         # a single-page app: 200 HTML for every path, but a real JSON spec at one path

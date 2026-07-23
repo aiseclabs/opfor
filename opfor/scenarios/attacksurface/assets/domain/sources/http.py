@@ -36,6 +36,11 @@ from opfor.scenarios.attacksurface.assets.domain.sources.dns import (
 from opfor.scenarios.attacksurface.assets.domain.sources.observations import Liveness, Response
 
 _BODY_HEAD = 4096
+# A product's own version endpoint, such as a settings document, can bury the version deep in a
+# large body, so an interface path that carries a version is read to this larger cap rather than the
+# head floor, else a real version is missed. Only the identification paths a product declares read
+# this far, generic probing stays at the head floor, and the model view is bounded elsewhere by render.
+_BODY_VERSION = 32768
 # One retry on a transient timeout, so a single slow read does not mark a live host dead.
 _PROBE_ATTEMPTS = 2
 _TITLE = re.compile(r"<title[^>]*>(.*?)</title>", re.IGNORECASE | re.DOTALL)
@@ -79,7 +84,7 @@ def http_probe(name: str, addresses=()) -> Liveness:
     return _dead("refused" if refused else "unreachable")
 
 
-def fetch_url(name: str, addresses, path: str) -> Response:
+def fetch_url(name: str, addresses, path: str, *, body_limit: int = _BODY_HEAD) -> Response:
     """Fetch one interface path on a name by connecting to a public resolved address.
 
     Every public address is tried, not only the first, the same way the alive probe does, so
@@ -88,7 +93,8 @@ def fetch_url(name: str, addresses, path: str) -> Response:
     carries a `reason`, `no-public-address` or `unreachable`, so the caller tells a transport
     failure from a real absent path, invariant 5. Only transport errors are caught, so an
     unexpected error is raised loud rather than swallowed as a null status, the same loud
-    contract the alive probe keeps.
+    contract the alive probe keeps. `body_limit` is how far the body is read, the head floor by
+    default and a larger cap for a product version endpoint whose version sits deep in the body.
     """
     public = public_addresses(addresses)
     if not public:
@@ -96,7 +102,8 @@ def fetch_url(name: str, addresses, path: str) -> Response:
     for ip in public:
         for scheme in ("https", "http"):
             try:
-                status, server, content_type, body, location, _hdrs = _connect(name, ip, scheme, path)
+                status, server, content_type, body, location, _hdrs = _connect(
+                    name, ip, scheme, path, read_limit=body_limit)
             except (OSError, http.client.HTTPException):
                 continue
             match = _TITLE.search(body)

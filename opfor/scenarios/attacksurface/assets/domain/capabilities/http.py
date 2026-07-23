@@ -17,6 +17,7 @@ from opfor.scenarios.attacksurface.assets.domain.responses import (
     _is_static_asset,
 )
 from opfor.scenarios.attacksurface.assets.domain.sources.parsers import path_permutations
+from opfor.scenarios.attacksurface.assets.domain.sources.http import _BODY_VERSION
 from opfor.scenarios.attacksurface.assets.domain.sources import (
     cloud_refs_in_text,
     paths_in_javascript,
@@ -227,8 +228,12 @@ class ProbeEndpoints(Capability):
 
     _MAX_CANDIDATES = 400
 
-    def __init__(self, fetch_fn) -> None:
+    def __init__(self, fetch_fn, version_paths=()) -> None:
         self._fetch = fetch_fn
+        # Product-declared version endpoints, read to a larger body cap so a version buried deep in
+        # a settings document is still reached. Empty when this capability is driven directly in a
+        # test, so a bare fetch fake is then always called with the plain signature.
+        self._version_paths = frozenset(version_paths)
 
     # Unlikely paths, probed first to learn how a host answers a path that does not
     # exist. A single-page app returns its 200 HTML for these too, which is the catch-all
@@ -262,7 +267,10 @@ class ProbeEndpoints(Capability):
                            f"{self._MAX_CANDIDATES} cap were not probed")
         for path in candidates:
             try:
-                result = self._fetch(name, addresses, path)
+                if path in self._version_paths:
+                    result = self._fetch(name, addresses, path, body_limit=_BODY_VERSION)
+                else:
+                    result = self._fetch(name, addresses, path)
             except Exception as exc:
                 skipped.append(f"{path}: {type(exc).__name__}")
                 continue

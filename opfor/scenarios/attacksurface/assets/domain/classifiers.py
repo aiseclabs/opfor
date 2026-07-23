@@ -15,9 +15,14 @@ from urllib.parse import urlparse
 
 from opfor.core import iter_md_docs
 from opfor.scenarios.attacksurface.assets.domain.sources.parsers import info_from_openapi
+from opfor.scenarios.attacksurface.assets.domain.sources.http import _BODY_VERSION
 
 
 _TITLE = re.compile(r"^#\s+(.+)$", re.MULTILINE)
+# A generic endpoint body contributes only its head to the evidence, enough for a marker that sits
+# a kilobyte or two in. A version endpoint a product declares, whose version can sit deep in a large
+# settings document, contributes far more so that version is still read.
+_BODY_EVIDENCE = 2048
 
 
 def load_frameworks(directory: Path) -> dict:
@@ -42,10 +47,13 @@ def load_frameworks(directory: Path) -> dict:
     return out
 
 
-def host_evidence(world, host) -> str:
+def host_evidence(world, host, version_paths=()) -> str:
     """A host's identification signals as compact text, the HTTP headers, title, and server, and
     the bodies of the paths that name a product or its version, so a profiler reads one evidence
-    blob rather than the world directly. It reads existing facts, it sends no request."""
+    blob rather than the world directly. It reads existing facts, it sends no request. A path in
+    `version_paths`, a product's declared version endpoint, contributes a larger body slice, so a
+    version buried deep in a large settings document is still in the evidence a profiler reads."""
+    version_paths = frozenset(version_paths)
     lines = [f"host {host.payload.name}"]
     http = world.latest("http", host.id)
     if http is not None:
@@ -73,7 +81,10 @@ def host_evidence(world, host) -> str:
             # A page's head carries a block of framework CSS before its app-specific bundle, so a
             # high-signal marker such as an app theme path sits a kilobyte or two in, past a tighter
             # window, as a real Airflow login page showed. This covers a realistic head, still bounded.
-            bit += f"\n  body: {endpoint.body[:2048]}"
+            # A product version endpoint contributes far more, since its version can sit deep in a
+            # large settings document, and only those declared paths pay that cost.
+            window = _BODY_VERSION if endpoint.path in version_paths else _BODY_EVIDENCE
+            bit += f"\n  body: {endpoint.body[:window]}"
         lines.append(bit)
         title, version = _spec_info(world, node, endpoint)
         if title or version:

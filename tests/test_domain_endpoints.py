@@ -56,7 +56,7 @@ def test_endpoint_probe_records_a_coverage_gap_when_a_path_errors():
     # one candidate path errors on the probe. The scan still returns the endpoints it
     # reached, but the dropped path is recorded as a coverage gap and surfaced as an INFO
     # finding, so a partial probe is never read as a clean, complete negative, invariant 5.
-    def fetch(name, addresses, path):
+    def fetch(name, addresses, path, *, body_limit=None):
         if name == "admin.example.com" and path == "/.git/config":
             raise TimeoutError("probe timed out")
         return _fetch(name, addresses, path)
@@ -74,7 +74,7 @@ def test_endpoint_probe_records_a_coverage_gap_on_a_transport_failure_not_only_a
     # the real fetch seam swallows a connection error and returns status None rather than
     # raising, so the gap must be recorded from a None status too, else a WAF-blocked or
     # timed-out probe reads as a clean negative, invariant 5
-    def fetch(name, addresses, path):
+    def fetch(name, addresses, path, *, body_limit=None):
         if name == "admin.example.com" and path == "/.git/config":
             return Response(status=None, url=f"https://{name}{path}")
         return _fetch(name, addresses, path)
@@ -93,7 +93,7 @@ def test_endpoint_probe_reports_truncation_when_the_candidate_cap_is_hit():
     world.add(Node(id="domain:h", type="domain", payload=DomainData(name="h", root="h", source="s")))
     paths = [f"/p{i}" for i in range(500)]
 
-    def fetch(name, addresses, path):
+    def fetch(name, addresses, path, *, body_limit=None):
         return Response(status=404, url=f"https://{name}{path}")
 
     outcome = ProbeEndpoints(fetch).run(
@@ -111,7 +111,7 @@ def test_endpoint_probe_flags_when_the_baseline_cannot_be_established():
     world = World()
     world.add(Node(id="domain:h", type="domain", payload=DomainData(name="h", root="h", source="s")))
 
-    def fetch(name, addresses, path):
+    def fetch(name, addresses, path, *, body_limit=None):
         # only the real path answers, the baseline catch-all probes get no response
         if path == "/real":
             return Response(status=200, url=f"https://{name}{path}", content_type="text/html", body="x")

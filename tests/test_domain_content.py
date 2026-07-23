@@ -235,7 +235,7 @@ def test_backup_scan_finds_a_twin_of_an_observed_file():
     home = '<html><body><a href="/config.php">cfg</a></body></html>'
     source = "<?php $db_pass='s3cr3t'; ?>"
 
-    def fetch(name, addresses, path):
+    def fetch(name, addresses, path, *, body_limit=None):
         url = f"https://{name}{path}"
         miss = Response(status=404, url=url)
         if name != "admin.example.com":
@@ -261,7 +261,7 @@ def test_backup_scan_finds_a_twin_of_an_observed_file():
 def test_backup_scan_records_a_coverage_gap_when_a_twin_errors():
     home = '<html><body><a href="/config.php">cfg</a></body></html>'
 
-    def fetch(name, addresses, path):
+    def fetch(name, addresses, path, *, body_limit=None):
         url = f"https://{name}{path}"
         miss = Response(status=404, url=url)
         if name != "admin.example.com":

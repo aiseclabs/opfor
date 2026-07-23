@@ -106,6 +106,9 @@ def assemble(*, enumerate_fn, resolve_fn, probe_fn, fetch_fn, fetch_doc_fn,
     a test drives the class with fixtures. The run maps exactly the operator's seed roots and
     expands each to its subdomains, no root discovery beyond the seed. The CVE lookup rides only
     when its lookup seam is wired."""
+    # The per-product knowledge units are loaded once here, so their own paths are read both as the
+    # probe's version endpoints and as the identify seam's markers below.
+    fingerprints = load_products(PATHS.products)
     capabilities = [
         DiscoverDomains(),
         EnumerateSubdomains(enumerate_fn),
@@ -116,7 +119,7 @@ def assemble(*, enumerate_fn, resolve_fn, probe_fn, fetch_fn, fetch_doc_fn,
         ProbeTLSPosture(tls_fn),
         HarvestPaths(fetch_fn, fetch_doc_fn, wayback_fn),
         PermutePaths(),
-        ProbeEndpoints(fetch_fn),
+        ProbeEndpoints(fetch_fn, version_paths=product_probe_paths(fingerprints)),
         ExpandSpec(fetch_doc_fn),
         ProbeSpec(fetch_fn),
         GraphQLIntrospect(introspect_fn),
@@ -130,7 +133,6 @@ def assemble(*, enumerate_fn, resolve_fn, probe_fn, fetch_fn, fetch_doc_fn,
     # seam, so the seam tries the products first and falls to the model on a miss, and a thin or
     # stale set identifies less rather than wrong. They are the class's own knowledge, loaded here
     # at assemble time. An empty set leaves the seam pure model, so a missing tree is no regression.
-    fingerprints = load_products(PATHS.products)
     if identify_fn is not None and fingerprints:
         model_identify = identify_fn
 
@@ -146,7 +148,8 @@ def assemble(*, enumerate_fn, resolve_fn, probe_fn, fetch_fn, fetch_doc_fn,
     def framework_fn(http):
         return classify_frameworks(http, frameworks_table)
 
-    capabilities.append(ProfileHost(identify_fn, framework_fn))
+    capabilities.append(ProfileHost(identify_fn, framework_fn,
+                                    version_paths=product_probe_paths(fingerprints)))
     if cve_fn is not None:
         capabilities.append(CVELookup(cve_fn))
     # The plan config is loaded here, at assemble time, not at planner import, so the content root

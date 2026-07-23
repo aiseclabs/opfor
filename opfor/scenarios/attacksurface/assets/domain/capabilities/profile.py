@@ -24,9 +24,10 @@ class ProfileHost(Capability):
     phase = Phase.ENRICH
     osint = True
 
-    def __init__(self, identify_fn, framework_fn) -> None:
+    def __init__(self, identify_fn, framework_fn, version_paths=()) -> None:
         self._identify = identify_fn
         self._frameworks = framework_fn
+        self._version_paths = tuple(version_paths)
 
     def run(self, task: Task, world: World) -> Outcome:
         host = world.node(task.node)
@@ -35,7 +36,7 @@ class ProfileHost(Capability):
         product = version = cpe = ""
         if self._identify is not None:
             try:
-                found = self._identify(host_evidence(world, host))
+                found = self._identify(host_evidence(world, host, self._version_paths))
             except Exception as exc:
                 return net_failed("product identification", exc)
             product = str(found.get("product", "")).strip()

@@ -102,7 +102,7 @@ def test_probe_spec_verifies_reads_defers_writes_and_skips_templated():
 
     calls = []
 
-    def fetch(name, addresses, path):
+    def fetch(name, addresses, path, *, body_limit=None):
         calls.append(path)
         if path.startswith("/opfor-baseline") or path.startswith("/does-not-exist"):
             return Response(status=404)
@@ -152,7 +152,7 @@ def test_probe_spec_flags_a_coverage_gap_when_the_baseline_could_not_be_establis
         APISpec, DomainData, Endpoint, Resolved,
     )
 
-    def fetch(name, addresses, path):
+    def fetch(name, addresses, path, *, body_limit=None):
         if path.startswith("/opfor-baseline") or path.startswith("/does-not-exist"):
             raise TimeoutError("baseline probe timed out")  # the catch-all baseline cannot be read
         if path == "/config/all":

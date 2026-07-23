@@ -15,8 +15,8 @@ original path is recorded below, so a sync is a diff against the same upstream f
 
 - `CVE-2021-43798.yaml`, upstream `http/cves/2021/CVE-2021-43798.yaml`, Grafana arbitrary file read.
 - `CVE-2021-41277.yaml`, upstream `http/cves/2021/CVE-2021-41277.yaml`, Metabase GeoJSON local file read.
-- `CVE-2019-6340.yaml`, upstream `http/cves/2019/CVE-2019-6340.yaml`, Drupal REST deserialization command run. A state-changing POST recipe, replayed only at the exploit tier, whose benign `id` proof rides in the response.
 - `CVE-2023-38646.yaml`, upstream `http/cves/2023/CVE-2023-38646.yaml`, Metabase H2 pre-auth command execution. A multi-step chain, it reads the setup token from one response and spends it in the next, driven whole at the exploit tier, its dsl matcher consumed by `nuclei_chain`.
+- `CVE-2020-27986.yaml`, upstream `http/cves/2020/CVE-2020-27986.yaml`, SonarQube unauthenticated settings read. A read-only GET whose response leaks configured secrets such as the SMTP credentials, so the live lane seeds one dummy secret first.
 
 To sync: refresh a file from the same upstream path, re-run the eval that verifies it against a live
 instance, and only then commit the update.

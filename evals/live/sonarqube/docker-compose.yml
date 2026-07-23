@@ -1,0 +1,34 @@
+# SonarQube at a version with an unauthenticated settings read CVE, for the live reproduction lane.
+#
+# Run on a machine with Docker, not in CI. SonarQube bundles Elasticsearch, so the host needs a
+# raised map count first. Bring it up, wait for the seed to finish, run the lane, tear it down:
+#
+#   sudo sysctl -w vm.max_map_count=262144
+#   docker compose -f evals/live/sonarqube/docker-compose.yml up -d
+#   python -m evals.live.run --url http://localhost:9000 --expect-cve CVE-2020-27986
+#   docker compose -f evals/live/sonarqube/docker-compose.yml down
+#
+# SonarQube 8.4.2 carries CVE-2020-27986, an unauthenticated read of the instance settings through
+# /api/settings/values, which returns configured secrets without authentication. The leak only has
+# content once a secret is configured, so the seed service sets one dummy SMTP secret through the
+# admin API before the run, the precondition the vulnerability reads back. The lane then identifies
+# the version, looks its CVEs up in NVD, replays the read-only recipe, and confirms it on the leak.
+services:
+  sonarqube-8-4-2:
+    image: sonarqube:8.4.2-community
+    ports: ["9000:9000"]
+  seed:
+    image: curlimages/curl:8.5.0
+    depends_on: [sonarqube-8-4-2]
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        until curl -sf http://sonarqube-8-4-2:9000/api/system/status | grep -q '"status":"UP"'; do
+          sleep 5
+        done
+        for kv in email.smtp_host.secured=smtp.opfor.test email.smtp_port.secured=25 \
+                  email.smtp_username.secured=opfor email.smtp_password.secured=s3cr3t; do
+          curl -s -u admin:admin -X POST "http://sonarqube-8-4-2:9000/api/settings/set" \
+            --data-urlencode "key=${kv%%=*}" --data-urlencode "value=${kv#*=}"
+        done
+        echo "seeded a dummy SMTP secret, the precondition CVE-2020-27986 reads back"

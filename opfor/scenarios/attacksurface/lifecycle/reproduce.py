@@ -26,6 +26,24 @@ _READ_METHODS = ("GET", "HEAD", "OPTIONS")
 _EXCERPT = 300
 
 
+def _marker_excerpt(body: str, expect: str) -> str:
+    """An excerpt of the response centered on the recipe's marker, so the confirm judge sees the
+    matching evidence rather than only the head of a large response. The recipe's `expect` carries
+    the matcher's literal words in parentheses, a leaked key or an error string, so the earliest of
+    those found in the body anchors the window. A regex marker or a marker absent from the body
+    falls back to the head, where a file read marker such as a passwd line already sits."""
+    literals: list[str] = []
+    for group in re.findall(r"\(([^)]*)\)", expect or ""):
+        literals += [w.strip() for w in re.split(r"\s+(?:and|or)\s+", group)]
+    found = [w for w in literals if len(w) >= 4 and not w.isdigit() and w in body]
+    if any(w not in body[:_EXCERPT] for w in found):
+        # A window around each matched marker, so the judge sees every leaked item even when they
+        # are scattered through a large response, not one contiguous run and not only the head.
+        windows = [body[max(0, body.find(w) - 12):body.find(w) + 100] for w in found]
+        return " ... ".join(dict.fromkeys(windows))[:2 * _EXCERPT]
+    return body[:_EXCERPT]
+
+
 @dataclass(frozen=True, kw_only=True)
 class PoCRequest:
     """A finding's grounded, reproducible request, taken from a recorded observation or a recipe.
@@ -119,7 +137,7 @@ class ReproduceFinding(Capability):
         repro = Reproduction(
             method=method, url=request.url, status=status,
             content_type=result.content_type, size=len(body),
-            excerpt=self._redact(body)[:_EXCERPT],
+            excerpt=_marker_excerpt(self._redact(body), request.expect),
             location=result.location, expect=request.expect,
             error="" if status is not None else "no response")
         return Done(facts=(Fact(kind="reproduction", about=task.node, payload=repro),))
@@ -179,7 +197,7 @@ class ExploitFinding(Capability):
         repro = Reproduction(
             method=method, url=request.url, status=status,
             content_type=result.content_type, size=len(body),
-            excerpt=self._redact(body)[:_EXCERPT],
+            excerpt=_marker_excerpt(self._redact(body), request.expect),
             location=result.location, expect=request.expect,
             error="" if status is not None else "no response")
         return Done(facts=(Fact(kind="reproduction", about=task.node, payload=repro),))
@@ -245,7 +263,7 @@ class ExploitChain(Capability):
         repro = Reproduction(
             method=chain.steps[-1].method.upper(), url=final.get("url", claim.request.url),
             status=final.get("status"), content_type=final.get("content_type", ""),
-            size=len(body), excerpt=self._redact(body)[:_EXCERPT],
+            size=len(body), excerpt=_marker_excerpt(self._redact(body), claim.request.expect),
             location=final.get("location", ""), expect=claim.request.expect,
             error="" if final.get("status") is not None else "no response")
         return Done(facts=(Fact(kind="reproduction", about=task.node, payload=repro),))

@@ -22,6 +22,11 @@ from opfor.scenarios.onchain.assets.contract.sources.observations import (
 _DEXSCREENER = "https://api.dexscreener.com"
 _TIMEOUT = 15.0
 _DEFAULT_TERMS = ("WBNB USDT", "BSC USDC", "CAKE WBNB", "BSC new pair")
+# The shallow pivot can return dozens of pools for one token, which floods MAP and exhausts the
+# budget before ENRICH runs. Cap the breadth so a single hop stays bounded. The pools are ranked
+# by liquidity so the cap keeps the richest, and a deeper pivot to the fund contracts behind a
+# token, the real value, is the tracked next increment.
+_MAX_RELATED = 8
 
 
 def _get_json(url: str):
@@ -70,11 +75,15 @@ def pivot(contract) -> tuple[RelatedObservation, ...]:
         return ()
     data = _get_json(f"{_DEXSCREENER}/token-pairs/v1/{contract.chain}/{contract.address}")
     pairs = data if isinstance(data, list) else (data.get("pairs") or [])
+    ranked = sorted(pairs, key=lambda p: float((p.get("liquidity") or {}).get("usd") or 0),
+                    reverse=True)
     related: dict[str, RelatedObservation] = {}
-    for pair in pairs:
+    for pair in ranked:
         address = pair.get("pairAddress")
         if address and address.lower() != contract.address.lower():
             related[address.lower()] = RelatedObservation(
                 address=address, chain=contract.chain, role_hint="pool",
                 via="dexscreener token-pairs")
+        if len(related) >= _MAX_RELATED:
+            break
     return tuple(related.values())

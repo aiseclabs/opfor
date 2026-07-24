@@ -1,0 +1,36 @@
+# External-attacker risk signatures the scan_signals capability matches against verified source.
+# A match records a flag, it carries no severity. Triage weighs the flags against the funds and
+# the reachable fund paths. These are the signals that, from an outside caller's view, mark fund
+# logic worth a manual audit.
+
+signatures:
+  - flag: share_accounting
+    category: risk
+    pattern: "totalAssets|convertToShares|convertToAssets|pricePerShare|sharePrice"
+  - flag: reward_debt_accounting
+    category: risk
+    pattern: "rewardDebt|accRewardPerShare|pendingReward|accPerShare"
+  - flag: oracle_dependency
+    category: risk
+    pattern: "latestAnswer|latestRoundData|getPrice|priceOracle|IOracle"
+  - flag: dex_spot_price_dependency
+    category: risk
+    pattern: "getReserves|slot0|getAmountsOut|getAmountOut|consult"
+  - flag: fee_on_transfer_accounting
+    category: risk
+    pattern: "balanceBefore|balanceAfter|balanceOf\\(address\\(this\\)\\)"
+  - flag: delegatecall
+    category: risk
+    pattern: "delegatecall"
+  - flag: arbitrary_call
+    category: risk
+    pattern: "\\.call\\s*[\\({]"
+  - flag: callback_validation_required
+    category: risk
+    pattern: "uniswapV3\\w*Callback|pancakeCall|onFlashLoan|flashCallback|hook"
+  - flag: unchecked_low_level_transfer
+    category: risk
+    pattern: "\\.transfer\\(|\\.send\\("
+  - flag: upgradeable_proxy
+    category: risk
+    pattern: "upgradeTo|_authorizeUpgrade|Initializable|initializer|delegatecall"

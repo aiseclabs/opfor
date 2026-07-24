@@ -50,4 +50,5 @@ include = ["opfor*"]
 [tool.setuptools.package-data]
 "*" = [
     "knowledge/**/*.md",
+    "knowledge/**/*.yaml",
 ]

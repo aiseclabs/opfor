@@ -6,8 +6,8 @@ import in `CLAUDE.md`.
 It is an offensive-security engine with one mission. From a root domain, discover its
 subdomains, identify what each subdomain is, analyze the state of the service it runs, the
 interfaces it exposes, whether it carries a known CVE, whether it leaves an unauthorized-access
-hole, and write an accurate PoC for what is found. A report of the findings is the last step,
-still to come.
+hole, and write an accurate PoC for what is found, then report it. A run writes its findings as a
+structured `findings.json` and a human `report.md`.
 
 The engine underneath is generic. It names no host, product, or person, so the mission lives
 as scenario data, capabilities, and knowledge. A scenario changes by swapping those, never by

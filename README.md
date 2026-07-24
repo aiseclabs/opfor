@@ -63,6 +63,25 @@ authorize the tier:
 opfor run attacksurface --root example.com --reproduce --confirm --tier intrusive --authorize
 ```
 
+The `onchain` scenario maps a chain's on-chain surface to a ranked audit queue. It is recon-only,
+it reads public chain data and never sends a transaction. A default run sweeps the active DEX pools
+on a chain, pivots from each token to the fund contracts behind it, and judges which are worth a
+manual audit:
+
+```bash
+opfor run onchain --root bsc
+```
+
+To audit specific contracts directly, name them with `--host`, which skips the sweep and judges
+exactly those addresses and what they pivot to:
+
+```bash
+opfor run onchain --root bsc --host 0xCONTRACT --host 0xANOTHER
+```
+
+Reading verified source, the explorer step, needs an Etherscan V2 key in `OPFOR_ETHERSCAN_API_KEY`,
+see `.env.example`. Without it the run still closes but cannot read the source its triage judges on.
+
 ## Develop
 
 ```bash

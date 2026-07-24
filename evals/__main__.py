@@ -2,6 +2,7 @@
 
     python -m evals run                    # replay every cassette, print the matrix
     python -m evals run --recall-floor 1.0 --version-floor 1.0   # and exit nonzero on a regression
+    python -m evals repro                  # score the reproduce loop against benign perturbations
     python -m evals coverage               # which knowledge claims a backtest exercises
     python -m evals coverage --strict      # and exit nonzero while any claim is uncovered
 
@@ -15,7 +16,7 @@ from __future__ import annotations
 import argparse
 import sys
 
-from evals import backtest, knowledge
+from evals import backtest, knowledge, repro_backtest
 
 
 def _run(args) -> int:
@@ -23,6 +24,20 @@ def _run(args) -> int:
     result = backtest.score(cases)
     print(backtest.format_report(cases, result))
     fails = backtest.gate(result, recall_floor=args.recall_floor, version_floor=args.version_floor)
+    if fails:
+        print("\nFAIL:")
+        for f in fails:
+            print(f"  - {f}")
+        return 1
+    print("\nPASS")
+    return 0
+
+
+def _repro(args) -> int:
+    cases = repro_backtest.run()
+    result = repro_backtest.score(cases)
+    print(repro_backtest.format_report(cases, result))
+    fails = repro_backtest.gate(result, recall_floor=args.recall_floor)
     if fails:
         print("\nFAIL:")
         for f in fails:
@@ -47,11 +62,15 @@ def main(argv: list[str] | None = None) -> int:
     r = sub.add_parser("run", help="replay the corpus and score")
     r.add_argument("--recall-floor", type=float, default=1.0, help="fail below this recall, default 1.0")
     r.add_argument("--version-floor", type=float, default=1.0, help="fail below this version accuracy, default 1.0")
+    p = sub.add_parser("repro", help="score the reproduce loop against benign perturbations")
+    p.add_argument("--recall-floor", type=float, default=1.0, help="fail below this adaptation recall, default 1.0")
     c = sub.add_parser("coverage", help="report which knowledge claims a backtest exercises")
     c.add_argument("--strict", action="store_true", help="exit nonzero while any claim is uncovered")
     args = parser.parse_args(argv)
     if args.cmd == "coverage":
         return _coverage(args)
+    if args.cmd == "repro":
+        return _repro(args)
     return _run(args)
 
 

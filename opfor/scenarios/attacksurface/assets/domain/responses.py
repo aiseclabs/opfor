@@ -13,9 +13,6 @@ import re
 from opfor.scenarios.attacksurface.assets.domain.sources.observations import Response
 
 _LINK = re.compile(r'(?:href|src)\s*=\s*["\']([^"\'#?]+)', re.IGNORECASE)
-# Same-host bundles checked for a source map per host, bounded so a bundle-heavy app stays
-# a small number of extra reads.
-_MAX_SOURCE_MAPS = 12
 
 
 def _is_static_asset(path: str, suffixes, prefixes) -> bool:

@@ -59,11 +59,3 @@ class Response:
     reason: str = ""
 
 
-@dataclass(frozen=True)
-class SourceMapClues:
-    """What a JavaScript source map leaks, parsed from a bundle's own text: the count of original
-    sources, whether the source is inlined, and a few paths as evidence."""
-
-    sources_count: int
-    has_sources_content: bool
-    sample_sources: tuple[str, ...] = ()

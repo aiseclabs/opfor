@@ -59,14 +59,12 @@ from opfor.scenarios.attacksurface.assets.domain.sources.parsers import (
 from opfor.scenarios.attacksurface.assets.domain.sources.javascript import (
     paths_in_javascript,
     script_sources,
-    source_map_from_text,
     urls_in_javascript,
 )
 from opfor.scenarios.attacksurface.assets.domain.sources.observations import (
     Liveness,
     Resolution,
     Response,
-    SourceMapClues,
 )
 
 
@@ -77,7 +75,6 @@ __all__ = [
     "Liveness",
     "Resolution",
     "Response",
-    "SourceMapClues",
     "backup_candidates",
     "certspotter_subdomains",
     "cves_from_nvd",
@@ -103,7 +100,6 @@ __all__ = [
     "same_host_path",
     "script_sources",
     "sitemap_paths",
-    "source_map_from_text",
     "split_operation",
     "subdomains",
     "subdomains_from_dnsdumpster",

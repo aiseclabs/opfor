@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import json
-
 from opfor.core import Node, World
 
 from opfor.scenarios.attacksurface.assets.domain.sources.observations import Response
@@ -65,71 +63,6 @@ def test_javascript_extraction_dedups_and_caps_a_hostile_bundle():
 
     urls = "".join(f'"https://h/u{i}"' for i in range(_MAX_JS_STRINGS + 500))
     assert len(urls_in_javascript(urls)) == _MAX_JS_STRINGS
-
-def test_source_map_parser_detects_inlined_source_and_paths_only():
-    from opfor.scenarios.attacksurface.assets.domain import sources as domains
-
-    inlined = json.dumps({"version": 3, "sources": ["../src/app.ts", "../src/api.ts"],
-                          "sourcesContent": ["export const x = 1", ""]})
-    r = domains.source_map_from_text(inlined)
-    assert r.has_sources_content is True
-    assert r.sources_count == 2
-    assert "../src/app.ts" in r.sample_sources
-
-    # a map that lists paths but inlines no content is a lesser leak, not None
-    paths_only = json.dumps({"version": 3, "sources": ["../src/app.ts"], "sourcesContent": [None]})
-    assert domains.source_map_from_text(paths_only).has_sources_content is False
-
-    # ordinary json and an empty body are not source maps
-    assert domains.source_map_from_text('{"hello": "world"}') is None
-    assert domains.source_map_from_text("") is None
-
-def test_source_map_scan_flags_an_inlined_map():
-    home = '<script src="/assets/app.abc.js"></script>'
-    mapdoc = json.dumps({"version": 3, "sources": ["../src/secret.ts"],
-                         "sourcesContent": ["const API_KEY = 'x'"]})
-
-    def fetch_doc(name, path):
-        if path == "/":
-            return Response(body=home)
-        if path.endswith(".map"):
-            return Response(body=mapdoc)
-        return Response(body="")
-
-    report, _scenario, world = _run_capturing(fetch_doc_fn=fetch_doc)
-    leaks = [f.payload for f in world.facts("source_maps") if f.payload.leaks]
-    assert leaks, "expected a source_maps fact carrying a leak"
-    leak = leaks[0].leaks[0]
-    assert leak.has_sources_content is True
-    assert leak.url.endswith("/assets/app.abc.js.map")
-
-def test_source_map_scan_tolerates_a_bundle_error_and_still_records_the_gap():
-    from opfor.core import Done, Task
-    from opfor.scenarios.attacksurface.assets.domain.capabilities.artifacts import SourceMapScan
-    from opfor.scenarios.attacksurface.assets.domain.types import DomainData
-
-    world = World()
-    world.add(Node(id="domain:h", type="domain", payload=DomainData(name="h", root="h", source="s")))
-    home = '<script src="/a.js"></script><script src="/b.js"></script>'
-
-    def fetch_doc(name, path):
-        if path == "/":
-            return Response(status=200, body=home)
-        if path == "/a.js.map":
-            raise TimeoutError("map fetch failed")
-        if path == "/b.js.map":
-            return Response(status=200,
-                            body='{"version":3,"sources":["x.ts"],"sourcesContent":["code"]}')
-        return Response(status=None)
-
-    outcome = SourceMapScan(fetch_doc).run(Task(capability="source_map_scan", node="domain:h"), world)
-    assert isinstance(outcome, Done)
-    kinds = {f.kind for f in outcome.facts}
-    # the good bundle's leak is kept, and the errored bundle is a coverage gap, not a whole
-    # scan Failed that would discard what was already found
-    assert "source_maps" in kinds and "coverage_gap" in kinds
-    leaks = [f for f in outcome.facts if f.kind == "source_maps"][0].payload.leaks
-    assert len(leaks) == 1
 
 def test_backup_candidates_derives_twins_and_skips_directories():
     from opfor.scenarios.attacksurface.assets.domain import sources as domains

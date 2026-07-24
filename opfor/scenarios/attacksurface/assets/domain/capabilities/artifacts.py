@@ -1,82 +1,12 @@
-"""ENRICH-phase artifact scans, source maps, secrets in bundles, and backup twins."""
+"""ENRICH-phase artifact scan: backup and editor-artifact twins of a host's observed files."""
 
 from __future__ import annotations
 
 from opfor.core import Capability, Done, Fact, Outcome, Phase, Task, World
-from opfor.scenarios.attacksurface.assets.domain.failures import _coverage_gap, net_failed
-from opfor.scenarios.attacksurface.assets.domain.responses import (
-    _MAX_SOURCE_MAPS,
-    _baseline,
-    _distinct,
-)
+from opfor.scenarios.attacksurface.assets.domain.failures import _coverage_gap
+from opfor.scenarios.attacksurface.assets.domain.responses import _baseline, _distinct
 from opfor.scenarios.attacksurface.assets.domain.candidates import backup_targets
-from opfor.scenarios.attacksurface.assets.domain.sources import (
-    script_sources,
-    source_map_from_text,
-)
-from opfor.scenarios.attacksurface.assets.domain.types import (
-    BackupHit,
-    BackupReport,
-    SourceMapLeak,
-    SourceMapReport,
-)
-
-
-class SourceMapScan(Capability):
-    """ENRICH: find reachable JavaScript source maps on a live host.
-
-    A build tool ships `bundle.js.map` next to a bundle, and when it inlines the original
-    source in `sourcesContent` the application's source is reconstructable, comments,
-    internal paths, and sometimes secrets. The map is skipped as a static asset by the
-    interface probe, so this capability derives the map url from each same-host bundle the
-    home page loads and reads it. It touches the target, so it is scoped, not osint. It
-    reports the raw maps found, whether one is a real leak is triage's judgment.
-    """
-
-    name = "source_map_scan"
-    phase = Phase.ENRICH
-    osint = False
-
-    def __init__(self, fetch_doc_fn) -> None:
-        self._fetch_doc = fetch_doc_fn
-
-    def run(self, task: Task, world: World) -> Outcome:
-        host = world.node(task.node)
-        name = host.payload.name
-        try:
-            home = self._fetch_doc(name, "/").body
-        except Exception as exc:
-            return net_failed("source map scan home fetch", exc)
-        bundles = script_sources(home, name)
-        probed = bundles[:_MAX_SOURCE_MAPS]
-        leaks: list[SourceMapLeak] = []
-        skipped: list[str] = []
-        for bundle in probed:
-            map_path = bundle + ".map"
-            # one bundle's error must not discard the maps already found on the others, so it
-            # is a per-bundle coverage gap rather than a whole-scan Failed, invariant 5
-            try:
-                text = self._fetch_doc(name, map_path).body
-            except Exception as exc:
-                skipped.append(f"{map_path}: {type(exc).__name__}")
-                continue
-            parsed = source_map_from_text(text)
-            if parsed is None:
-                continue
-            leaks.append(SourceMapLeak(
-                bundle=bundle, url=f"https://{name}{map_path}",
-                sources_count=parsed.sources_count,
-                has_sources_content=parsed.has_sources_content,
-                sample_sources=parsed.sample_sources))
-        if len(bundles) > len(probed):
-            skipped.append(f"{len(bundles) - len(probed)} more bundles beyond the "
-                           f"{_MAX_SOURCE_MAPS} cap were not scanned")
-        facts = [Fact(kind="source_maps", about=task.node,
-                      payload=SourceMapReport(leaks=tuple(leaks)))]
-        gap = _coverage_gap("source_map_scan", name, len(bundles), skipped)
-        if gap is not None:
-            facts.append(Fact(kind="coverage_gap", about=task.node, payload=gap))
-        return Done(facts=tuple(facts))
+from opfor.scenarios.attacksurface.assets.domain.types import BackupHit, BackupReport
 
 
 class BackupScan(Capability):

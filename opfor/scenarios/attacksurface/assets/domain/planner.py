@@ -208,21 +208,6 @@ def _graphql_rule(world: World) -> list[Task]:
     return tasks
 
 
-def _source_map_rule(world: World) -> list[Task]:
-    """Scan every live host for reachable JavaScript source maps, once per host.
-
-    It reads the target's bundles and their maps, a scoped act, so the task carries the host
-    for scope. Gated on its own fact so it runs once.
-    """
-    tasks: list[Task] = []
-    for node in _live_domains(world):
-        if world.has_fact(node.id, "source_maps"):
-            continue
-        tasks.append(Task(capability="source_map_scan", node=node.id,
-                          scope_target=node.payload.name))
-    return tasks
-
-
 def _backup_rule(world: World, config: DomainPlanConfig) -> list[Task]:
     """Probe backup twins of a live host's observed files, once per host, after its interfaces
     are enumerated so the observed file set is complete. Hands the capability the name
@@ -322,7 +307,6 @@ def enrich_rules(config: DomainPlanConfig, *, with_profile: bool = False, with_c
         _spec_rule,
         _spec_probe_rule,
         _graphql_rule,
-        _source_map_rule,
         lambda world: _backup_rule(world, config),
     ]
     if with_profile:

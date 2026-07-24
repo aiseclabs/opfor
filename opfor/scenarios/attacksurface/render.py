@@ -146,13 +146,6 @@ class SurfaceRenderer:
                 # vulnerability set, invariant 5
                 line += (f"\n  {len(ranked) - _MAX_CVES} more CVE(s) not shown, ranked below "
                          f"the {_MAX_CVES} highest-scored")
-        maps = world.latest("source_maps", node.id)
-        if maps is not None and maps.payload.leaks:
-            for leak in maps.payload.leaks:
-                detail = "inlines original source" if leak.has_sources_content else "source paths only"
-                line += f"\n  source map: {leak.url}, {leak.sources_count} sources, {detail}"
-                if leak.sample_sources:
-                    line += f"\n    sample: {', '.join(leak.sample_sources)}"
         backups = world.latest("backups", node.id)
         if backups is not None and backups.payload.hits:
             for hit in backups.payload.hits:

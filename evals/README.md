@@ -4,8 +4,8 @@ Two offline, deterministic gates, no Docker, network, or model. The fingerprint 
 whether opfor identifies a product. The reproduction-capability backtest measures the other half of
 a run, whether the reproduce loop adapts when a target deviates from the recipe. Both are CI gates,
 and both keep their ground truth out of the pipeline, so a high score cannot come from the tool
-grading itself. The live lanes in `evals/live/` are a separate on-demand seam check, not a capability
-measurement, see that directory's README.
+grading itself. Docker-based live lanes against real product containers were removed and parked, so
+the whole eval surface here is offline, benign, and deterministic.
 
 ## Fingerprint backtest
 

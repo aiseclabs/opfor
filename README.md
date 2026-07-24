@@ -64,23 +64,28 @@ opfor run attacksurface --root example.com --reproduce --confirm --tier intrusiv
 ```
 
 The `onchain` scenario maps a chain's on-chain surface to a ranked audit queue. It is recon-only,
-it reads public chain data and never sends a transaction. A default run sweeps the active DEX pools
-on a chain, pivots from each token to the fund contracts behind it, and judges which are worth a
-manual audit:
+it reads public chain data and never sends a transaction. It aims at the long tail, the young,
+funded, unaudited contracts worth a manual look, not the established bluechips. A default run sweeps
+a chain's recently created pools inside an age band, pivots from each token to the fund contracts
+behind it by transfer-counterparty analysis, prices what each holds, matches risk signals, and
+judges which are worth an audit, dropping known infrastructure so the queue stays on the unknowns:
 
 ```bash
-opfor run onchain --root bsc
+opfor run onchain --root ethereum
 ```
 
 To audit specific contracts directly, name them with `--host`, which skips the sweep and judges
 exactly those addresses and what they pivot to:
 
 ```bash
-opfor run onchain --root bsc --host 0xCONTRACT --host 0xANOTHER
+opfor run onchain --root ethereum --host 0xCONTRACT --host 0xANOTHER
 ```
 
-Reading verified source, the explorer step, needs an Etherscan V2 key in `OPFOR_ETHERSCAN_API_KEY`,
-see `.env.example`. Without it the run still closes but cannot read the source its triage judges on.
+The explorer reads, verified source and transfer history, use the Etherscan V2 multichain API and
+need a key in `OPFOR_ETHERSCAN_API_KEY`, see `.env.example`. A free key is full-access on Ethereum
+mainnet. Other chains such as bsc read verified source on the free tier but need a paid plan for the
+transfer analysis the autonomous discovery relies on. The tool does not auto-load `.env`, so
+`source .env` first.
 
 ## Develop
 

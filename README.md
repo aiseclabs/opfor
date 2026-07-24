@@ -9,15 +9,19 @@
  ╚═════╝ ╚═╝     ╚═╝      ╚═════╝ ╚═╝  ╚═╝
 ```
 
-AI-assisted offensive reconnaissance and attack surface mapping.
+AI-assisted external attack-surface reconnaissance, from a root domain to a confirmed PoC.
 
-One generic engine drives every scenario, web, internal network, AI agents, phishing.
-You change scenario by swapping data, plugins, and knowledge, never by editing the engine.
+From a root domain it discovers the subdomains, identifies what each one is, analyzes the state
+of the service it runs, the interfaces it exposes, its known CVEs, its unauthorized-access holes,
+and writes an accurate PoC for what it finds, then reports it.
 
-It mirrors codejury's "generic engine, knowledge as data" decoupling. The
-difference is that codejury reads code and judges, while opfor acts on live
-targets: it grows a live situation graph, gates every action by authorized scope,
-survives async waits, and keeps an audit ledger.
+The engine underneath is generic and names no host, product, or person, so this mission lives as
+scenario data, capabilities, and knowledge. You change a scenario by swapping those, never by
+editing the engine.
+
+It mirrors codejury's "generic engine, knowledge as data" decoupling. The difference is that
+codejury reads code and judges, while opfor acts on live targets: it grows a situation graph,
+gates every action by authorized scope, survives async waits, and keeps an audit ledger.
 
 ## Layers
 
@@ -48,6 +52,15 @@ an extra, `opfor[anthropic]` or `opfor[openai]`.
 ```bash
 opfor scenarios
 opfor run attacksurface --root example.com
+```
+
+A default run maps the surface and judges it at the recon tier, then writes a structured
+`findings.json`, one record per subdomain with what it is and its service state, and a human
+`report.md`. To reproduce and confirm a PoC for what it finds, opt into the intrusive phases and
+authorize the tier:
+
+```bash
+opfor run attacksurface --root example.com --reproduce --confirm --tier intrusive --authorize
 ```
 
 ## Develop

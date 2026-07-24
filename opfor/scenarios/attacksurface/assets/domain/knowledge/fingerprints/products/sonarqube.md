@@ -23,5 +23,5 @@ through `/api/settings/values`, which returns configured secrets such as the SMT
 without authentication. Its read-only reproduction is the vendored Nuclei template
 `knowledge/nuclei/CVE-2020-27986.yaml`, which opfor consumes as data. The recipe fires only for a
 CVE the lookup tied to the running version, and only under the intrusive EXPLOIT phase as a read.
-The leak has content only once a secret is configured, so the live lane seeds one dummy SMTP secret
-before the run, the precondition the vulnerability reads back.
+The leak has content only once a secret is configured, that configured secret being the precondition
+the vulnerability reads back.

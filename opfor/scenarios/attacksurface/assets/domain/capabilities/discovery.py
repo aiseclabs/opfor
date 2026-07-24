@@ -31,7 +31,7 @@ class DiscoverDomains(Capability):
             for d in org.domains
         )
         # Inventory hosts enter as leaves under their registrable root, not as roots, so the
-        # pivot and subdomain rules, gated on name == root, skip them, and only resolution
+        # subdomain and permute rules, gated on name == root, skip them, and only resolution
         # and probing enrich them. This is how a DNS export closes the wildcard blind spot.
         hosts = tuple(
             Node(id=f"domain:{h.lower()}", type="domain",

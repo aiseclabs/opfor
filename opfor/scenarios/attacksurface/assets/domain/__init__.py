@@ -1,6 +1,6 @@
 """The domain asset class: an org's hint roots and inventory hosts to a ranked web surface.
 
-It owns the passive discovery and evidence pivots, the resolution and probing pipeline, and
+It owns the passive discovery and label permutation, the resolution and probing pipeline, and
 the triage knowledge that judges a web surface, the classes of finding, the exposure clues,
 and the takeover signatures, all under its `knowledge` tree. So it declares a knowledge
 directory the scenario's triage reads.

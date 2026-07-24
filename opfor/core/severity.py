@@ -9,11 +9,3 @@ from __future__ import annotations
 
 # Least to most severe. INFO records a fact worth noting that is not itself a risk.
 SEVERITIES: tuple[str, ...] = ("INFO", "LOW", "MEDIUM", "HIGH", "CRITICAL")
-
-
-def rank(severity: str) -> int:
-    """Rank a severity, fail loud on an unknown label so a typo cannot slip a gate."""
-    try:
-        return SEVERITIES.index(severity)
-    except ValueError:
-        raise ValueError(f"unknown severity {severity!r}, known: {', '.join(SEVERITIES)}") from None

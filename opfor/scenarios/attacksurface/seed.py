@@ -14,9 +14,9 @@ from dataclasses import dataclass
 @dataclass(frozen=True, kw_only=True)
 class Org:
     """The seed: an organization to map. `name` is what the operator gives, such as a company
-    name, used as a label. `domains` are the seed roots the run starts from, since root discovery
-    grows from a seed by evidence, cert-SAN co-tenancy and the DMARC and redirect self-declarations,
-    not from a bare name. `hosts` are known subdomains from an inventory such as a DNS export, the
+    name, used as a label. `domains` are the seed roots the run starts from. The run does not
+    discover roots beyond them, it only expands each root into subdomains by passive evidence.
+    `hosts` are known subdomains from an inventory such as a DNS export, the
     way to supply hosts a wildcard certificate hides from passive discovery, they enter the surface
     as leaves and are enriched rather than re-enumerated. `classes` restricts which asset classes
     run, empty means all of them."""

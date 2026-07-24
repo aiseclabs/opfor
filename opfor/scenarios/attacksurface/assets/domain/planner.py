@@ -7,33 +7,16 @@ The rules gate on facts rather than task dependencies, so a name that does not r
 never probed, and each rule that touches the target carries the host for scope.
 
 This module composes the capability action-config the planner hands the endpoint probe, so the
-capability reads no knowledge file. The secret and backup name templates come from the finding
-units they serve, and the probe path set is composed by the class from the owners of each path
-rather than a global guessed list. The config is loaded once at assemble time into a
-`DomainPlanConfig`, not at import, so the content root stays swappable and importing the module
-triggers no file IO.
+capability reads no knowledge file. The backup name templates come from the finding units they
+serve, and the probe path set is composed by the class from the owners of each path rather than a
+global guessed list. The config is loaded once at assemble time into a `DomainPlanConfig`, not at
+import, so the content root stays swappable and importing the module triggers no file IO.
 """
 
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass
 from urllib.parse import urlparse
-
-
-def _validate_secret_patterns(patterns) -> None:
-    """Compile every secret pattern regex at load, so a malformed one fails the run loudly
-    here rather than being silently skipped during a scan and quietly disabling a whole
-    secret class, invariant 5."""
-    for pattern in patterns:
-        regex = str(pattern.get("regex", ""))
-        if not regex:
-            continue
-        try:
-            re.compile(regex)
-        except re.error as exc:
-            raise RuntimeError(
-                f"invalid secret pattern regex for {pattern.get('id', '?')!r}: {exc}") from exc
 
 from opfor.core import Task, World, each, iter_md_docs
 from opfor.scenarios.attacksurface.assets.base import class_enabled
@@ -53,16 +36,15 @@ _STATIC_PREFIXES = ("/_next/static/", "/static/", "/assets/", "/_nuxt/")
 @dataclass(frozen=True, kw_only=True)
 class DomainPlanConfig:
     """The domain class's capability action-config, the paths to probe, the static-asset templates,
-    and the secret and backup name templates the planner hands each capability so the capability
-    reads no knowledge file, invariant 1. This is action config, not triage knowledge. Loaded once
-    at assemble time by `load_plan_config`, so import triggers no IO. `probe_paths` starts empty and
+    and the backup name templates the planner hands each capability so the capability reads no
+    knowledge file, invariant 1. This is action config, not triage knowledge. Loaded once at
+    assemble time by `load_plan_config`, so import triggers no IO. `probe_paths` starts empty and
     the class composes it from the owners of each path, the products' own version endpoints and the
     spec and introspection locations, so there is no global guessed path list."""
 
     probe_paths: tuple[str, ...] = ()
     static_suffixes: tuple[str, ...] = ()
     static_prefixes: tuple[str, ...] = ()
-    secret_patterns: tuple[dict, ...] = ()
     backup_append: tuple[str, ...] = ()
     backup_rename: tuple[str, ...] = ()
     backup_swap: tuple[str, ...] = ()
@@ -71,26 +53,20 @@ class DomainPlanConfig:
 def load_plan_config(paths) -> DomainPlanConfig:
     """Load the domain plan config from the class's knowledge tree, once, at build time, so the
     file IO the planner needs happens when a scenario is assembled, never at import. `paths` is the
-    class's `KnowledgePaths`. The secret patterns and backup templates are deterministic detection
-    payloads carried in the frontmatter of the finding classes they serve, unioned across
-    `findings/` and handed to their capabilities as params so the capability reads no knowledge,
-    invariant 1."""
-    secret_patterns: list[dict] = []
+    class's `KnowledgePaths`. The backup templates are deterministic detection payloads carried in
+    the frontmatter of the finding classes they serve, unioned across `findings/` and handed to
+    their capabilities as params so the capability reads no knowledge, invariant 1."""
     backup_append: list[str] = []
     backup_rename: list[str] = []
     backup_swap: list[str] = []
     for _path, meta, _body in iter_md_docs(paths.findings):
-        secret_patterns.extend(dict(p) for p in (meta.get("secrets") or []))
         backups = meta.get("backups") or {}
         backup_append.extend(str(s) for s in (backups.get("append") or []))
         backup_rename.extend(str(s) for s in (backups.get("rename") or []))
         backup_swap.extend(str(s) for s in (backups.get("swap") or []))
-    secret_patterns = tuple(secret_patterns)
-    _validate_secret_patterns(secret_patterns)
     return DomainPlanConfig(
         static_suffixes=_STATIC_SUFFIXES,
         static_prefixes=_STATIC_PREFIXES,
-        secret_patterns=secret_patterns,
         backup_append=tuple(backup_append),
         backup_rename=tuple(backup_rename),
         backup_swap=tuple(backup_swap),
@@ -247,19 +223,6 @@ def _source_map_rule(world: World) -> list[Task]:
     return tasks
 
 
-def _secret_scan_rule(world: World, config: DomainPlanConfig) -> list[Task]:
-    """Scan every live host's scripts for secret-like strings, once per host, handing the
-    capability the patterns. It reads the target's bundles, so the task carries the host."""
-    tasks: list[Task] = []
-    for node in _live_domains(world):
-        if world.has_fact(node.id, "secrets_in_js"):
-            continue
-        tasks.append(Task(capability="secret_scan", node=node.id,
-                          params={"patterns": list(config.secret_patterns)},
-                          scope_target=node.payload.name))
-    return tasks
-
-
 def _backup_rule(world: World, config: DomainPlanConfig) -> list[Task]:
     """Probe backup twins of a live host's observed files, once per host, after its interfaces
     are enumerated so the observed file set is complete. Hands the capability the name
@@ -360,7 +323,6 @@ def enrich_rules(config: DomainPlanConfig, *, with_profile: bool = False, with_c
         _spec_probe_rule,
         _graphql_rule,
         _source_map_rule,
-        lambda world: _secret_scan_rule(world, config),
         lambda world: _backup_rule(world, config),
     ]
     if with_profile:

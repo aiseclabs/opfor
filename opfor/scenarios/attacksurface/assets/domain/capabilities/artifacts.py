@@ -12,14 +12,11 @@ from opfor.scenarios.attacksurface.assets.domain.responses import (
 from opfor.scenarios.attacksurface.assets.domain.candidates import backup_targets
 from opfor.scenarios.attacksurface.assets.domain.sources import (
     script_sources,
-    secrets_in_text,
     source_map_from_text,
 )
 from opfor.scenarios.attacksurface.assets.domain.types import (
     BackupHit,
     BackupReport,
-    SecretMatch,
-    SecretReport,
     SourceMapLeak,
     SourceMapReport,
 )
@@ -77,58 +74,6 @@ class SourceMapScan(Capability):
         facts = [Fact(kind="source_maps", about=task.node,
                       payload=SourceMapReport(leaks=tuple(leaks)))]
         gap = _coverage_gap("source_map_scan", name, len(bundles), skipped)
-        if gap is not None:
-            facts.append(Fact(kind="coverage_gap", about=task.node, payload=gap))
-        return Done(facts=tuple(facts))
-
-
-class SecretScan(Capability):
-    """ENRICH: scan a live host's JavaScript bundles for secret-like strings.
-
-    A single-page app can ship a hardcoded key or token in a bundle. This reads the same-
-    host bundles the home page loads and runs the secret patterns the planner hands it over
-    each body, so the capability holds no pattern of its own. A match is redacted, a prefix
-    and a length, never the value, so the report and the log never carry the secret. It
-    touches the target, so it is scoped, not osint. Whether a match is a live secret or a
-    placeholder is triage's judgment.
-    """
-
-    name = "secret_scan"
-    phase = Phase.ENRICH
-    osint = False
-
-    def __init__(self, fetch_doc_fn) -> None:
-        self._fetch_doc = fetch_doc_fn
-
-    def run(self, task: Task, world: World) -> Outcome:
-        host = world.node(task.node)
-        name = host.payload.name
-        patterns = task.params.get("patterns", [])
-        try:
-            home = self._fetch_doc(name, "/").body
-        except Exception as exc:
-            return net_failed("secret scan home fetch", exc)
-        bundles = script_sources(home, name)
-        probed = bundles[:_MAX_SOURCE_MAPS]
-        matches: list[SecretMatch] = []
-        skipped: list[str] = []
-        for bundle in probed:
-            # a bundle that fails to fetch must not discard secrets already found in the
-            # others, so it is a per-bundle coverage gap rather than a whole-scan Failed
-            try:
-                body = self._fetch_doc(name, bundle).body
-            except Exception as exc:
-                skipped.append(f"{bundle}: {type(exc).__name__}")
-                continue
-            for found in secrets_in_text(body, patterns):
-                matches.append(SecretMatch(pattern=found["pattern"], note=found["note"],
-                                           bundle=bundle, sample=found["sample"]))
-        if len(bundles) > len(probed):
-            skipped.append(f"{len(bundles) - len(probed)} more bundles beyond the "
-                           f"{_MAX_SOURCE_MAPS} cap were not scanned")
-        facts = [Fact(kind="secrets_in_js", about=task.node,
-                      payload=SecretReport(matches=tuple(matches)))]
-        gap = _coverage_gap("secret_scan", name, len(bundles), skipped)
         if gap is not None:
             facts.append(Fact(kind="coverage_gap", about=task.node, payload=gap))
         return Done(facts=tuple(facts))

@@ -166,25 +166,6 @@ class SourceMapReport:
 
 
 @dataclass(frozen=True, kw_only=True)
-class SecretMatch:
-    """One secret-like string a pattern matched in a script. `sample` is redacted, a prefix
-    and a length, never the full secret, so the report and the log do not carry it. The
-    operator reads the bundle for the value once triage judges it worth confirming."""
-
-    pattern: str
-    note: str = ""
-    bundle: str = ""
-    sample: str = ""
-
-
-@dataclass(frozen=True, kw_only=True)
-class SecretReport:
-    """The secret-like strings found across a host's scripts. Empty is a real negative."""
-
-    matches: tuple[SecretMatch, ...] = ()
-
-
-@dataclass(frozen=True, kw_only=True)
 class BackupHit:
     """One backup or editor-artifact twin that answered without a 404. `size` is the response
     body length, a proxy for whether the twin returned real content rather than an empty or

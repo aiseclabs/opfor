@@ -43,7 +43,6 @@ from opfor.scenarios.attacksurface.assets.domain.capabilities import (
     HTTPDomain,
     PermutePaths,
     ResolveDomain,
-    SecretScan,
     SourceMapScan,
     EnumerateSubdomains,
 )
@@ -132,7 +131,6 @@ def assemble(*, enumerate_fn, resolve_fn, probe_fn, fetch_fn, fetch_doc_fn,
         ProbeSpec(fetch_fn),
         GraphQLIntrospect(introspect_fn),
         SourceMapScan(fetch_doc_fn),
-        SecretScan(fetch_doc_fn),
         BackupScan(fetch_fn),
     ]
     # The per-product knowledge units identify a known product without a model call, with the

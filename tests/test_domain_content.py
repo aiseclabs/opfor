@@ -2,8 +2,6 @@ from __future__ import annotations
 
 import json
 
-import pytest
-
 from opfor.core import Node, World
 
 from opfor.scenarios.attacksurface.assets.domain.sources.observations import Response
@@ -132,86 +130,6 @@ def test_source_map_scan_tolerates_a_bundle_error_and_still_records_the_gap():
     assert "source_maps" in kinds and "coverage_gap" in kinds
     leaks = [f for f in outcome.facts if f.kind == "source_maps"][0].payload.leaks
     assert len(leaks) == 1
-
-def test_secrets_in_text_matches_patterns_and_redacts():
-    from opfor.scenarios.attacksurface.assets.domain import sources as domains
-
-    patterns = [
-        {"id": "aws-access-key-id", "regex": "AKIA[0-9A-Z]{16}", "note": "an AWS access key id"},
-        {"id": "never", "regex": "ZZZZ[0-9]{40}", "note": "no match"},
-    ]
-    body = "const k = 'AKIAIOSFODNN7EXAMPLE'; const ok = 1;"
-    hits = domains.secrets_in_text(body, patterns)
-    assert len(hits) == 1
-    assert hits[0]["pattern"] == "aws-access-key-id"
-    # the sample is redacted, a prefix and a length, never the full key
-    assert "AKIAIOSFODNN7EXAMPLE" not in hits[0]["sample"]
-    assert hits[0]["sample"].startswith("AKIAIO")
-
-def test_secrets_in_text_keeps_two_keys_sharing_a_prefix_and_length():
-    # two distinct AWS keys with the same six-char prefix and identical length must both be
-    # reported, not collapsed to one by a redaction-keyed dedup that loses a real secret
-    from opfor.scenarios.attacksurface.assets.domain import sources as domains
-
-    patterns = [{"id": "aws-access-key-id", "regex": "AKIA[0-9A-Z]{16}", "note": "key"}]
-    body = "a='AKIA000000000000AAAA'; b='AKIA000000000000BBBB';"
-    hits = domains.secrets_in_text(body, patterns)
-    assert len(hits) == 2
-
-def test_shipped_secret_patterns_do_not_backtrack_on_a_hostile_bundle():
-    # a bundle of repeated 'eyJ' with no dots made the old unbounded JWT pattern backtrack
-    # super-linearly and tie a worker. The possessive quantifier plus the body cap make the
-    # scan linear, so this returns effectively instantly rather than hanging.
-    from opfor.scenarios.attacksurface.assets import domain as domain_class
-    from opfor.scenarios.attacksurface.assets.domain import planner
-    from opfor.scenarios.attacksurface.assets.domain.sources.javascript import secrets_in_text
-
-    patterns = [dict(p) for p in planner.load_plan_config(domain_class.PATHS).secret_patterns]
-    hostile = "eyJ" * 300_000
-    assert secrets_in_text(hostile, patterns) == []
-    # a real JWT is still caught
-    real = "token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.abcDEF123456xyz"
-    hits = secrets_in_text(real, patterns)
-    assert any(h["pattern"] == "json-web-token" for h in hits)
-
-
-def test_secret_scan_flags_a_key_in_a_bundle_and_redacts_it():
-    home = '<script src="/static/main.js"></script>'
-    bundle = "var cfg={awsKey:'AKIAIOSFODNN7EXAMPLE'};"
-
-    def fetch_doc(name, path):
-        if path == "/":
-            return Response(body=home)
-        if path == "/static/main.js":
-            return Response(body=bundle)
-        return Response(body="")
-
-    report, _scenario, world = _run_capturing(fetch_doc_fn=fetch_doc)
-    # the planner hands the real patterns from detections/secret-patterns.md, which includes the aws
-    # key shape, so the scan matches without the test injecting patterns
-    hits = [f.payload for f in world.facts("secrets_in_js") if f.payload.matches]
-    assert hits, "expected a secrets_in_js fact carrying a match"
-    match = hits[0].matches[0]
-    assert match.pattern == "aws-access-key-id"
-    assert "AKIAIOSFODNN7EXAMPLE" not in match.sample
-
-def test_secret_scan_reports_multiple_distinct_matches_not_only_the_first():
-    from opfor.scenarios.attacksurface.assets.domain.sources.javascript import secrets_in_text
-    body = "a=sk-aaaaaaaaaaaaaaaaaaaa b=sk-bbbbbbbbbbbbbbbbbbbb"
-    patterns = [{"id": "token", "regex": r"sk-[a-z]{20}", "note": "token"}]
-    found = secrets_in_text(body, patterns)
-    # both distinct tokens surface, not just the first, and they are deduped by sample
-    assert len(found) == 2 and len({f["sample"] for f in found}) == 2
-
-def test_a_malformed_secret_pattern_fails_loud_at_load(tmp_path):
-    from opfor.scenarios.attacksurface.assets.domain import KnowledgePaths, planner
-    paths = KnowledgePaths.under(tmp_path)
-    paths.findings.mkdir(parents=True)
-    (paths.findings / "hardcoded-secret.md").write_text(
-        "---\nsecrets:\n  - id: bad\n    regex: '([unclosed'\n    note: broken\n---\n# X\n", encoding="utf-8")
-    # a broken regex must fail the run at load, not silently disable the whole secret class
-    with pytest.raises(RuntimeError):
-        planner.load_plan_config(paths)
 
 def test_backup_candidates_derives_twins_and_skips_directories():
     from opfor.scenarios.attacksurface.assets.domain import sources as domains

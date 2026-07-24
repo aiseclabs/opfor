@@ -153,11 +153,6 @@ class SurfaceRenderer:
                 line += f"\n  source map: {leak.url}, {leak.sources_count} sources, {detail}"
                 if leak.sample_sources:
                     line += f"\n    sample: {', '.join(leak.sample_sources)}"
-        secrets = world.latest("secrets_in_js", node.id)
-        if secrets is not None and secrets.payload.matches:
-            for hit in secrets.payload.matches:
-                line += (f"\n  secret in {hit.bundle}: {hit.pattern} ({hit.note}), "
-                         f"sample {hit.sample}")
         backups = world.latest("backups", node.id)
         if backups is not None and backups.payload.hits:
             for hit in backups.payload.hits:

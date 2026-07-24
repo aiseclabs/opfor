@@ -59,7 +59,6 @@ from opfor.scenarios.attacksurface.assets.domain.sources.parsers import (
 from opfor.scenarios.attacksurface.assets.domain.sources.javascript import (
     paths_in_javascript,
     script_sources,
-    secrets_in_text,
     source_map_from_text,
     urls_in_javascript,
 )
@@ -103,7 +102,6 @@ __all__ = [
     "roots_from_file",
     "same_host_path",
     "script_sources",
-    "secrets_in_text",
     "sitemap_paths",
     "source_map_from_text",
     "split_operation",

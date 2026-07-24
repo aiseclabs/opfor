@@ -13,12 +13,6 @@ _SCRIPT_SRC = re.compile(r'<script[^>]+src\s*=\s*["\']([^"\']+)', re.IGNORECASE)
 _JS_PATH = re.compile(r"""["'`](/[A-Za-z0-9_.\-/]{1,160})["'`]""")
 QUOTED_URL = re.compile(r"""["'`](https?://[A-Za-z0-9.\-]+(?::\d+)?(?:/[A-Za-z0-9_.\-/]{0,200})?)["'`]""")
 
-_MAX_SECRET_MATCHES = 20
-# A ceiling on how much of a body the secret patterns scan. A hostile bundle can arrive at the
-# full document byte limit, and a pattern with an unbounded repeat could then do super-linear
-# work on it and tie a worker thread. Real leaked keys sit near the top of a bundle, so this
-# bounds the scan without losing them, defense in depth beside the per-pattern anchoring.
-_MAX_SECRET_SCAN_BYTES = 512_000
 # A ceiling on the path-like and url-like strings read out of one script body, so a hostile
 # bundle packing hundreds of thousands of distinct quoted paths into the document byte limit
 # cannot tie a worker thread or grow an unbounded candidate list. Far above the downstream
@@ -121,45 +115,3 @@ def source_map_from_text(text: str) -> SourceMapClues | None:
                               has_sources_content='"sourcescontent"' in low,
                               sample_sources=())
     return None
-
-
-def _redact(value: str) -> str:
-    """A secret shown as a short prefix and its length, never in full, so the report and the
-    log never carry the value itself."""
-    value = value.strip()
-    head = value[:6]
-    return f"{head}...({len(value)} chars)"
-
-
-def secrets_in_text(text: str, patterns) -> list[dict]:
-    """Secret-like strings a set of patterns match in a body, redacted, parsed apart from
-    the fetch so a test drives it without a network call.
-
-    Each pattern is a dict with an id, a regex, and a note. Every distinct match is reported,
-    deduped by the full matched value, so a bundle holding several keys of one shape surfaces
-    all of them rather than only the first, bounded by a cap. Dedup is on the whole match, not
-    its redacted sample, so two keys that share a prefix and a length are not collapsed into
-    one and a real second secret is never dropped. The full value keys a transient local set
-    only, it is never stored or logged. A malformed regex is not swallowed here, patterns are
-    validated loudly at load, so a bad one fails the run rather than silently disabling a whole
-    secret class. Whether a match is live is triage's judgment.
-    """
-    out: list[dict] = []
-    body = (text or "")[:_MAX_SECRET_SCAN_BYTES]
-    seen: set[tuple[str, str]] = set()
-    for pattern in patterns or []:
-        regex = str(pattern.get("regex", ""))
-        if not regex:
-            continue
-        pid = str(pattern.get("id", ""))
-        for match in re.finditer(regex, body):
-            value = match.group(0)
-            key = (pid, value)
-            if key in seen:
-                continue
-            seen.add(key)
-            out.append({"pattern": pid, "note": str(pattern.get("note", "")),
-                        "sample": _redact(value)})
-            if len(out) >= _MAX_SECRET_MATCHES:
-                return out
-    return out

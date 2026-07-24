@@ -2,7 +2,6 @@
 
 from opfor.scenarios.attacksurface.assets.domain.capabilities.artifacts import (
     BackupScan,
-    SecretScan,
     SourceMapScan,
 )
 from opfor.scenarios.attacksurface.assets.domain.capabilities.cves import CVELookup
@@ -39,7 +38,6 @@ __all__ = [
     "ProbeSpec",
     "ProfileHost",
     "ResolveDomain",
-    "SecretScan",
     "SourceMapScan",
     "EnumerateSubdomains",
 ]

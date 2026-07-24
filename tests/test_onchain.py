@@ -201,6 +201,48 @@ def test_compute_funds_prices_native_and_value_tokens():
     assert set(assets) == {"native", "USDT", "WBTC"}  # WETH balance was zero, so not counted
 
 
+def test_discovery_keeps_only_the_age_band_and_liquidity_floor():
+    from opfor.scenarios.onchain.assets.contract.sources.geckoterminal import select
+    from opfor.scenarios.onchain.assets.contract.sources.observations import PoolObservation
+    from opfor.scenarios.onchain.seed import Survey
+
+    survey = Survey(name="t", chain="ethereum", min_liquidity=50_000,
+                    min_age_days=2.0, max_age_days=45.0)
+    pools = [
+        PoolObservation(address="0x1", chain="ethereum", liquidity_usd=100_000, age_days=10),  # keep
+        PoolObservation(address="0x2", chain="ethereum", liquidity_usd=100_000, age_days=0.5),  # too fresh
+        PoolObservation(address="0x3", chain="ethereum", liquidity_usd=100_000, age_days=400),  # bluechip age
+        PoolObservation(address="0x4", chain="ethereum", liquidity_usd=1_000, age_days=10),  # below floor
+        PoolObservation(address="0x5", chain="ethereum", liquidity_usd=100_000, age_days=None),  # age unknown
+    ]
+    assert {p.address for p in select(pools, survey)} == {"0x1"}
+
+
+def test_triage_surfaces_an_unverified_high_value_contract():
+    from opfor.core import Fact, Node, World
+    from opfor.scenarios.onchain.lifecycle.triage import AuditTriage
+    from opfor.scenarios.onchain.assets.contract.types import (
+        ContractData, FundFact, IdentityFact, SourceFact,
+    )
+
+    def _world(funds: float) -> World:
+        world = World()
+        nid = "contract:ethereum:0xopaque"
+        world.add(Node(id=nid, type="contract",
+                       payload=ContractData(chain="ethereum", address="0xopaque", role="unknown",
+                                            source="pivoted", related_to="0xtoken")))
+        world.absorb([Fact(kind="sourced", about=nid, payload=SourceFact(verified=False, note="unverified")),
+                      Fact(kind="identified", about=nid, payload=IdentityFact(role="unknown")),
+                      Fact(kind="funded", about=nid, payload=FundFact(funds_at_risk_usd=funds))])
+        return world
+
+    findings = AuditTriage().judge(_world(5_000_000))
+    assert len(findings) == 1  # unverified but $5M, so surfaced on its own class
+    assert findings[0].data["kind"] == "unverified-high-value" and findings[0].severity == "MEDIUM"
+    # a small unverified balance is left alone, one of many throwaway deploys
+    assert AuditTriage().judge(_world(5_000)) == []
+
+
 def test_funds_prices_the_pivoted_project_token_not_just_the_value_set():
     from opfor.scenarios.onchain.assets.contract.sources.funds import value_tokens_for
     from opfor.scenarios.onchain.assets.contract.types import ContractData

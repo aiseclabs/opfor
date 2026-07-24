@@ -12,3 +12,5 @@ user-reachable fund path plus a complex or dependency signal is the high bar.
 - `upgradeable-proxy-surface.md` An upgrade or initialize path that changes the code behind the
   funds.
 - `centralization-risk.md` Owner powers, recorded but never raising the external-attacker priority.
+- `unverified-high-value.md` A large balance behind unverified source, surfaced on its own since the
+  code cannot be read to grade it.

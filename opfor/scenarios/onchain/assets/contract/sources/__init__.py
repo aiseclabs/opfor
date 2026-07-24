@@ -16,7 +16,7 @@ from opfor.scenarios.onchain.assets.contract.sources import (
     rpc,
 )
 
-sweep = geckoterminal.new_pools
+sweep = geckoterminal.discover
 pivot = pivot_src.pivot
 fetch_source = explorer.fetch_source
 read_funds = funds_src.read_funds

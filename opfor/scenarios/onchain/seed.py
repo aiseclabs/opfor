@@ -23,7 +23,12 @@ class Survey:
 
     name: str
     chain: str = "ethereum"
-    min_liquidity: float = 10_000.0
+    min_liquidity: float = 50_000.0
     min_volume: float = 5_000.0
     age_days: float | None = 90.0
+    # The discovery age band in days. The floor skips the just-launched churn that has no fund
+    # contract or source yet, the ceiling skips the established bluechips that have had years of
+    # audits, so the sweep lands on the young-but-real projects that are the audit sweet spot.
+    min_age_days: float = 2.0
+    max_age_days: float = 45.0
     anchors: tuple[str, ...] = field(default_factory=tuple)

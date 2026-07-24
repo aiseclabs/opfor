@@ -20,6 +20,10 @@ from opfor.scenarios.onchain.assets.contract.sources.funds import value_token_ad
 # Priority to severity, A worth a full audit down to C a project-power note. D is not minted, it
 # is the surface the run judged not worth a security engineer's time.
 _SEVERITY = {"A": "HIGH", "B": "MEDIUM", "C": "LOW"}
+# The funds above which an unverified contract is worth surfacing despite no source to analyze. A
+# larger opaque balance is graded up, since more is at stake behind code no one can read.
+_UNVERIFIED_FLOOR = 100_000.0
+_UNVERIFIED_HIGH = 1_000_000.0
 
 
 class AuditTriage(Triage):
@@ -62,6 +66,13 @@ class AuditTriage(Triage):
         sourced = world.latest("sourced", node.id)
         verified = sourced is not None and sourced.payload.verified
 
+        # An unverified contract cannot be analyzed from code, so the fund-path and signal ladder
+        # cannot judge it. But a large balance behind opaque, unaudited bytecode is itself a reason
+        # to look, so it is surfaced as its own class rather than silently dropped. A small balance
+        # behind unverified code is left alone, too many are throwaway deploys.
+        if not verified:
+            return self._unverified_finding(node, role, funds)
+
         priority = self._priority(funds=funds, open_paths=open_paths, risk_flags=risk_flags,
                                   verified=verified)
         if priority is None:
@@ -90,26 +101,48 @@ class AuditTriage(Triage):
             },
         )
 
+    def _unverified_finding(self, node, role, funds) -> Finding | None:
+        """A large balance behind unverified source, surfaced as its own class since the code
+        cannot be read to judge it. Below the floor it is not minted, one of many throwaway
+        deploys."""
+        if funds < _UNVERIFIED_FLOOR:
+            return None
+        severity = "MEDIUM" if funds >= _UNVERIFIED_HIGH else "LOW"
+        return Finding(
+            id=f"finding:{node.id}",
+            title=f"unverified high-value contract {node.payload.address}",
+            severity=severity,
+            where=node.payload.address,
+            evidence=f"A contract holding about ${funds:,.0f} has no verified source, so its logic "
+                     f"cannot be audited from code. The opaque high-value contract warrants a manual "
+                     f"look, at its bytecode or its on-chain behavior.",
+            data={
+                "kind": "unverified-high-value",
+                "priority": "U",
+                "chain": node.payload.chain,
+                "address": node.payload.address,
+                "role": role,
+                "related_to": node.payload.related_to,
+                "funds_at_risk_usd": round(funds, 2),
+                "source_verified": False,
+            },
+        )
+
     def _priority(self, *, funds, open_paths, risk_flags, verified) -> str | None:
-        """The deterministic ladder. Funds are the floor, nothing without funds is worth auditing.
-        A user-reachable fund path plus complex or dependency signals is the high bar, either alone
-        is the middle, and neither with funds still records a low note. Unverified source caps the
-        priority, since it cannot be audited well, per the knowledge tree's downgrade."""
+        """The deterministic ladder for a verified contract. Funds are the floor, nothing without
+        funds is worth auditing. A user-reachable fund path plus complex or dependency signals is
+        the high bar, either alone is the middle, and neither with funds records a low note."""
         if funds <= 0:
             return None
         has_path = bool(open_paths)
         signal_count = len(risk_flags)
         if has_path and signal_count >= 2:
-            priority = "A"
-        elif has_path and signal_count >= 1:
-            priority = "B"
-        elif has_path or signal_count >= 1:
-            priority = "C"
-        else:
-            return None
-        if not verified and priority in ("A", "B"):
-            priority = "C"
-        return priority
+            return "A"
+        if has_path and signal_count >= 1:
+            return "B"
+        if has_path or signal_count >= 1:
+            return "C"
+        return None
 
     def _reason(self, *, role, funds, open_paths, risk_flags, central, verified) -> str:
         parts = [f"A {role} contract holding about ${funds:,.0f}"]

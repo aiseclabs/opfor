@@ -1,10 +1,11 @@
-"""The new-pool discovery seam, the default sweep over recently created pools.
+"""The discovery seam, the default sweep over a chain's young-but-real pools.
 
-The mission is the long tail, small, new, unaudited contracts that hold enough funds to matter, not
-the established bluechips a size-ranked sweep would surface first. So the sweep reads a chain's
-recently created pools from GeckoTerminal, newest first, and keeps the ones that already hold real
-liquidity, a floor so there are funds to lose but no ceiling that would exclude a large new project.
-It carries the pool age, so a downstream step can weigh novelty. A test injects its own seam.
+The mission is the long tail, projects deployed days to weeks ago that hold real funds, not the
+just-launched churn with no fund contract or verified source yet, and not the established
+bluechips that have had years of audits. So the sweep reads both the recently created pools and
+the trending pools, then keeps those inside an age band, the floor skipping the too-fresh, the
+ceiling skipping the bluechips, above a liquidity floor so there are funds behind them. It carries
+the pool age so a downstream step can weigh novelty. A test injects its own seam.
 """
 
 from __future__ import annotations
@@ -73,18 +74,31 @@ def _parse(item: dict, chain: str) -> PoolObservation | None:
         age_days=_age_days(attributes.get("pool_created_at")))
 
 
-def new_pools(survey) -> tuple[PoolObservation, ...]:
-    """Read the chain's recently created pools, newest first, keeping those that clear the liquidity
-    floor so there are real funds behind them. Volume is not floored, since a brand-new pool has not
-    yet built a day of it."""
+def select(pools, survey) -> tuple[PoolObservation, ...]:
+    """Keep the pools inside the survey's age band and above its liquidity floor, deduped and
+    capped, richest first. Pure, so the band logic is tested without the network. A pool with an
+    unknown age is dropped, since the band is the point of this discovery."""
+    seen: dict[str, PoolObservation] = {}
+    for pool in pools:
+        if pool is None or pool.liquidity_usd < survey.min_liquidity:
+            continue
+        if pool.age_days is None or not survey.min_age_days <= pool.age_days <= survey.max_age_days:
+            continue
+        seen.setdefault(pool.address.lower(), pool)
+    ranked = sorted(seen.values(), key=lambda p: p.liquidity_usd, reverse=True)
+    return tuple(ranked[:_MAX_POOLS])
+
+
+def discover(survey) -> tuple[PoolObservation, ...]:
+    """Read the chain's trending and recently created pools and keep the young-but-real ones. The
+    two feeds together cover the band, trending surfaces the projects with traction and new_pools
+    the fresher ones, and `select` keeps only those the age band and liquidity floor admit."""
     network = _NETWORK.get(survey.chain)
     if network is None:
         return ()
-    seen: dict[str, PoolObservation] = {}
-    for page in range(1, _PAGES + 1):
-        data = _get(f"{_BASE}/networks/{network}/new_pools?page={page}")
-        for item in data.get("data") or []:
-            pool = _parse(item, survey.chain)
-            if pool is not None and pool.liquidity_usd >= survey.min_liquidity:
-                seen.setdefault(pool.address.lower(), pool)
-    return tuple(list(seen.values())[:_MAX_POOLS])
+    raw: list = []
+    for feed in ("pools", "new_pools"):
+        for page in range(1, _PAGES + 1):
+            data = _get(f"{_BASE}/networks/{network}/{feed}?page={page}")
+            raw.extend(_parse(item, survey.chain) for item in data.get("data") or [])
+    return select(raw, survey)

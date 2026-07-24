@@ -144,55 +144,6 @@ def test_fetch_seams_are_loud_on_the_unexpected_and_name_why_no_address_answered
     assert domains.fetch_document("h.example.com", "/x").reason == "no-public-address"
     assert domains.fetch_readonly("https://h.example.com/x").reason == "no-public-address"
 
-def test_fetch_public_url_is_loud_on_the_unexpected_and_names_unreachable(monkeypatch):
-    from opfor.scenarios.attacksurface.assets.domain.sources import http as domains
-
-    # the host resolves to a public address, so it clears the no-public-address guard and the
-    # opener behavior below is what is under test
-    monkeypatch.setattr(domains, "resolve_host", lambda n: Resolution(resolvable=True, addresses=("1.1.1.1",)))
-
-    class BugOpener:
-        def open(self, *a, **k):
-            raise ValueError("bug")
-
-    monkeypatch.setattr(domains, "_NO_REDIRECT_OPENER", BugOpener())
-    with pytest.raises(ValueError):
-        domains.fetch_public_url("https://bucket.example.com/")
-
-    class DeadOpener:
-        def open(self, *a, **k):
-            raise ConnectionResetError()
-
-    monkeypatch.setattr(domains, "_NO_REDIRECT_OPENER", DeadOpener())
-    assert domains.fetch_public_url("https://bucket.example.com/").reason == "unreachable"
-
-def test_fetch_public_url_uses_the_no_redirect_opener(monkeypatch):
-    from opfor.scenarios.attacksurface.assets.domain.sources import http as domains
-
-    used = {}
-
-    class _Resp:
-        status = 200
-        headers = {"Content-Type": "application/xml"}
-
-        def read(self, *_a):
-            return b"<ListBucketResult/>"
-
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *exc):
-            return False
-
-    def fake_open(req, timeout=0):
-        used["opener"] = True
-        return _Resp()
-
-    monkeypatch.setattr(domains._NO_REDIRECT_OPENER, "open", fake_open)
-    result = domains.fetch_public_url("https://x.s3.amazonaws.com/")
-    # a bucket probe does not chase a server-controlled redirect off to another host
-    assert used.get("opener") and result.status == 200
-
 def test_readonly_fetch_refuses_a_host_that_resolves_only_to_a_private_address(monkeypatch):
     from opfor.scenarios.attacksurface.assets.domain.sources import http as domains
     monkeypatch.setattr(domains, "resolve_host",

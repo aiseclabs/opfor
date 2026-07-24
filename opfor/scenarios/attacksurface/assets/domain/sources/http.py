@@ -119,46 +119,6 @@ def _no_url_answer(name: str, path: str, reason: str) -> Response:
     return Response(status=None, url=f"https://{name}{path}", reason=reason)
 
 
-_PUBLIC_URL_TIMEOUT = 10
-_PUBLIC_URL_BODY = 4096
-
-
-def fetch_public_url(url: str) -> Response:
-    """Anonymous GET of a public url, for checking a derived cloud-storage endpoint.
-
-    A 403 or a 404 is a meaningful answer, the bucket exists but is private or it does not
-    exist, so an HTTP error is captured as its status rather than raised. A connection error
-    returns a null status with an `unreachable` reason, so a single unreachable candidate is
-    skipped by the caller rather than failing the whole scan. Only transport errors are
-    caught, so an unexpected error is raised loud rather than swallowed as a null status. It
-    never sends a credential, so it reads only what is public.
-
-    It first refuses a host with no public address, the same guard the probe and the document
-    fetch use, so even a url off the pinned cloud-provider hosts cannot be steered at a private
-    or internal address. The no-redirect opener already blocks a server-controlled Location.
-    """
-    host = urllib.parse.urlparse(url).hostname or ""
-    if not host or not public_addresses(resolve_host(host).addresses):
-        return Response(status=None, url=url, reason="no-public-address")
-    request = urllib.request.Request(url, headers={"User-Agent": _UA})
-    try:
-        # do not follow a redirect, a server-controlled Location could steer this at another
-        # host, and the bucket state is read from the direct response, not a chased one
-        with _NO_REDIRECT_OPENER.open(request, timeout=_PUBLIC_URL_TIMEOUT) as resp:
-            body = resp.read(_PUBLIC_URL_BODY).decode("utf-8", "replace")
-            return Response(status=resp.status, url=url,
-                            content_type=resp.headers.get("Content-Type", ""), body=body, reason="")
-    except urllib.error.HTTPError as exc:
-        try:
-            body = exc.read(_PUBLIC_URL_BODY).decode("utf-8", "replace")
-        except (OSError, http.client.HTTPException):
-            body = ""
-        content_type = exc.headers.get("Content-Type", "") if exc.headers else ""
-        return Response(status=exc.code, url=url, content_type=content_type, body=body, reason="")
-    except (OSError, http.client.HTTPException):
-        return Response(status=None, url=url, reason="unreachable")
-
-
 # The read-only reproduce replay must never follow a redirect. Following one would chase a
 # server-controlled Location, which can be an off-scope host or a GET that triggers an
 # action, breaking the read-only and in-scope guarantees. A larger body cap than the bucket

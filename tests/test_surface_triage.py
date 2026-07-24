@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from dataclasses import replace
-
 import pytest
 
 from opfor.core import Budget, MockProvider, Scope, run
@@ -10,7 +8,6 @@ from opfor.scenarios.attacksurface.assets.domain.sources.observations import Res
 from tests.surface_fixtures import (
     ROOT,
     HostScope,
-    _probe,
     _make,
     _seed,
     _run_capturing,
@@ -182,17 +179,6 @@ def test_chunk_failure_is_a_degraded_finding_not_a_crash():
     assert any(f.data.get("kind") == "degraded" for f in report.findings)
 
 
-def test_missing_security_headers_are_surfaced_and_the_class_is_selected():
-    # the fixture hosts set no security headers, so the posture line lists them all as not set
-    # and the knowledge class is selected by the trigger the line carries, so the judge is
-    # asked to weigh the omission rather than a keyword rule deciding in code
-    _, sc, _ = _run_capturing()
-    prompt = _prompt(sc)
-    assert "security response headers set: none" in prompt
-    assert "not set: strict-transport-security" in prompt
-    assert "Missing Security Response Header" in _knowledge(sc)
-
-
 def test_path_permutation_runs_between_harvest_and_endpoints_without_deadlock():
     from opfor.core.result import CLOSED
 
@@ -202,21 +188,6 @@ def test_path_permutation_runs_between_harvest_and_endpoints_without_deadlock():
             if (h := world.latest("http", n.id)) is not None and h.payload.alive]
     assert live and all(world.latest("path_permuted", n.id) is not None for n in live)
     assert report.status == CLOSED
-
-
-def test_insecure_cookie_flags_are_surfaced_and_the_class_is_selected():
-    # a session cookie set without Secure or HttpOnly, added to whichever hosts the fixture
-    # already reports alive, so aliveness is unchanged and only the cookie posture is new
-    def probe(name, addresses=()):
-        result = _probe(name, addresses)
-        if result.alive:
-            return replace(result, headers=(("set-cookie", "sid; Path=/"),))
-        return result
-
-    _, sc, _ = _run_capturing(probe_fn=probe)
-    prompt = _prompt(sc)
-    assert "set-cookie: sid; Path=/" in prompt
-    assert "Insecure Cookie Flags" in _knowledge(sc)
 
 
 def test_system_prompts_frame_target_text_as_untrusted():

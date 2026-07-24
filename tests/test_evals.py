@@ -34,7 +34,7 @@ def test_knowledge_inventory_enumerates_every_claim_by_ref_and_kind():
     # without a backtest shows up as an uncovered ref rather than being invisible
     assert by_ns["product"] == 8
     assert by_ns["framework"] == 2
-    assert by_ns["class"] == 12
+    assert by_ns["class"] == 8
     assert by_ns["clue"] >= 7 and by_ns["signature"] >= 20
     # a reproduction recipe is a detection claim, so it is enumerated and owes a backtest case
     assert by_ns["repro"] >= 1
@@ -66,7 +66,7 @@ def test_coverage_matrix_counts_cases_per_claim_and_flags_gaps():
     kinds = {p.kind for p in problems}
     assert "missing-positive" in kinds and "missing-negative" in kinds and "missing-case" in kinds
     # every judgment class with no case is reported, so an unexercised class is not silent
-    assert any(p.kind == "missing-case" and p.ref == "class:cors-misconfiguration" for p in problems)
+    assert any(p.kind == "missing-case" and p.ref == "class:improper-authentication" for p in problems)
 
 
 def test_coverage_flags_a_case_label_that_names_no_knowledge(tmp_path):

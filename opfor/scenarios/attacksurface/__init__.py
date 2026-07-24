@@ -104,7 +104,6 @@ def build(
     introspect_fn=domain_src.graphql_introspect,
     wayback_fn=domain_src.wayback_paths,
     probe_url_fn=domain_src.fetch_public_url,
-    dns_fn=domain_src.dns_email_posture,
     tls_fn=domain_src.tls_probe,
     identify_fn=None,
     cve_fn=domain_src.nvd_cves,
@@ -142,7 +141,7 @@ def build(
         domain.assemble(enumerate_fn=enumerate_fn, resolve_fn=resolve_fn,
                         probe_fn=probe_fn, fetch_fn=fetch_fn, fetch_doc_fn=fetch_doc_fn,
                         introspect_fn=introspect_fn, wayback_fn=wayback_fn,
-                        probe_url_fn=probe_url_fn, dns_fn=dns_fn, tls_fn=tls_fn,
+                        probe_url_fn=probe_url_fn, tls_fn=tls_fn,
                         identify_fn=identify_fn, cve_fn=cve_fn),
     ]
     capabilities = tuple(cap for bundle in bundles for cap in bundle.capabilities)

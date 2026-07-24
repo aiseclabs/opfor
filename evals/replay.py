@@ -20,7 +20,6 @@ from opfor.scenarios.attacksurface.hostnames import HostScope
 from opfor.scenarios.attacksurface.seed import Org
 from opfor.scenarios.attacksurface.assets.domain import PATHS
 from opfor.scenarios.attacksurface.assets.domain.sources.observations import (
-    EmailPosture,
     Liveness,
     Resolution,
     Response,
@@ -95,15 +94,12 @@ def _seams(cassette: dict) -> dict:
     def probe_url_fn(url):
         return Response(status=404, url=url)
 
-    def dns_fn(d):
-        return EmailPosture()
-
     def tls_fn(name, addresses=()):
         return TLSReport(reachable=False, reason="no-tls")
 
     return dict(enumerate_fn=enumerate_fn, resolve_fn=resolve_fn, probe_fn=probe_fn,
                 fetch_fn=fetch_fn, fetch_doc_fn=fetch_doc_fn, introspect_fn=introspect_fn,
-                wayback_fn=wayback_fn, probe_url_fn=probe_url_fn, dns_fn=dns_fn, tls_fn=tls_fn)
+                wayback_fn=wayback_fn, probe_url_fn=probe_url_fn, tls_fn=tls_fn)
 
 
 def profile_for(cassette: dict):

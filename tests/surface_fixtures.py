@@ -15,7 +15,6 @@ import json
 from opfor.core import Budget, MockProvider, Node, Scope, World, run
 from opfor.scenarios.attacksurface import build
 from opfor.scenarios.attacksurface.assets.domain.sources.observations import (
-    EmailPosture,
     Liveness,
     Resolution,
     Response,
@@ -176,12 +175,6 @@ def _probe_url(url):
     return Response(status=404, url=url)
 
 
-def _dns(domain):
-    # By default a root sets no email authentication and no CAA and is unsigned, so the posture
-    # scan surfaces the absences. A test overrides this seam to drive a configured domain.
-    return EmailPosture(spf=(), dmarc="", caa=(), dnssec=False)
-
-
 def _tls(name, addresses=()):
     # By default a host serves a valid certificate over a modern protocol, so the TLS scan is a
     # quiet clean result. A test overrides this seam to drive an expired or untrusted cert.
@@ -197,7 +190,7 @@ def _make(**over):
     seams = dict(enumerate_fn=_enumerate,
                  resolve_fn=_resolve, probe_fn=_probe, fetch_fn=_fetch, fetch_doc_fn=_fetch_doc,
                  introspect_fn=_introspect, wayback_fn=_wayback, identify_fn=_identify, cve_fn=_cves,
-                 probe_url_fn=_probe_url, dns_fn=_dns, tls_fn=_tls)
+                 probe_url_fn=_probe_url, tls_fn=_tls)
     seams.update(over)
     seams.setdefault("provider", MockProvider(default='{"findings": []}'))
     seams.setdefault("model", "test-model")
@@ -293,7 +286,6 @@ __all__ = [
     '_identify',
     '_cves',
     '_probe_url',
-    '_dns',
     '_tls',
     '_make',
     '_scenario',

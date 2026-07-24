@@ -240,19 +240,6 @@ def test_insecure_cookie_flags_are_surfaced_and_the_class_is_selected():
     assert "Insecure Cookie Flags" in _knowledge(sc)
 
 
-def test_dns_email_posture_is_read_on_roots_only_and_surfaced_for_the_judge():
-    _, sc, world = _run_capturing()
-    # the root carries the posture fact, and email authentication is a root property, so a
-    # discovered subdomain is never given the fact
-    assert world.latest("dns_email", "domain:example.com") is not None
-    for node in world.nodes("domain"):
-        if node.payload.name != node.payload.root:
-            assert world.latest("dns_email", node.id) is None
-    prompt = _prompt(sc)
-    assert "email/DNS security: SPF absent" in prompt
-    assert "Spoofable Email Domain" in _knowledge(sc)
-
-
 def test_system_prompts_frame_target_text_as_untrusted():
     from opfor.scenarios.attacksurface.lifecycle import confirm as confirm_mod
     from opfor.scenarios.attacksurface.lifecycle import triage as triage_mod

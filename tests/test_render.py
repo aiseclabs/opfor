@@ -109,19 +109,3 @@ def test_render_shows_an_invalid_tls_certificate_with_its_reason():
     assert "TLS certificate: INVALID, certificate has expired; protocol TLSv1.2" in text
 
 
-def test_render_shows_a_configured_root_email_and_dns_posture_even_without_a_website():
-    from opfor.core import Fact
-    from opfor.scenarios.attacksurface.assets.domain.types import DNSEmailPosture, DomainData
-    from opfor.scenarios.attacksurface.render import SurfaceRenderer
-
-    # no http fact, so the root serves no website, yet the email posture must still be judged
-    world = World()
-    world.add(Node(id="domain:example.com", type="domain",
-                   payload=DomainData(name="example.com", root="example.com", source="hint")))
-    world.absorb((Fact(kind="dns_email", about="domain:example.com",
-                       payload=DNSEmailPosture(domain="example.com", spf=("v=spf1 -all",),
-                                               dmarc="v=DMARC1; p=reject",
-                                               caa=('0 issue "letsencrypt.org"',), dnssec=True)),))
-    text = "\n".join(SurfaceRenderer([], []).units(world))
-    assert ("email/DNS security: SPF v=spf1 -all; DMARC v=DMARC1; p=reject; "
-            "DNSSEC validated; CAA 1 record(s)") in text

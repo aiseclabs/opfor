@@ -11,10 +11,7 @@ from opfor.scenarios.attacksurface.assets.domain.capabilities.discovery import (
     PermuteSubdomains,
     EnumerateSubdomains,
 )
-from opfor.scenarios.attacksurface.assets.domain.capabilities.dns import (
-    ProbeDNSEmailPosture,
-    ResolveDomain,
-)
+from opfor.scenarios.attacksurface.assets.domain.capabilities.dns import ResolveDomain
 from opfor.scenarios.attacksurface.assets.domain.capabilities.http import (
     ProbeEndpoints,
     HarvestPaths,
@@ -35,7 +32,6 @@ __all__ = [
     "BucketScan",
     "CVELookup",
     "DiscoverDomains",
-    "ProbeDNSEmailPosture",
     "ProbeEndpoints",
     "ExpandSpec",
     "GraphQLIntrospect",

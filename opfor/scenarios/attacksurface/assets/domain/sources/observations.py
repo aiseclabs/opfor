@@ -26,17 +26,6 @@ class Resolution:
 
 
 @dataclass(frozen=True)
-class EmailPosture:
-    """The email-authentication and DNS-integrity records read from public DNS. `spf` keeps every
-    `v=spf1` record, so a duplicate, which is an invalid setup, stays visible for triage to judge."""
-
-    spf: tuple[str, ...] = ()
-    dmarc: str = ""
-    caa: tuple[str, ...] = ()
-    dnssec: bool = False
-
-
-@dataclass(frozen=True)
 class TLSReport:
     """A TLS handshake on 443. `reachable` False is a real negative carrying `reason`. A reached
     host with a bad certificate is `reachable` True and `valid` False with `validity_error`, never

@@ -15,10 +15,7 @@ owning module, so the facade does not turn implementation into public API.
 
 from __future__ import annotations
 
-from opfor.scenarios.attacksurface.assets.domain.sources.dns import (
-    dns_email_posture,
-    resolve_host,
-)
+from opfor.scenarios.attacksurface.assets.domain.sources.dns import resolve_host
 from opfor.scenarios.attacksurface.assets.domain.sources.http import (
     chain_fetch,
     fetch_document,
@@ -74,7 +71,6 @@ from opfor.scenarios.attacksurface.assets.domain.sources.storage import (
 )
 from opfor.scenarios.attacksurface.assets.domain.sources.observations import (
     BucketReference,
-    EmailPosture,
     Liveness,
     Resolution,
     Response,
@@ -87,7 +83,6 @@ from opfor.scenarios.attacksurface.assets.domain.sources.observations import (
 # and a name that stops being used through the facade is caught rather than lingering.
 __all__ = [
     "BucketReference",
-    "EmailPosture",
     "Enumeration",
     "Liveness",
     "Resolution",
@@ -100,7 +95,6 @@ __all__ = [
     "cloud_bucket_from_url",
     "cloud_refs_in_text",
     "cves_from_nvd",
-    "dns_email_posture",
     "dnsdumpster_subdomains",
     "chain_fetch",
     "fetch_document",

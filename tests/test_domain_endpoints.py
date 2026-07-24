@@ -30,9 +30,9 @@ def test_exposure_clues_and_judgment_classes_are_loaded():
 
     knowledge = domain_class.KNOWLEDGE
     clue_ids = {c["id"] for c in _load_clues(knowledge / "findings")}
-    assert {"exposed-private-key", "exposed-htpasswd", "exposed-sql-dump"} <= clue_ids
+    assert {"prometheus-metrics", "apache-server-status", "exposed-actuator-env"} <= clue_ids
     class_ids = {c["id"] for c in _load_classes(knowledge / "findings")}
-    assert {"cors-misconfiguration", "verbose-error-disclosure"} <= class_ids
+    assert {"api-spec-exposure", "graphql-introspection"} <= class_ids
 
 def test_static_assets_are_never_probed_into_endpoints():
     # admin's script names /main.css, a static asset, so it must not become an endpoint

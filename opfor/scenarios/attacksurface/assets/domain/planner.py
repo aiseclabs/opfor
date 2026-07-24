@@ -18,7 +18,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from urllib.parse import urlparse
 
-from opfor.core import Task, World, each, iter_md_docs
+from opfor.core import Task, World, each
 from opfor.scenarios.attacksurface.assets.base import class_enabled
 
 # The asset class this planner belongs to, the single source of the class name the enable gate and
@@ -45,31 +45,14 @@ class DomainPlanConfig:
     probe_paths: tuple[str, ...] = ()
     static_suffixes: tuple[str, ...] = ()
     static_prefixes: tuple[str, ...] = ()
-    backup_append: tuple[str, ...] = ()
-    backup_rename: tuple[str, ...] = ()
-    backup_swap: tuple[str, ...] = ()
 
 
 def load_plan_config(paths) -> DomainPlanConfig:
-    """Load the domain plan config from the class's knowledge tree, once, at build time, so the
-    file IO the planner needs happens when a scenario is assembled, never at import. `paths` is the
-    class's `KnowledgePaths`. The backup templates are deterministic detection payloads carried in
-    the frontmatter of the finding classes they serve, unioned across `findings/` and handed to
-    their capabilities as params so the capability reads no knowledge, invariant 1."""
-    backup_append: list[str] = []
-    backup_rename: list[str] = []
-    backup_swap: list[str] = []
-    for _path, meta, _body in iter_md_docs(paths.findings):
-        backups = meta.get("backups") or {}
-        backup_append.extend(str(s) for s in (backups.get("append") or []))
-        backup_rename.extend(str(s) for s in (backups.get("rename") or []))
-        backup_swap.extend(str(s) for s in (backups.get("swap") or []))
+    """Load the domain plan config, once, at build time, so the file IO the planner needs happens
+    when a scenario is assembled, never at import. `paths` is the class's `KnowledgePaths`."""
     return DomainPlanConfig(
         static_suffixes=_STATIC_SUFFIXES,
         static_prefixes=_STATIC_PREFIXES,
-        backup_append=tuple(backup_append),
-        backup_rename=tuple(backup_rename),
-        backup_swap=tuple(backup_swap),
     )
 
 
@@ -208,25 +191,6 @@ def _graphql_rule(world: World) -> list[Task]:
     return tasks
 
 
-def _backup_rule(world: World, config: DomainPlanConfig) -> list[Task]:
-    """Probe backup twins of a live host's observed files, once per host, after its interfaces
-    are enumerated so the observed file set is complete. Hands the capability the name
-    templates, so it reads no knowledge file, and carries the host, since it touches the
-    target's server."""
-    tasks: list[Task] = []
-    for node in _live_domains(world):
-        if not world.has_fact(node.id, "endpoints"):
-            continue
-        if world.has_fact(node.id, "backups"):
-            continue
-        tasks.append(Task(capability="backup_scan", node=node.id,
-                          params={"append": list(config.backup_append),
-                                  "rename": list(config.backup_rename),
-                                  "swap": list(config.backup_swap)},
-                          scope_target=node.payload.name))
-    return tasks
-
-
 def _profile_rule(world: World) -> list[Task]:
     """Profile every live host once its surface is enumerated, deriving its product, front-end
     frameworks, and edge into one host_profile fact.
@@ -307,7 +271,6 @@ def enrich_rules(config: DomainPlanConfig, *, with_profile: bool = False, with_c
         _spec_rule,
         _spec_probe_rule,
         _graphql_rule,
-        lambda world: _backup_rule(world, config),
     ]
     if with_profile:
         rules.append(_profile_rule)

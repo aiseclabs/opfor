@@ -244,7 +244,7 @@ def _receipt(**over):
 
 def _two_findings():
     return json.dumps({"findings": [
-        {"category": "sensitive-file-exposure", "title": "Exposed .git", "severity": "HIGH",
+        {"category": "exposed-admin-interface", "title": "Exposed admin", "severity": "HIGH",
          "where": "https://a/.git/config", "evidence": "core section present"},
         {"category": "unauthenticated-interface", "title": "Login redirect", "severity": "INFO",
          "where": "https://a/portal", "evidence": "302 to /login"},

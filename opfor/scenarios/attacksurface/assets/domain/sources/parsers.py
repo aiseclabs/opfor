@@ -168,41 +168,6 @@ def same_host_path(url: str, host: str) -> str | None:
     return None
 
 
-def backup_candidates(path: str, *, append=(), rename=(), swap=()) -> list[str]:
-    """Backup and editor-artifact twin paths derived from an observed file path, apart from
-    the fetch so a test drives it without a network call.
-
-    An `append` suffix is added after the full filename, `config.php` yields
-    `config.php.bak`. A `rename` extension replaces the file's own extension, `config.php`
-    yields `config.zip`, catching an archive of the source dropped beside it. A `swap`
-    template is an editor dotfile over the filename, `{file}` yields `.config.php.swp`. A
-    path with no filename segment, a directory or a query only, yields nothing. Deriving the
-    twin is the mechanism here, the name lists are the data the caller hands in.
-    """
-    path = path.split("?")[0].split("#")[0]
-    if not path.startswith("/") or path.endswith("/"):
-        return []
-    directory, _, filename = path.rpartition("/")
-    if not filename:
-        return []
-    stem, dot, _ = filename.rpartition(".")
-    out: list[str] = []
-    for suffix in append:
-        out.append(f"{directory}/{filename}{suffix}")
-    if dot:
-        for extension in rename:
-            out.append(f"{directory}/{stem}{extension}")
-    for template in swap:
-        out.append(f"{directory}/{template.format(file=filename)}")
-    seen: set[str] = set()
-    result: list[str] = []
-    for candidate in out:
-        if candidate != path and candidate not in seen:
-            seen.add(candidate)
-            result.append(candidate)
-    return result
-
-
 _VERSION_SEGMENT = re.compile(r"^v(\d+)$")
 
 

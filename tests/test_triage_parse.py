@@ -13,23 +13,23 @@ from tests.surface_fixtures import _run_capturing
 
 def test_model_findings_are_mapped_to_typed_findings():
     reply = json.dumps({"findings": [{
-        "category": "sensitive-file-exposure", "title": "Exposed .git config", "severity": "HIGH",
-        "where": "https://admin.example.com/.git/config", "evidence": "a git config section is present",
-        "poc": "curl -s https://admin.example.com/.git/config", "confidence": 0.9,
+        "category": "unauthenticated-interface", "title": "Open admin endpoint", "severity": "HIGH",
+        "where": "https://admin.example.com/admin", "evidence": "an admin dashboard answered 200",
+        "poc": "curl -s https://admin.example.com/admin", "confidence": 0.9,
     }]})
     report, _, _ = _run_capturing(provider=MockProvider(responses=[reply]))
-    git = [f for f in report.findings if f.data.get("kind") == "sensitive-file-exposure"]
-    assert git and git[0].severity == "HIGH"
-    assert git[0].where.endswith("/.git/config")
-    assert git[0].poc.startswith("curl")
-    assert git[0].data["confidence"] == 0.9
+    found = [f for f in report.findings if f.data.get("kind") == "unauthenticated-interface"]
+    assert found and found[0].severity == "HIGH"
+    assert found[0].where.endswith("/admin")
+    assert found[0].poc.startswith("curl")
+    assert found[0].data["confidence"] == 0.9
 
 
 def test_unknown_severity_falls_back_to_class_impact_then_medium():
-    ids = frozenset({"sensitive-file-exposure"})
-    impacts = {"sensitive-file-exposure": "HIGH"}
+    ids = frozenset({"known-vulnerability"})
+    impacts = {"known-vulnerability": "HIGH"}
     # a known class with a bad severity anchors on the class impact
-    f = _finding_from_dict({"where": "u", "category": "Sensitive-File-Exposure", "severity": "WOBBLY"},
+    f = _finding_from_dict({"where": "u", "category": "Known-Vulnerability", "severity": "WOBBLY"},
                            known_ids=ids, impacts=impacts)
     assert f.severity == "HIGH"
     # an unknown class with a bad severity falls back to MEDIUM
@@ -42,7 +42,7 @@ def test_finding_without_a_location_is_dropped():
 
 
 def test_a_finding_host_that_is_only_a_substring_of_a_report_host_is_dropped():
-    data = {"category": "sensitive-file-exposure", "title": "x", "severity": "HIGH",
+    data = {"category": "unauthenticated-interface", "title": "x", "severity": "HIGH",
             "where": "https://example.com/admin"}
     # the report only mentions notexample.com, so example.com must not be accepted as a substring
     assert _finding_from_dict(data, report_text="server notexample.com only") is None
@@ -51,11 +51,11 @@ def test_a_finding_host_that_is_only_a_substring_of_a_report_host_is_dropped():
 
 
 def test_category_is_normalized_onto_the_known_class_ids():
-    ids = frozenset({"sensitive-file-exposure"})
-    f = _finding_from_dict({"where": "u", "category": "Sensitive-File-Exposure", "severity": "medium"},
+    ids = frozenset({"known-vulnerability"})
+    f = _finding_from_dict({"where": "u", "category": "Known-Vulnerability", "severity": "medium"},
                            known_ids=ids)
-    assert f.data["kind"] == "sensitive-file-exposure"
-    assert f.id == "finding:sensitive-file-exposure:u"
+    assert f.data["kind"] == "known-vulnerability"
+    assert f.id == "finding:known-vulnerability:u"
     # an unrecognized class collapses to other, so the id stays stable for dedup
     other = _finding_from_dict({"where": "u", "category": "made-up-thing"}, known_ids=ids)
     assert other.data["kind"] == "other"
@@ -69,7 +69,7 @@ def test_malformed_findings_are_dropped_loudly_with_a_degraded_marker():
     from opfor.scenarios.attacksurface.lifecycle.triage import SurfaceTriage
 
     reply = json.dumps({"findings": [
-        {"category": "sensitive-file-exposure", "title": "ok", "severity": "HIGH",
+        {"category": "unauthenticated-interface", "title": "ok", "severity": "HIGH",
          "where": "https://h/a"},
         {"category": "x"},          # no location, dropped
         "not-an-object",            # not a dict, dropped
@@ -91,9 +91,9 @@ def test_a_finding_whose_location_is_not_in_the_report_is_dropped():
     from opfor.scenarios.attacksurface.lifecycle.triage import SurfaceTriage
 
     reply = json.dumps({"findings": [
-        {"category": "sensitive-file-exposure", "title": "real", "severity": "HIGH",
+        {"category": "unauthenticated-interface", "title": "real", "severity": "HIGH",
          "where": "https://h/real"},
-        {"category": "sensitive-file-exposure", "title": "invented", "severity": "HIGH",
+        {"category": "unauthenticated-interface", "title": "invented", "severity": "HIGH",
          "where": "https://evil.invented/x"},
     ]})
     triage = SurfaceTriage([], provider=MockProvider(responses=[reply]), model="m")
@@ -132,13 +132,13 @@ def test_dedup_collapses_title_and_scheme_variance_but_keeps_distinct_paths():
     from opfor.core.result import Finding
     from opfor.scenarios.attacksurface.lifecycle.triage import SurfaceTriage
     # same class + location worded two ways, plus a scheme/slash variant, collapse to one
-    v1 = Finding(id="finding:missing-security-headers:https://h/a",
-                 title="no HSTS", severity="LOW", where="https://h/a")
-    v2 = Finding(id="finding:missing-security-headers:https://h/a/",
-                 title="missing strict-transport-security", severity="LOW", where="https://h/a/")
+    v1 = Finding(id="finding:unauthenticated-interface:https://h/a",
+                 title="open endpoint", severity="LOW", where="https://h/a")
+    v2 = Finding(id="finding:unauthenticated-interface:https://h/a/",
+                 title="unauthenticated endpoint", severity="LOW", where="https://h/a/")
     # a genuinely different path stays a separate finding
-    other = Finding(id="finding:missing-security-headers:https://h/b",
-                    title="no HSTS", severity="LOW", where="https://h/b")
+    other = Finding(id="finding:unauthenticated-interface:https://h/b",
+                    title="open endpoint", severity="LOW", where="https://h/b")
     out = SurfaceTriage._dedup([v1, v2, other])
     assert len(out) == 2
     assert {f.where for f in out} == {"https://h/a", "https://h/b"}

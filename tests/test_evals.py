@@ -34,18 +34,18 @@ def test_knowledge_inventory_enumerates_every_claim_by_ref_and_kind():
     # without a backtest shows up as an uncovered ref rather than being invisible
     assert by_ns["product"] == 8
     assert by_ns["framework"] == 2
-    assert by_ns["class"] == 13
-    assert by_ns["clue"] >= 15 and by_ns["signature"] >= 20
+    assert by_ns["class"] == 12
+    assert by_ns["clue"] >= 7 and by_ns["signature"] >= 20
     # a reproduction recipe is a detection claim, so it is enumerated and owes a backtest case
     assert by_ns["repro"] >= 1
     # a finding class is judgment, its embedded detection payloads are detection, so the two
     # regimes are told apart by the ref's kind
-    assert items["class:sensitive-file-exposure"].kind == JUDGMENT
-    assert items["clue:exposed-git"].kind == DETECTION
+    assert items["class:api-spec-exposure"].kind == JUDGMENT
+    assert items["clue:swagger-openapi"].kind == DETECTION
     # a concept is one file: the judgment prose and the detection payloads it surfaces share the
     # finding's own file, told apart by the ref's kind rather than by living in two trees
-    assert items["clue:exposed-git"].path == items["class:sensitive-file-exposure"].path
-    assert "findings" in items["class:sensitive-file-exposure"].path.parts
+    assert items["clue:swagger-openapi"].path == items["class:api-spec-exposure"].path
+    assert "findings" in items["class:api-spec-exposure"].path.parts
 
 
 def test_coverage_matrix_counts_cases_per_claim_and_flags_gaps():
@@ -60,7 +60,7 @@ def test_coverage_matrix_counts_cases_per_claim_and_flags_gaps():
     assert cov["product:jenkins"].positive >= 1 and cov["product:jenkins"].negative == 0
     assert not cov["product:jenkins"].covered
     # a claim no case exercises is uncovered, so it is a visible gap
-    assert cov["clue:exposed-git"].positive == 0 and not cov["clue:exposed-git"].covered
+    assert cov["clue:swagger-openapi"].positive == 0 and not cov["clue:swagger-openapi"].covered
 
     problems = coverage_problems()
     kinds = {p.kind for p in problems}

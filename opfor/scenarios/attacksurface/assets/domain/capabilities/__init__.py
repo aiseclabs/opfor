@@ -1,6 +1,5 @@
 """Domain-class capabilities, each fetches, none judges, re-exported by action family."""
 
-from opfor.scenarios.attacksurface.assets.domain.capabilities.artifacts import BackupScan
 from opfor.scenarios.attacksurface.assets.domain.capabilities.cves import CVELookup
 from opfor.scenarios.attacksurface.assets.domain.capabilities.discovery import (
     DiscoverDomains,
@@ -22,7 +21,6 @@ from opfor.scenarios.attacksurface.assets.domain.capabilities.specs import (
 )
 
 __all__ = [
-    "BackupScan",
     "CVELookup",
     "DiscoverDomains",
     "ProbeEndpoints",

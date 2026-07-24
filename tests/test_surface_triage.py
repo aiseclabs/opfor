@@ -48,17 +48,6 @@ def test_exposed_admin_interface_class_is_always_present_with_the_admin_host():
     assert "Exposed Non-Production" in _knowledge(sc)
 
 
-def test_exposed_git_clue_and_class_are_surfaced():
-    _, sc, _ = _run_capturing()
-    assert "matched exposed-git" in _prompt(sc)
-    assert "Sensitive File Exposure" in _knowledge(sc)
-
-
-def test_exposed_env_clue_is_surfaced():
-    _, sc, _ = _run_capturing()
-    assert "matched exposed-env" in _prompt(sc)
-
-
 def test_authenticated_endpoint_is_excluded_from_the_surface():
     # /metrics answered 401, so the capability marks it auth_required and triage keeps it
     # out of the surface the model judges, it is already protected
@@ -120,16 +109,17 @@ def test_graphql_without_operations_is_not_surfaced():
     assert "GraphQL introspection" not in _prompt(sc)
 
 
-def test_empty_env_body_yields_no_exposure_clue():
-    # a host that serves an empty 200 for /.env has no KEY=value body, so the deterministic
+def test_empty_body_yields_no_exposure_clue():
+    # a host that serves an empty 200 for /metrics has no body to match, so the deterministic
     # clue must not fire, the clue asserts on content, not the path
     from opfor.scenarios.attacksurface.assets.domain.types import Endpoint
 
     sc = _make()
-    empty = Endpoint(url="https://cf.example.com/.env", path="/.env", status=200, body="")
-    real = Endpoint(url="https://x/.env", path="/.env", status=200, body="db_password=secret\napi_key=abc")
+    empty = Endpoint(url="https://cf.example.com/metrics", path="/metrics", status=200, body="")
+    real = Endpoint(url="https://x/metrics", path="/metrics", status=200,
+                    body="# help go_gc_duration_seconds")
     assert sc.triage._renderer._exposure_clues(empty) == []
-    assert any("exposed-env" in c for c in sc.triage._renderer._exposure_clues(real))
+    assert any("prometheus-metrics" in c for c in sc.triage._renderer._exposure_clues(real))
 
 
 def test_resolution_failure_suppresses_the_model_call():
@@ -176,8 +166,8 @@ def test_large_surface_is_split_across_calls():
 def test_knowledge_and_class_ids_ride_the_system_prompt():
     _, sc, _ = _run_capturing()
     system = _knowledge(sc)
-    assert "Class id: sensitive-file-exposure" in system
-    assert "Sensitive File Exposure" in system
+    assert "Class id: exposed-admin-interface" in system
+    assert "Exposed Non-Production Or Admin Interface" in system
 
 
 def test_chunk_failure_is_a_degraded_finding_not_a_crash():

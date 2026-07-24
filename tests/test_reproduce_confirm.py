@@ -295,7 +295,7 @@ def test_confirm_regrades_end_to_end_across_triage_reproduce_and_confirm():
                                     status=200, auth_required=False, content_type="text/html")))
 
     finder = json.dumps({"findings": [{
-        "category": "sensitive-file-exposure", "title": "Exposed .env", "severity": "MEDIUM",
+        "category": "unauthenticated-interface", "title": "Exposed .env", "severity": "MEDIUM",
         "where": "https://api.example.com/.env", "evidence": "a dotenv path answered 200",
         "poc": "safe read: curl -s https://api.example.com/.env", "confidence": 0.8}]})
     triage = SurfaceTriage([], provider=MockProvider(responses=[finder]), model="m")
@@ -390,7 +390,7 @@ def test_regression_grounding_never_replays_an_unobserved_url():
     grounded, so no node is materialized and the EXPLOIT phase replays nothing. This locks
     strict grounding: reproduce touches only requests a capability already made."""
     finding = json.dumps({"findings": [{
-        "category": "sensitive-file-exposure", "title": "Invented path", "severity": "HIGH",
+        "category": "unauthenticated-interface", "title": "Invented path", "severity": "HIGH",
         "where": "https://spa.example.com/", "evidence": "claims a path that was never probed",
         "poc": "safe read: curl -s https://spa.example.com/this-was-never-observed",
         "confidence": 0.9}]})

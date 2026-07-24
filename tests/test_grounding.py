@@ -90,7 +90,7 @@ def test_triage_judge_mints_findings_and_mutates_no_world_node():
                    payload=Endpoint(url="https://api.example.com/.env", path="/.env",
                                     status=200, auth_required=False, content_type="text/plain")))
     finder = json.dumps({"findings": [{
-        "category": "sensitive-file-exposure", "title": "Exposed .env", "severity": "MEDIUM",
+        "category": "unauthenticated-interface", "title": "Exposed .env", "severity": "MEDIUM",
         "where": "https://api.example.com/.env", "evidence": "a dotenv path answered 200",
         "poc": "safe read: curl -s https://api.example.com/.env"}]})
     triage = SurfaceTriage([], provider=MockProvider(responses=[finder]), model="m")

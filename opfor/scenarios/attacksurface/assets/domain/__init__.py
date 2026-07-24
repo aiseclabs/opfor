@@ -30,7 +30,6 @@ from opfor.scenarios.attacksurface.assets.domain.capabilities.specs import (
 )
 from opfor.scenarios.attacksurface.assets.domain.capabilities.http import DISCLOSURE_PROBE_PATHS
 from opfor.scenarios.attacksurface.assets.domain.capabilities import (
-    BackupScan,
     CVELookup,
     DiscoverDomains,
     ProbeEndpoints,
@@ -129,7 +128,6 @@ def assemble(*, enumerate_fn, resolve_fn, probe_fn, fetch_fn, fetch_doc_fn,
         ExpandSpec(fetch_doc_fn),
         ProbeSpec(fetch_fn),
         GraphQLIntrospect(introspect_fn),
-        BackupScan(fetch_fn),
     ]
     # The per-product knowledge units identify a known product without a model call, with the
     # exact version a version header or endpoint carries. They wrap the injected model identify

@@ -47,7 +47,6 @@ from opfor.scenarios.attacksurface.assets.domain.sources.seeds import (
     roots_from_file,
 )
 from opfor.scenarios.attacksurface.assets.domain.sources.parsers import (
-    backup_candidates,
     info_from_openapi,
     operations_from_introspection,
     paths_from_openapi,
@@ -75,7 +74,6 @@ __all__ = [
     "Liveness",
     "Resolution",
     "Response",
-    "backup_candidates",
     "certspotter_subdomains",
     "cves_from_nvd",
     "dnsdumpster_subdomains",

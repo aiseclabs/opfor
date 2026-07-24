@@ -146,11 +146,6 @@ class SurfaceRenderer:
                 # vulnerability set, invariant 5
                 line += (f"\n  {len(ranked) - _MAX_CVES} more CVE(s) not shown, ranked below "
                          f"the {_MAX_CVES} highest-scored")
-        backups = world.latest("backups", node.id)
-        if backups is not None and backups.payload.hits:
-            for hit in backups.payload.hits:
-                line += (f"\n  backup file: {hit.url}, HTTP {hit.status}, "
-                         f"{hit.content_type or 'unknown type'}, {hit.size} bytes")
         return line
 
     def _endpoint_line(self, ep) -> str:

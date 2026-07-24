@@ -1,6 +1,6 @@
 [project]
 name = "opfor"
-version = "0.4.0"
+version = "0.5.0"
 description = "AI-assisted offensive reconnaissance and attack surface mapping."
 readme = "README.md"
 requires-python = ">=3.12"

@@ -3,9 +3,16 @@
 Project instructions for coding agents. Claude Code reads it through the `@AGENTS.md`
 import in `CLAUDE.md`.
 
-It is a universal offensive-security engine. One generic engine drives every scenario,
-web, internal network, AI agents, phishing, chain, people. A scenario changes by swapping
-data, capabilities, and knowledge, never by editing the engine.
+It is an offensive-security engine with one mission. From a root domain, discover its
+subdomains, identify what each subdomain is, analyze the state of the service it runs, the
+interfaces it exposes, whether it carries a known CVE, whether it leaves an unauthorized-access
+hole, and write an accurate PoC for what is found. A report of the findings is the last step,
+still to come.
+
+The engine underneath is generic. It names no host, product, or person, so the mission lives
+as scenario data, capabilities, and knowledge. A scenario changes by swapping those, never by
+editing the engine. Today one scenario, `attacksurface`, carries the mission, and `mock` is the
+kernel's own fixture.
 
 The architecture is a blackboard, the world model held outside any model context, read and
 written by narrow capabilities, with a planner that proposes and a triage that judges, all
@@ -25,8 +32,8 @@ sequenced along a fixed lifecycle spine so a run either closes or says why it di
    ENRICH, TRIAGE, then the intrusive EXPLOIT and CONFIRM, and stops at the terminal phase
    the scenario declares. A run that reaches its terminal is closed. A run stopped by an
    exhausted budget or by work awaiting an async result is suspended and records why, so a
-   stall is a visible failure to close, not a silently clean result. Async results arrive
-   later, the phishing "hours later" path, through a parked handle.
+   stall is a visible failure to close, not a silently clean result. An async result that
+   arrives later comes back through a parked handle.
 4. **Scope is deny-by-default, every act is authored in the ledger.** Every task is
    authorized against the campaign scope before it runs. A passive recon-tier osint lookup
    of a public source is waved through, anything else must name an in-scope target within
@@ -74,6 +81,13 @@ sequenced along a fixed lifecycle spine so a run either closes or says why it di
   holding its `knowledge/` and data files.
 - `scenarios/registry.py` is the one place that lists scenarios. `mock` is the reference,
   the smallest run that closes the loop, and the kernel's own fixture.
+- `attacksurface` is the mission scenario, the only one the CLI runs. It maps the mission onto
+  the spine. MAP discovers the subdomains, ENRICH identifies each host and analyzes its service
+  state, the interfaces it exposes, the product it runs and that product's CVEs. TRIAGE judges
+  the findings, the exposed interfaces, the known vulnerabilities, and the unauthorized-access
+  holes. The opt-in EXPLOIT and CONFIRM write and confirm an accurate PoC. Its terminal is
+  TRIAGE by default, raised to EXPLOIT or CONFIRM only when the operator opts in and authorizes
+  the intrusive tier.
 - Knowledge markdown and data files such as wordlists or fingerprint tables are read by the
   planner and triage, never by a capability.
 

@@ -201,6 +201,38 @@ def test_compute_funds_prices_native_and_value_tokens():
     assert set(assets) == {"native", "USDT", "WBTC"}  # WETH balance was zero, so not counted
 
 
+def test_triage_drops_known_infrastructure_however_much_it_holds():
+    from opfor.core import Fact, Node, World
+    from opfor.scenarios.onchain.lifecycle.triage import AuditTriage
+    from opfor.scenarios.onchain.assets.contract.types import (
+        ContractData, FundFact, IdentityFact, InterfaceFact, InterfaceFn, SignalFact, SourceFact,
+    )
+
+    infra = "0x000000000004444c5dc75cb358380d2e3de08a90"  # a router-like singleton, not a target
+
+    def _world(address: str) -> World:
+        world = World()
+        nid = f"contract:ethereum:{address}"
+        world.add(Node(id=nid, type="contract",
+                       payload=ContractData(chain="ethereum", address=address, role="unknown")))
+        world.absorb([
+            Fact(kind="sourced", about=nid, payload=SourceFact(verified=True, source_text="x")),
+            Fact(kind="identified", about=nid, payload=IdentityFact(role="router")),
+            Fact(kind="funded", about=nid, payload=FundFact(funds_at_risk_usd=200_000_000)),
+            Fact(kind="interfaces", about=nid, payload=InterfaceFact(
+                functions=(InterfaceFn(name="swap", is_fund_path=True, guarded=False),))),
+            Fact(kind="signals", about=nid, payload=SignalFact(
+                flags=("dex_spot_price_dependency", "delegatecall"))),
+        ])
+        return world
+
+    known = {"ethereum": frozenset({infra})}
+    assert AuditTriage(known_infrastructure=known).judge(_world(infra)) == []  # dropped as infra
+    # the same shape at a non-denylisted address is a real high finding
+    other = AuditTriage(known_infrastructure=known).judge(_world("0xffff000000000000000000000000000000000001"))
+    assert len(other) == 1 and other[0].severity == "HIGH"
+
+
 def test_discovery_keeps_only_the_age_band_and_liquidity_floor():
     from opfor.scenarios.onchain.assets.contract.sources.geckoterminal import select
     from opfor.scenarios.onchain.assets.contract.sources.observations import PoolObservation

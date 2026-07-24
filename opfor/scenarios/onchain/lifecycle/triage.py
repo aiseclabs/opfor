@@ -29,6 +29,11 @@ _UNVERIFIED_HIGH = 1_000_000.0
 class AuditTriage(Triage):
     """Judge each analyzed contract into an audit priority, or drop it as not worth auditing."""
 
+    def __init__(self, known_infrastructure: dict[str, frozenset[str]] | None = None) -> None:
+        # The per-chain denylist of audited infrastructure, judgment data loaded at build time. A
+        # contract on it is dropped however much it holds, keeping the queue on the unknown long tail.
+        self._known = known_infrastructure or {}
+
     def judge(self, world: World) -> list[Finding]:
         findings: list[Finding] = []
         for node in world.nodes("contract"):
@@ -47,6 +52,11 @@ class AuditTriage(Triage):
         identified = world.latest("identified", node.id)
         role = identified.payload.role if identified is not None else node.payload.role
         if role in self._NOT_AUDIT_TARGET:
+            return None
+        # Known audited infrastructure, a router or a DEX singleton, is never a target, even when it
+        # holds a fortune and matches every signal. It surfaces as a young token's biggest transfer
+        # counterparty, so drop it here to keep the queue on the unknown long tail.
+        if node.payload.address.lower() in self._known.get(node.payload.chain, frozenset()):
             return None
         # A value token, WETH or a stable, is money, not an audit target, even when its functions
         # such as deposit and withdraw make it look like a vault. Skip it, so a quote token swept in

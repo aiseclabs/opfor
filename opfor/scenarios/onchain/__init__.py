@@ -20,6 +20,7 @@ from opfor.core import Node, Phase, RuleSet, Scenario, World
 from opfor.scenarios.onchain.assets.contract import assemble
 from opfor.scenarios.onchain.assets.contract import identify as contract_identify
 from opfor.scenarios.onchain.assets.contract import sources as contract_src
+from opfor.scenarios.onchain.assets.contract.known import load_known_infrastructure
 from opfor.scenarios.onchain.assets.contract.types import ContractData
 from opfor.scenarios.onchain.lifecycle.triage import AuditTriage
 from opfor.scenarios.onchain.report import report_view
@@ -57,12 +58,13 @@ def build(
     bundle = assemble(sweep_fn=sweep_fn, pivot_fn=pivot_fn, source_fn=source_fn,
                       identify_fn=identify_fn, funds_fn=funds_fn)
     rules = {Phase.MAP: list(bundle.map_rules), Phase.ENRICH: list(bundle.enrich_rules)}
+    known = load_known_infrastructure(bundle.knowledge_dir)
     return Scenario(
         name=NAME,
         content_root=Path(__file__).resolve().parent,
         capabilities=bundle.capabilities,
         planner=RuleSet(rules),
-        triage=AuditTriage(),
+        triage=AuditTriage(known_infrastructure=known),
         terminal=Phase.TRIAGE,
         payloads=_payloads(),
     )

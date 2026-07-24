@@ -1,22 +1,27 @@
 # Live reproduction lanes
 
-The offline backtest in `evals/README.md` replays recorded cassettes, no Docker, no network, no
-model, and it is the CI gate. These live lanes are the other half, an on-demand end-to-end check
-that opfor reproduces a known CVE against a real product instance rather than a fixture. A lane
-identifies the running version, looks its CVEs up in NVD, replays the vendored recipe under
-authorization, and confirms it on the live receipt.
+These lanes are a **seam smoke test**, not a capability measurement. A lane brings up a real product
+container and checks that opfor's live seams, the real HTTP fetch and the real identify-to-confirm
+path, connect end to end against reality. Capability, whether the reproduce loop adapts when a
+target deviates from the recipe, is measured offline and benignly by the reproduction-capability
+backtest in `evals/README.md`, `python -m evals repro`, so it is not the job of a lane. A lane that
+passes proves the pipeline connects, it cannot prove capability, since the recipe already encodes
+the answer and the target matches it exactly.
 
 ## Contract
 
+- **A thin smoke test, kept small.** The lanes exist to catch a seam that stops connecting, so the
+  set stays minimal. Capability coverage grows in the offline backtest, not by adding lanes, and a
+  new lane is worth it only when it exercises a seam the current set does not.
 - **Not in CI.** A lane needs Docker, a network, and a model, so it is run by hand, the same
   on-demand contract as `evals/capture/record.py`.
 - **Local throwaway target only.** Each lane brings up an official product image the operator
   started, on localhost. The lane's seams talk to that container directly, they resolve nothing
   public and send nothing off the host, so a run is consequence-free.
-- **Public CVEs, read-only or benign.** The reproduction is a known CVE's own published proof, from
-  a vendored Nuclei template. A read-only lane runs at the intrusive tier, a state-changing lane at
-  the exploit tier under explicit authorization, and its proof is benign, a `/etc/passwd` line, a
-  SQL error, a settings key, not a destructive act.
+- **Read-only or benign.** The reproduction is a known CVE's own published proof, from a vendored
+  Nuclei template, and its proof is benign, a `/etc/passwd` line, a settings key, not a destructive
+  act. Since a lane no longer carries capability, prefer a file-read or an info-disclosure lane,
+  whose proof is a benign read, over an exploit-tier one.
 
 ## Run a lane
 

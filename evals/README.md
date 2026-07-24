@@ -1,10 +1,19 @@
-# Fingerprint backtest
+# Offline backtests
+
+Two offline, deterministic gates, no Docker, network, or model. The fingerprint backtest measures
+whether opfor identifies a product. The reproduction-capability backtest measures the other half of
+a run, whether the reproduce loop adapts when a target deviates from the recipe. Both are CI gates,
+and both keep their ground truth out of the pipeline, so a high score cannot come from the tool
+grading itself. The live lanes in `evals/live/` are a separate on-demand seam check, not a capability
+measurement, see that directory's README.
+
+## Fingerprint backtest
 
 Measures opfor's deterministic product fingerprint against **real product output**, so a marker or
 a version regex that regresses is caught. It does not test the classifier with hand-typed strings,
 it replays what a real scan drew from a real instance.
 
-## How it works
+### How it works
 
 - `capture/` records a **cassette** from a running product instance: the HTTP responses opfor's
   probe draws, in the same shape opfor's seams return. Run it on a machine with Docker.
@@ -22,13 +31,13 @@ it replays what a real scan drew from a real instance.
 - Ground truth lives only in the cassette labels, never fed into the pipeline, so a high score
   cannot come from the tool grading itself.
 
-## Run the backtest (offline, deterministic, no Docker, no model, no network)
+### Run the backtest (offline, deterministic, no Docker, no model, no network)
 
     python -m evals run
 
 Fails with a nonzero exit on any regression, so it is a CI gate.
 
-## Refresh the corpus (needs Docker, on-demand)
+### Refresh the corpus (needs Docker, on-demand)
 
     docker compose -f evals/capture/grafana/docker-compose.yml up -d
     python -m evals.capture.record --product Grafana --version 10.4.0 --url http://localhost:3104
@@ -44,3 +53,34 @@ display name such as `Apache Airflow` is captured under the `airflow` slug while
 the full product name the fingerprint identifies. Add a product by placing its instance in the
 matching stack directory, a new directory when it has no stack yet, with a compose file of pinned
 versions, then capturing each.
+
+## Reproduction-capability backtest
+
+Measures whether the reproduce loop adapts when a target deviates from the recipe as written. A live
+lane against a real vulnerable product proves the pipeline connects, it does not prove capability,
+since the recipe already encodes the answer and the target matches it exactly. Capability is the
+loop's behavior under perturbation, so this measures that directly and offline.
+
+### How it works
+
+- The corpus is in `repro_backtest.py`, a set of **benign, synthetic** cases. The technique reads a
+  sentinel marker, `OPFOR-REPRO-OK`, never a sensitive file or a credential, and the target is a
+  pure in-process responder on a `.test` host, never a real instance, so a case names no
+  vulnerability and reaches nothing off the process. The perturbation is the variable under test, a
+  reverse-proxy mount, a collapsed traversal, a wrong document-root depth, a token flow the read
+  loop cannot satisfy.
+- Each case runs through the **real reproduce loop**, the same `reproduce_rule` and capability the
+  engine drives, so a variator that regresses is caught.
+- It scores two axes and gates on a regression: **adaptation recall** (each perturbation the loop
+  should adapt to bore the marker through the seed or a variant) and **honesty** (each perturbation
+  the loop cannot adapt to stayed unreproduced rather than false-confirmed, since the suspected
+  verdict is only honest if the oracle never fires on the wrong response).
+- Whether a case is adaptable is the grader's label, never fed into the loop, so a high score cannot
+  come from the loop grading itself.
+
+### Run the backtest (offline, deterministic, no Docker, no model, no network)
+
+    python -m evals repro
+
+Fails with a nonzero exit on any regression, so it is a CI gate. Adding a variator adds an adaptable
+case it should carry, so the corpus grows with the loop's capability.

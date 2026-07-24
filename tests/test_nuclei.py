@@ -44,23 +44,6 @@ def test_the_vendored_grafana_template_parses_into_opfor_shapes():
     assert not t.writes and t.tier == "intrusive"
 
 
-def test_the_vendored_druid_raw_template_parses_into_opfor_shapes():
-    # a single raw request template, the Druid RCE, parses into the same shapes as a structured one
-    t = parse_template((PATHS.nuclei / "CVE-2021-25646.yaml").read_text(encoding="utf-8"))
-    assert isinstance(t, NucleiTemplate)
-    assert t.cve == "CVE-2021-25646"
-    req = t.requests[0]
-    assert req.method == "POST"
-    # the bare raw path is rebased onto BaseURL so it flows through concrete_paths like a structured one
-    assert req.paths[0] == "{{BaseURL}}/druid/indexer/v1/sampler"
-    # the Host header is dropped, opfor's seam sets it, other headers and the body survive
-    assert dict(req.headers).get("Content-Type") == "application/json"
-    assert "host" not in {k.lower() for k, _ in req.headers}
-    assert req.body and "firehose" in req.body
-    # a state-changing method, so it needs the exploit tier and its published proof body
-    assert t.writes and t.tier == "exploit"
-
-
 _RAW_TMPL = """
 id: CVE-2099-0001
 info:
@@ -86,7 +69,13 @@ def test_a_single_raw_request_parses_and_rejects_an_unknown_placeholder():
     t = parse_template(_RAW_TMPL)
     assert isinstance(t, NucleiTemplate)
     req = t.requests[0]
+    # the bare raw path is rebased onto BaseURL so it flows through concrete_paths like a structured one
     assert req.method == "POST" and req.paths[0] == "{{BaseURL}}/x/y" and req.body == '{"a":1}'
+    # the Host header is dropped, opfor's seam sets it, other headers survive
+    assert dict(req.headers).get("Content-Type") == "application/json"
+    assert "host" not in {k.lower() for k, _ in req.headers}
+    # a state-changing method, so it needs the exploit tier rather than the read-only intrusive one
+    assert t.writes and t.tier == "exploit"
     # a raw request naming a placeholder the single consumer does not fill is a loud coverage gap
     bad = _RAW_TMPL.replace('{"a":1}', '{"a":"{{interactsh-url}}"}')
     result = parse_template(bad)

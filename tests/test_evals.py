@@ -34,7 +34,7 @@ def test_knowledge_inventory_enumerates_every_claim_by_ref_and_kind():
     # without a backtest shows up as an uncovered ref rather than being invisible
     assert by_ns["product"] == 8
     assert by_ns["framework"] == 2
-    assert by_ns["class"] == 17
+    assert by_ns["class"] == 16
     assert by_ns["clue"] >= 15 and by_ns["secret"] >= 5 and by_ns["signature"] >= 20
     # a reproduction recipe is a detection claim, so it is enumerated and owes a backtest case
     assert by_ns["repro"] >= 1

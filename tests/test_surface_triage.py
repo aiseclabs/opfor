@@ -214,17 +214,6 @@ def test_path_permutation_runs_between_harvest_and_endpoints_without_deadlock():
     assert report.status == CLOSED
 
 
-def test_tls_posture_is_probed_on_live_hosts_and_surfaced_for_the_judge():
-    _, sc, world = _run_capturing()
-    live = [n for n in world.nodes("domain")
-            if (h := world.latest("http", n.id)) is not None and h.payload.alive]
-    # every live host carries a tls fact, since the TLS probe runs on hosts that answered HTTP
-    assert live and all(world.latest("tls", n.id) is not None for n in live)
-    prompt = _prompt(sc)
-    assert "TLS certificate: valid" in prompt
-    assert "Insecure TLS Certificate" in _knowledge(sc)
-
-
 def test_insecure_cookie_flags_are_surfaced_and_the_class_is_selected():
     # a session cookie set without Secure or HttpOnly, added to whichever hosts the fixture
     # already reports alive, so aliveness is unchanged and only the cookie posture is new

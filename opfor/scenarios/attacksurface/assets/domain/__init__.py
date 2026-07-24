@@ -47,7 +47,6 @@ from opfor.scenarios.attacksurface.assets.domain.capabilities import (
     SecretScan,
     SourceMapScan,
     EnumerateSubdomains,
-    ProbeTLSPosture,
 )
 
 KNOWLEDGE = Path(__file__).resolve().parent / "knowledge"
@@ -112,7 +111,7 @@ def _template_chains(nuclei_dir) -> tuple:
 
 
 def assemble(*, enumerate_fn, resolve_fn, probe_fn, fetch_fn, fetch_doc_fn,
-             introspect_fn, wayback_fn, probe_url_fn, tls_fn,
+             introspect_fn, wayback_fn, probe_url_fn,
              identify_fn=None, cve_fn=None) -> ClassBundle:
     """The domain class's contribution. The seams are the passive and active sources, injected so
     a test drives the class with fixtures. The run maps exactly the operator's seed roots and
@@ -127,7 +126,6 @@ def assemble(*, enumerate_fn, resolve_fn, probe_fn, fetch_fn, fetch_doc_fn,
         PermuteSubdomains(resolve_fn),
         ResolveDomain(resolve_fn),
         HTTPDomain(probe_fn),
-        ProbeTLSPosture(tls_fn),
         HarvestPaths(fetch_fn, fetch_doc_fn, wayback_fn),
         PermutePaths(),
         ProbeEndpoints(fetch_fn, version_paths=product_probe_paths(fingerprints)),

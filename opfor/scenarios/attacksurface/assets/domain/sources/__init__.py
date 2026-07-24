@@ -26,7 +26,6 @@ from opfor.scenarios.attacksurface.assets.domain.sources.http import (
     graphql_introspect,
     http_probe,
 )
-from opfor.scenarios.attacksurface.assets.domain.sources.tls import tls_probe
 from opfor.scenarios.attacksurface.assets.domain.sources.enumeration import (
     Enumeration,
     certspotter_subdomains,
@@ -75,7 +74,6 @@ from opfor.scenarios.attacksurface.assets.domain.sources.observations import (
     Resolution,
     Response,
     SourceMapClues,
-    TLSReport,
 )
 
 
@@ -88,7 +86,6 @@ __all__ = [
     "Resolution",
     "Response",
     "SourceMapClues",
-    "TLSReport",
     "backup_candidates",
     "bucket_listable",
     "certspotter_subdomains",
@@ -124,7 +121,6 @@ __all__ = [
     "subdomains_from_dnsdumpster",
     "subdomains_from_otx",
     "subdomains_from_vt",
-    "tls_probe",
     "urls_in_javascript",
     "virustotal_subdomains",
     "wayback_paths",

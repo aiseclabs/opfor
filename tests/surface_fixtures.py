@@ -18,7 +18,6 @@ from opfor.scenarios.attacksurface.assets.domain.sources.observations import (
     Liveness,
     Resolution,
     Response,
-    TLSReport,
 )
 from opfor.scenarios.attacksurface.hostnames import HostScope
 from opfor.scenarios.attacksurface.seed import Org
@@ -175,13 +174,6 @@ def _probe_url(url):
     return Response(status=404, url=url)
 
 
-def _tls(name, addresses=()):
-    # By default a host serves a valid certificate over a modern protocol, so the TLS scan is a
-    # quiet clean result. A test overrides this seam to drive an expired or untrusted cert.
-    return TLSReport(reachable=True, valid=True, days_to_expiry=300,
-                     protocol="TLSv1.3", cipher="TLS_AES_256_GCM_SHA384")
-
-
 def _make(**over):
     """Build the scenario with every seam faked, so no test touches the network or the
     model. A MockProvider stands in for the triage model, returning an empty result by
@@ -190,7 +182,7 @@ def _make(**over):
     seams = dict(enumerate_fn=_enumerate,
                  resolve_fn=_resolve, probe_fn=_probe, fetch_fn=_fetch, fetch_doc_fn=_fetch_doc,
                  introspect_fn=_introspect, wayback_fn=_wayback, identify_fn=_identify, cve_fn=_cves,
-                 probe_url_fn=_probe_url, tls_fn=_tls)
+                 probe_url_fn=_probe_url)
     seams.update(over)
     seams.setdefault("provider", MockProvider(default='{"findings": []}'))
     seams.setdefault("model", "test-model")
@@ -286,7 +278,6 @@ __all__ = [
     '_identify',
     '_cves',
     '_probe_url',
-    '_tls',
     '_make',
     '_scenario',
     '_seed',

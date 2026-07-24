@@ -25,7 +25,6 @@ from opfor.scenarios.attacksurface.assets.domain.capabilities.specs import (
     ProbeSpec,
 )
 from opfor.scenarios.attacksurface.assets.domain.capabilities.storage import BucketScan
-from opfor.scenarios.attacksurface.assets.domain.capabilities.tls import ProbeTLSPosture
 
 __all__ = [
     "BackupScan",
@@ -45,5 +44,4 @@ __all__ = [
     "SecretScan",
     "SourceMapScan",
     "EnumerateSubdomains",
-    "ProbeTLSPosture",
 ]

@@ -90,22 +90,3 @@ def test_render_flags_a_cve_the_scenario_carries_a_reproduction_recipe_for():
     assert flag not in text[rce:repro]
 
 
-def test_render_shows_an_invalid_tls_certificate_with_its_reason():
-    from opfor.core import Fact
-    from opfor.scenarios.attacksurface.assets.domain.types import DomainData, HTTP as HTTPData, TLSPosture
-    from opfor.scenarios.attacksurface.render import SurfaceRenderer
-
-    world = World()
-    world.add(Node(id="domain:h.example.com", type="domain",
-                   payload=DomainData(name="h.example.com", root="example.com", source="hint")))
-    world.absorb((
-        Fact(kind="http", about="domain:h.example.com",
-             payload=HTTPData(alive=True, status=200, url="https://h.example.com/")),
-        Fact(kind="tls", about="domain:h.example.com",
-             payload=TLSPosture(host="h.example.com", reachable=True, valid=False,
-                                validity_error="certificate has expired", protocol="TLSv1.2")),
-    ))
-    text = "\n".join(SurfaceRenderer([], []).units(world))
-    assert "TLS certificate: INVALID, certificate has expired; protocol TLSv1.2" in text
-
-

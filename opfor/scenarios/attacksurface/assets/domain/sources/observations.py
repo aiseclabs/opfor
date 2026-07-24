@@ -26,22 +26,6 @@ class Resolution:
 
 
 @dataclass(frozen=True)
-class TLSReport:
-    """A TLS handshake on 443. `reachable` False is a real negative carrying `reason`. A reached
-    host with a bad certificate is `reachable` True and `valid` False with `validity_error`, never
-    mistaken for unreachable, and its expiry is still recovered rather than left blank."""
-
-    reachable: bool
-    valid: bool = False
-    validity_error: str = ""
-    not_after: str = ""
-    days_to_expiry: int | None = None
-    protocol: str = ""
-    cipher: str = ""
-    reason: str = ""
-
-
-@dataclass(frozen=True)
 class Liveness:
     """The HTTP alive probe. When `alive` is False, `reason` tells a real negative, `refused` or
     `no-public-address`, from a coverage gap, `unreachable`, which the caller records rather than

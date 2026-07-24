@@ -62,14 +62,16 @@ class SweepPools(Capability):
                                                    role="pool", source="swept", dex_id=pool.dex_id,
                                                    url=pool.url, base_symbol=pool.base_symbol,
                                                    quote_symbol=pool.quote_symbol,
-                                                   liquidity_usd=pool.liquidity_usd)))
+                                                   liquidity_usd=pool.liquidity_usd,
+                                                   age_days=pool.age_days)))
             for address, symbol in ((pool.base_address, pool.base_symbol),
                                     (pool.quote_address, pool.quote_symbol)):
                 if address:
                     nodes.append(Node(id=_node_id(pool.chain, address), type="contract",
                                       payload=ContractData(chain=pool.chain, address=address,
                                                            role="token", source="swept",
-                                                           base_symbol=symbol)))
+                                                           base_symbol=symbol,
+                                                           age_days=pool.age_days)))
         return Done(facts=(Fact(kind="swept", about=task.node, yields=tuple(nodes)),))
 
 

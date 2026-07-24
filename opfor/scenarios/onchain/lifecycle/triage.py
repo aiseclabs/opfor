@@ -15,6 +15,7 @@ priority, since they are a user's trust risk, not an external attacker's hole.
 from __future__ import annotations
 
 from opfor.core import Finding, Triage, World
+from opfor.scenarios.onchain.assets.contract.sources.funds import value_token_addresses
 
 # Priority to severity, A worth a full audit down to C a project-power note. D is not minted, it
 # is the surface the run judged not worth a security engineer's time.
@@ -42,6 +43,11 @@ class AuditTriage(Triage):
         identified = world.latest("identified", node.id)
         role = identified.payload.role if identified is not None else node.payload.role
         if role in self._NOT_AUDIT_TARGET:
+            return None
+        # A value token, WETH or a stable, is money, not an audit target, even when its functions
+        # such as deposit and withdraw make it look like a vault. Skip it, so a quote token swept in
+        # beside a project token never becomes a finding.
+        if node.payload.address.lower() in value_token_addresses(node.payload.chain):
             return None
         funded = world.latest("funded", node.id)
         funds = funded.payload.funds_at_risk_usd if funded is not None else 0.0

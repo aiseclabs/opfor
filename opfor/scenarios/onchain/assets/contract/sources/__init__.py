@@ -11,11 +11,12 @@ from opfor.scenarios.onchain.assets.contract.sources import (
     dex,
     explorer,
     funds as funds_src,
+    geckoterminal,
     pivot as pivot_src,
     rpc,
 )
 
-sweep = dex.sweep
+sweep = geckoterminal.new_pools
 pivot = pivot_src.pivot
 fetch_source = explorer.fetch_source
 read_funds = funds_src.read_funds

@@ -30,6 +30,10 @@ class ContractData:
     base_symbol: str = ""
     quote_symbol: str = ""
     liquidity_usd: float = 0.0
+    # The age of the pool the contract was discovered through, in days, or None when unknown. A
+    # small age is the novelty signal, a freshly deployed contract is a fresher audit target than a
+    # long-lived one that has had years of eyes on it.
+    age_days: float | None = None
 
 
 @dataclass(frozen=True, kw_only=True)

@@ -14,17 +14,11 @@ rather than failing, and the run says as much through the empty counterparty set
 
 from __future__ import annotations
 
-import json
-import os
-import urllib.parse
-import urllib.request
 from collections import Counter
 
-from opfor.scenarios.onchain.assets.contract.sources import dex, rpc
+from opfor.scenarios.onchain.assets.contract.sources import dex, etherscan, rpc
 from opfor.scenarios.onchain.assets.contract.sources.observations import RelatedObservation
 
-_BSCSCAN = {"bsc": "https://api.bscscan.com/api"}
-_TIMEOUT = 15.0
 # How many recent transfers to read, how many top counterparties to code-check, and how many
 # fund contracts to keep. Each bounds a fan-out that would otherwise flood MAP.
 _TRANSFER_SCAN = 200
@@ -59,20 +53,14 @@ def counterparty_pivot(contract, *, fetch_transfers, is_contract, max_deep=_MAX_
     return related
 
 
-def _bscscan_transfers(address: str, chain: str) -> list[dict]:
+def _etherscan_transfers(address: str, chain: str) -> list[dict]:
     """Read the token's recent transfers from the explorer. Needs a key, so without one it returns
     no transfers and the deep pivot degrades to the shallow pools."""
-    base = _BSCSCAN.get(chain)
-    key = os.environ.get("OPFOR_EXPLORER_KEY")
-    if base is None or not key:
+    if not etherscan.configured(chain):
         return []
-    query = urllib.parse.urlencode({
-        "module": "account", "action": "tokentx", "contractaddress": address,
-        "page": "1", "offset": str(_TRANSFER_SCAN), "sort": "desc", "apikey": key})
-    request = urllib.request.Request(f"{base}?{query}",
-                                     headers={"User-Agent": "opfor-onchain/0.1"})
-    with urllib.request.urlopen(request, timeout=_TIMEOUT) as response:
-        data = json.loads(response.read().decode("utf-8"))
+    data = etherscan.get(chain, {"module": "account", "action": "tokentx",
+                                 "contractaddress": address, "page": "1",
+                                 "offset": str(_TRANSFER_SCAN), "sort": "desc"})
     result = data.get("result")
     return result if isinstance(result, list) else []
 
@@ -86,7 +74,7 @@ def pivot(contract) -> tuple[RelatedObservation, ...]:
     related: dict[str, RelatedObservation] = {}
     for obs in dex.pivot(contract):
         related[obs.address.lower()] = obs
-    for obs in counterparty_pivot(contract, fetch_transfers=_bscscan_transfers,
+    for obs in counterparty_pivot(contract, fetch_transfers=_etherscan_transfers,
                                   is_contract=rpc.is_contract):
         related.setdefault(obs.address.lower(), obs)
     return tuple(related.values())

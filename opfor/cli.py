@@ -19,7 +19,7 @@ from pathlib import Path
 
 from opfor import __version__
 from opfor.core import SEVERITIES
-from opfor.scenarios.registry import known_scenarios
+from opfor.scenarios.registry import known_scenarios, report_adapter
 
 # The report lists findings most-severe first, derived from the kernel's one severity vocabulary
 # rather than a second hardcoded list, so the CLI and the kernel cannot drift to opposite orders.
@@ -170,15 +170,22 @@ def _report_json(report, world=None) -> dict:
                 "content_type": repro.content_type, "size": repro.size,
                 "error": repro.error, "excerpt": repro.excerpt}
         findings.append(record)
-    return {
+    out = {
         "scenario": report.scenario,
         "status": report.status,
         "reached": report.reached.name,
         "terminal": report.terminal.name,
         "notes": list(report.notes),
         "summary": summary,
-        "findings": findings,
     }
+    # A scenario may add structured sections, the attack surface adds one record per subdomain, so
+    # the report shows the run's shape and not only its findings. The CLI stays generic, it merges
+    # whatever the adapter returns without knowing what a section means.
+    adapter = report_adapter(report.scenario)
+    if adapter is not None and world is not None:
+        out.update(adapter(world, report.findings))
+    out["findings"] = findings
+    return out
 
 
 def _report_md(report, world=None) -> str:

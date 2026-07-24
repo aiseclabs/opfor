@@ -38,6 +38,12 @@ _RUN_ADAPTERS: dict[str, Callable[..., tuple]] = {
     attacksurface.NAME: attacksurface.prepare_run,
 }
 
+# A report adapter builds a scenario's structured report sections from the run's world, so the
+# generic report holds no scenario specifics. A scenario without one reports its findings only.
+_REPORT_ADAPTERS: dict[str, Callable[..., dict]] = {
+    attacksurface.NAME: attacksurface.report_view,
+}
+
 
 def get_scenario(name: str) -> Scenario:
     if name not in _BUILDERS:
@@ -54,6 +60,12 @@ def run_adapter(name: str) -> Callable[..., tuple]:
         runnable = ", ".join(sorted(_RUN_ADAPTERS))
         raise KeyError(f"scenario {name!r} is not runnable from the CLI, runnable: {runnable}")
     return _RUN_ADAPTERS[name]
+
+
+def report_adapter(name: str):
+    """The scenario's structured report adapter, or None when it contributes only its findings, so
+    the generic report calls it when present and adds no scenario-specific sections otherwise."""
+    return _REPORT_ADAPTERS.get(name)
 
 
 def known_scenarios() -> tuple[str, ...]:

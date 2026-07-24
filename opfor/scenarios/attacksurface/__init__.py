@@ -37,6 +37,7 @@ from opfor.scenarios.attacksurface.lifecycle.reproduce import (
     exploit_rule,
     reproduce_rule,
 )
+from opfor.scenarios.attacksurface.report import report_view
 from opfor.scenarios.attacksurface.seed import Org
 
 NAME = "attacksurface"

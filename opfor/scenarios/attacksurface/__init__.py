@@ -1,18 +1,21 @@
-"""The attack-surface scenario: from an org name to a ranked map of its assets.
+"""The attack-surface scenario: from a root domain to a confirmed PoC.
 
-The seed is an `Org`, an organization the operator names, such as a company. The run
-discovers assets under it across classes and triages the whole into a ranked inventory.
-The operator restricts to a class with `Org.classes`, empty runs them all.
+The seed is an `Org`, the operator's root domains and known hosts. MAP discovers the
+subdomains under each root, ENRICH identifies what each host is and analyzes its service
+state, the interfaces it exposes, the product it runs and that product's CVEs, TRIAGE judges
+the findings, and the opt-in EXPLOIT and CONFIRM reproduce and confirm an accurate PoC.
 
-An asset class is a self-contained plugin under `assets/`, and it owns its payloads,
-capabilities, rules, and knowledge. This module names the classes the scenario is built
-from and concatenates their contributions, the one place that lists them, the way the
-registry is the one place that lists scenarios. Adding a class is a new package there plus
-one line here, never an edit to an existing class.
+The surface is worked one asset class at a time, a self-contained plugin under `assets/`
+that owns its payloads, capabilities, rules, and knowledge. Today that is `domain`. This
+module names the classes the scenario is built from and concatenates their contributions,
+the one place that lists them, the way the registry is the one place that lists scenarios.
+Adding a class is a new package there plus one line here, never an edit to an existing class.
 
 It reads public sources and probes only the domains scope authorizes, and it stops at
-TRIAGE, a declared finish line, so a full run is a closed run. Every source is an injected
-seam, so a test drives the whole scenario with fixtures. `build` wires the real seams.
+TRIAGE by default, a declared finish line, so a full run is a closed run. The operator
+raises the terminal to EXPLOIT or CONFIRM only by opting in and authorizing the intrusive
+tier. Every source is an injected seam, so a test drives the whole scenario with fixtures.
+`build` wires the real seams.
 """
 
 from __future__ import annotations

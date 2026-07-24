@@ -201,6 +201,21 @@ def test_compute_funds_prices_native_and_value_tokens():
     assert set(assets) == {"native", "USDT", "WBTC"}  # WETH balance was zero, so not counted
 
 
+def test_funds_prices_the_pivoted_project_token_not_just_the_value_set():
+    from opfor.scenarios.onchain.assets.contract.sources.funds import value_tokens_for
+    from opfor.scenarios.onchain.assets.contract.types import ContractData
+
+    # a vault pivoted from a project token: its funds live in that token, not in the stable set
+    vault = ContractData(chain="ethereum", address="0xvault", role="vault",
+                         related_to="0xPROJECT", base_symbol="PRJ")
+    tokens = value_tokens_for(vault, decimals_fn=lambda addr, chain: 9)
+    assert ("0xPROJECT", "PRJ", "priced", 9) in tokens  # project token priced with its live decimals
+
+    # a contract with no pivot origin gets only the chain's base value set
+    bare = ContractData(chain="ethereum", address="0xbare", role="vault")
+    assert all(entry[0] != "0xPROJECT" for entry in value_tokens_for(bare, decimals_fn=lambda a, c: 18))
+
+
 def test_deep_pivot_keeps_frequent_contract_counterparties_only():
     from opfor.scenarios.onchain.assets.contract.sources.pivot import counterparty_pivot
     from opfor.scenarios.onchain.assets.contract.types import ContractData

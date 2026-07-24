@@ -14,6 +14,8 @@ from opfor.scenarios.onchain.assets.contract.sources import etherscan
 
 # The ERC20 balanceOf selector, keccak("balanceOf(address)")[:4].
 _BALANCE_OF = "0x70a08231"
+# The ERC20 decimals() selector, keccak("decimals()")[:4].
+_DECIMALS = "0x313ce567"
 
 
 def _to_int(value) -> int:
@@ -33,6 +35,15 @@ def token_balance(token: str, holder: str, chain: str) -> int:
     is not configured or the call returns empty."""
     data = _BALANCE_OF + holder.lower().replace("0x", "").rjust(64, "0")
     return _to_int(etherscan.proxy(chain, "eth_call", {"to": token, "data": data, "tag": "latest"}))
+
+
+def token_decimals(token: str, chain: str) -> int:
+    """The ERC20 decimals of a token, for pricing a balance the value-token table does not name.
+    Falls back to 18, the common default, when the call is empty or returns an implausible value,
+    so a non-standard token yields a conservative figure rather than a wild one."""
+    result = etherscan.proxy(chain, "eth_call", {"to": token, "data": _DECIMALS, "tag": "latest"})
+    decimals = _to_int(result)
+    return decimals if 0 < decimals <= 36 else 18
 
 
 def is_contract(address: str, chain: str) -> bool:

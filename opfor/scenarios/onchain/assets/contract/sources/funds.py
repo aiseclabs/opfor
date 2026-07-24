@@ -44,6 +44,21 @@ def value_token_addresses(chain: str) -> frozenset[str]:
     return frozenset(address.lower() for address, _, _, _ in _VALUE_TOKENS.get(chain, ()))
 
 
+def value_tokens_for(contract, *, decimals_fn):
+    """The value tokens to price for a contract, the chain's base set plus the project token the
+    contract was pivoted from. This is the fix for the long tail, a new project's vault holds its
+    own token, not a stable, so a table of stables alone reads its funds as zero. The project token
+    is priced like any other priced token, its decimals read live since a project token is not in
+    the static table."""
+    tokens = list(_VALUE_TOKENS.get(contract.chain, ()))
+    project = (contract.related_to or "").strip()
+    known = {address.lower() for address, _, _, _ in tokens}
+    if project and project.lower() not in known:
+        symbol = contract.base_symbol or "PROJECT"
+        tokens.append((project, symbol, "priced", decimals_fn(project, contract.chain)))
+    return tuple(tokens)
+
+
 def compute_funds(contract, *, native_wei_fn, token_balance_fn, price_fn, value_tokens):
     """Sum the USD the contract holds across the native coin and the value tokens. Pure, the three
     reads are injected. The native price is the wrapped-native price, the first entry, read once.
@@ -79,11 +94,11 @@ def read_funds(contract, hint_usd: float) -> FundObservation:
     if hint_usd and hint_usd > 0:
         return FundObservation(funds_at_risk_usd=hint_usd, assets=("dex_liquidity",),
                                note="reused DEX sweep liquidity")
-    value_tokens = _VALUE_TOKENS.get(contract.chain)
-    if not value_tokens:
+    if contract.chain not in _VALUE_TOKENS:
         return FundObservation(note=f"no value-token table for chain {contract.chain!r}")
+    value_tokens = value_tokens_for(contract, decimals_fn=rpc.token_decimals)
     total, assets = compute_funds(contract, native_wei_fn=rpc.native_wei,
                                   token_balance_fn=rpc.token_balance, price_fn=dex.token_price_usd,
                                   value_tokens=value_tokens)
-    note = "priced native and value-token balances" if total > 0 else "no priced value-token balance held"
+    note = "priced native, value-token, and project-token balances" if total > 0 else "no priced balance held"
     return FundObservation(funds_at_risk_usd=total, assets=assets, note=note)

@@ -22,7 +22,7 @@ class Survey:
     to."""
 
     name: str
-    chain: str = "bsc"
+    chain: str = "ethereum"
     min_liquidity: float = 10_000.0
     min_volume: float = 5_000.0
     age_days: float | None = 90.0

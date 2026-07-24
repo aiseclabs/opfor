@@ -11,13 +11,22 @@ from __future__ import annotations
 
 import json
 import os
+import time
 import urllib.parse
 import urllib.request
 
 _API = "https://api.etherscan.io/v2/api"
 _TIMEOUT = 15.0
-# The V2 chain id per chain the scenario speaks. A second chain is one entry, not a code change.
-_CHAIN_ID = {"bsc": 56}
+# The free tier caps calls per second, and a throttled reply comes back as an HTTP 200 whose body
+# says so, not as an error. Back off and retry a few times, then fail loud, so a throttled read is
+# never mistaken for an unverified contract or an empty result, invariant 5.
+_MAX_RETRIES = 5
+_BACKOFF = 0.6
+# The V2 chain id per chain the scenario speaks. Ethereum is the primary chain, its free tier has
+# full module access, source, transfers, and the proxy RPC. A non-Ethereum chain such as bsc reads
+# verified source on the free tier but not the account and logs modules the deep pivot needs, so it
+# needs a paid plan. A new chain is one entry here, not a code change.
+_CHAIN_ID = {"ethereum": 1, "bsc": 56}
 
 
 def api_key() -> str | None:
@@ -36,11 +45,36 @@ def configured(chain: str) -> bool:
     return chain_id(chain) is not None and bool(api_key())
 
 
+def _rate_limited(data) -> bool:
+    """Whether a 200-body is a throttle notice rather than an answer. A genuine unverified-source
+    reply also carries status 0, so this matches only the rate-limit wording, not every NOTOK."""
+    text = f"{data.get('message', '')} {data.get('result', '')}".lower()
+    if "rate limit" in text or "max calls" in text:
+        return True
+    error = data.get("error")
+    return isinstance(error, dict) and "rate limit" in str(error.get("message", "")).lower()
+
+
 def get(chain: str, params: dict):
     """Make one V2 call for a chain and return the parsed json. Assumes `configured`, so a caller
-    checks first. Raises on a network error, which the calling capability turns into a loud
-    failure."""
+    checks first. Backs off and retries a throttled reply, then raises so a persistent throttle
+    fails loud rather than reading as an empty or unverified result. Raises on a network error too,
+    which the calling capability turns into a loud failure."""
     query = urllib.parse.urlencode({"chainid": chain_id(chain), **params, "apikey": api_key()})
     request = urllib.request.Request(f"{_API}?{query}", headers={"User-Agent": "opfor-onchain/0.1"})
-    with urllib.request.urlopen(request, timeout=_TIMEOUT) as response:
-        return json.loads(response.read().decode("utf-8"))
+    for attempt in range(_MAX_RETRIES):
+        with urllib.request.urlopen(request, timeout=_TIMEOUT) as response:
+            data = json.loads(response.read().decode("utf-8"))
+        if not _rate_limited(data):
+            return data
+        time.sleep(_BACKOFF * (attempt + 1))
+    raise RuntimeError("etherscan rate limit persisted after retries")
+
+
+def proxy(chain: str, action: str, params: dict):
+    """One `proxy` module call, the explorer's JSON-RPC pass-through, and return the raw `result`.
+    This is how the RPC reads reach the chain over the one reachable host and the one key, rather
+    than a separate node endpoint. Returns None when not configured, so a caller degrades cleanly."""
+    if not configured(chain):
+        return None
+    return get(chain, {"module": "proxy", "action": action, **params}).get("result")

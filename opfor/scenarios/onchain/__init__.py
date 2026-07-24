@@ -68,7 +68,7 @@ def build(
     )
 
 
-def seed(name: str, *, chain="bsc", min_liquidity=10_000.0, min_volume=5_000.0,
+def seed(name: str, *, chain="ethereum", min_liquidity=10_000.0, min_volume=5_000.0,
          age_days=90.0, anchors=()) -> World:
     """Build the seed world for a run, a `Survey` node carrying the chain and the sweep floor. When
     anchors are given they enter the world as contract nodes directly, so the enrich pipeline audits
@@ -88,14 +88,14 @@ def seed(name: str, *, chain="bsc", min_liquidity=10_000.0, min_volume=5_000.0,
 def prepare_run(*, name="", roots=(), roots_file="", hosts=(), hosts_file="",
                 tier="recon", authorized=False, reproduce=False, confirm=False):
     """Adapt a CLI run request into this scenario's seeded world, scope, and built scenario. The
-    first `--root` names the chain, defaulting to bsc, so `opfor run onchain` sweeps bsc out of the
-    box. Each `--host` names a contract address to audit directly, a focused run that skips the
-    sweep. The scenario is recon-only, so the reproduce and confirm flags do not raise the terminal,
-    it always stops at TRIAGE. Reading public chain data is passive, so every capability is osint
-    and the recon-tier scope authorizes the run with no per-target list."""
+    first `--root` names the chain, defaulting to ethereum, so `opfor run onchain` sweeps ethereum
+    out of the box. Each `--host` names a contract address to audit directly, a focused run that
+    skips the sweep. The scenario is recon-only, so the reproduce and confirm flags do not raise the
+    terminal, it always stops at TRIAGE. Reading public chain data is passive, so every capability
+    is osint and the recon-tier scope authorizes the run with no per-target list."""
     from opfor.core import Scope
 
-    chain = (roots[0] if roots else "bsc").strip().lower()
+    chain = (roots[0] if roots else "ethereum").strip().lower()
     target = name or f"{chain}-onchain"
     world = seed(target, chain=chain, anchors=tuple(hosts))
     scope = Scope(max_tier="recon")

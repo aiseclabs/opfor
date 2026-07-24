@@ -21,7 +21,10 @@ from opfor.scenarios.onchain.assets.contract.sources.observations import (
 
 _DEXSCREENER = "https://api.dexscreener.com"
 _TIMEOUT = 15.0
-_DEFAULT_TERMS = ("WBNB USDT", "BSC USDC", "CAKE WBNB", "BSC new pair")
+_DEFAULT_TERMS = ("WETH USDC", "WETH USDT", "ETH DAI", "new pair")
+# Cap the swept pools so a broad chain sweep does not fan out into an ENRICH the budget cannot
+# finish. The richest pools by liquidity are kept, the tail is dropped, and a bounded run closes.
+_MAX_POOLS = 15
 # The shallow pivot can return dozens of pools for one token, which floods MAP and exhausts the
 # budget before ENRICH runs. Cap the breadth so a single hop stays bounded. The pools are ranked
 # by liquidity so the cap keeps the richest, and a deeper pivot to the fund contracts behind a
@@ -65,7 +68,8 @@ def sweep(survey) -> tuple[PoolObservation, ...]:
             if pool.liquidity_usd < survey.min_liquidity or pool.volume_24h < survey.min_volume:
                 continue
             seen[pool.address.lower()] = pool
-    return tuple(seen.values())
+    ranked = sorted(seen.values(), key=lambda p: p.liquidity_usd, reverse=True)
+    return tuple(ranked[:_MAX_POOLS])
 
 
 def token_price_usd(address: str, chain: str) -> float | None:

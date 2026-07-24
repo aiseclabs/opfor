@@ -1,57 +1,43 @@
-"""The RPC source seam, the low-level reads over a chain's public JSON-RPC endpoint.
+"""The RPC source seam, the chain-state reads behind the funds and pivot steps.
 
-It reads a native balance, an ERC20 token balance, and whether an address holds code. The funds
-seam composes the balance reads with DEX prices, the pivot uses `is_contract` to keep a contract
-counterparty and drop an externally owned account. A test injects its own callables, so no read
-touches the network in a test.
+It reads a native balance, an ERC20 token balance, and whether an address holds code. The reads go
+through the explorer's `proxy` module, the explorer's JSON-RPC pass-through, so they reach the
+chain over the one host and key the scenario already uses rather than a separate node endpoint that
+a network may not reach. The funds seam composes the balance reads with DEX prices, the pivot uses
+`is_contract` to keep a contract counterparty and drop an externally owned account. A test injects
+its own callables, so no read touches the network in a test.
 """
 
 from __future__ import annotations
 
-import json
-import urllib.request
+from opfor.scenarios.onchain.assets.contract.sources import etherscan
 
-_TIMEOUT = 15.0
-_RPC_URL = {"bsc": "https://bsc-dataseed.binance.org"}
 # The ERC20 balanceOf selector, keccak("balanceOf(address)")[:4].
 _BALANCE_OF = "0x70a08231"
 
 
-def _rpc_call(rpc_url: str, method: str, params: list):
-    payload = json.dumps({"jsonrpc": "2.0", "id": 1, "method": method,
-                          "params": params}).encode("utf-8")
-    request = urllib.request.Request(rpc_url, data=payload,
-                                     headers={"Content-Type": "application/json",
-                                              "User-Agent": "opfor-onchain/0.1"})
-    with urllib.request.urlopen(request, timeout=_TIMEOUT) as response:
-        return json.loads(response.read().decode("utf-8")).get("result")
+def _to_int(value) -> int:
+    try:
+        return int(value, 16) if isinstance(value, str) and value.startswith("0x") else 0
+    except ValueError:
+        return 0
 
 
 def native_wei(address: str, chain: str) -> int:
-    """The native-coin balance of an address in wei, or 0 when the chain has no RPC configured."""
-    rpc_url = _RPC_URL.get(chain)
-    if rpc_url is None:
-        return 0
-    return int(_rpc_call(rpc_url, "eth_getBalance", [address, "latest"]) or "0x0", 16)
+    """The native-coin balance of an address in wei, or 0 when the explorer is not configured."""
+    return _to_int(etherscan.proxy(chain, "eth_getBalance", {"address": address, "tag": "latest"}))
 
 
 def token_balance(token: str, holder: str, chain: str) -> int:
-    """The ERC20 balance of `holder` in `token`, raw, undivided by decimals. Zero when the chain has
-    no RPC configured or the call returns empty."""
-    rpc_url = _RPC_URL.get(chain)
-    if rpc_url is None:
-        return 0
+    """The ERC20 balance of `holder` in `token`, raw, undivided by decimals. Zero when the explorer
+    is not configured or the call returns empty."""
     data = _BALANCE_OF + holder.lower().replace("0x", "").rjust(64, "0")
-    result = _rpc_call(rpc_url, "eth_call", [{"to": token, "data": data}, "latest"])
-    return int(result, 16) if result and result != "0x" else 0
+    return _to_int(etherscan.proxy(chain, "eth_call", {"to": token, "data": data, "tag": "latest"}))
 
 
 def is_contract(address: str, chain: str) -> bool:
     """Whether the address holds code, so the pivot keeps a contract counterparty and drops an
-    externally owned account. A chain with no RPC configured answers False, so the pivot degrades
-    to no counterparties rather than failing the whole run."""
-    rpc_url = _RPC_URL.get(chain)
-    if rpc_url is None:
-        return False
-    code = _rpc_call(rpc_url, "eth_getCode", [address, "latest"])
+    externally owned account. An unconfigured explorer answers False, so the pivot degrades to no
+    counterparties rather than failing the whole run."""
+    code = etherscan.proxy(chain, "eth_getCode", {"address": address, "tag": "latest"})
     return isinstance(code, str) and code not in ("0x", "0x0", "")

@@ -152,12 +152,12 @@ def test_onchain_is_registered_and_runnable():
     assert report_adapter("onchain") is onchain.report_view
 
 
-def test_prepare_run_defaults_to_bsc_and_recon_only():
+def test_prepare_run_defaults_to_ethereum_and_recon_only():
     target, world, scope, scenario = onchain.prepare_run()
     assert scope.max_tier == "recon"
     assert scenario.terminal == Phase.TRIAGE
-    survey = world.node("survey:bsc")
-    assert survey is not None and survey.payload.chain == "bsc"
+    survey = world.node("survey:ethereum")
+    assert survey is not None and survey.payload.chain == "ethereum"
 
 
 def test_identify_needs_two_markers_so_a_shared_name_does_not_misclassify():
@@ -184,20 +184,21 @@ def test_compute_funds_prices_native_and_value_tokens():
     from opfor.scenarios.onchain.assets.contract.sources.funds import compute_funds
     from opfor.scenarios.onchain.assets.contract.types import ContractData
 
-    wbnb, usdt, cake = "0xWBNB", "0xUSDT", "0xCAKE"
-    value_tokens = ((wbnb, "WBNB", "native"), (usdt, "USDT", "stable"), (cake, "CAKE", "priced"))
-    balances = {usdt.lower(): 1_000 * 10 ** 18, cake.lower(): 50 * 10 ** 18}  # holds 1000 USDT, 50 CAKE
-    prices = {wbnb.lower(): 600.0, cake.lower(): 2.0}  # BNB $600, CAKE $2
+    weth, usdt, wbtc = "0xWETH", "0xUSDT", "0xWBTC"
+    # native and WETH 18 decimals, USDT 6, WBTC 8, so each token divides by its own decimals
+    value_tokens = ((weth, "WETH", "native", 18), (usdt, "USDT", "stable", 6), (wbtc, "WBTC", "priced", 8))
+    balances = {usdt.lower(): 1_000 * 10 ** 6, wbtc.lower(): 2 * 10 ** 8}  # holds 1000 USDT, 2 WBTC
+    prices = {weth.lower(): 3_000.0, wbtc.lower(): 60_000.0}  # ETH $3000, WBTC $60000
 
     total, assets = compute_funds(
-        ContractData(chain="bsc", address="0xvault", role="unknown"),
+        ContractData(chain="ethereum", address="0xvault", role="unknown"),
         native_wei_fn=lambda addr, chain: 10 ** 18,  # 1 native coin
         token_balance_fn=lambda token, holder, chain: balances.get(token.lower(), 0),
         price_fn=lambda addr, chain: prices.get(addr.lower()),
         value_tokens=value_tokens)
 
-    assert total == 600.0 + 1_000.0 + 100.0  # 1 BNB*600 + 1000 USDT*1 + 50 CAKE*2
-    assert set(assets) == {"native", "USDT", "CAKE"}  # WBNB balance was zero, so not counted
+    assert total == 3_000.0 + 1_000.0 + 120_000.0  # 1 ETH*3000 + 1000 USDT*1 + 2 WBTC*60000
+    assert set(assets) == {"native", "USDT", "WBTC"}  # WETH balance was zero, so not counted
 
 
 def test_deep_pivot_keeps_frequent_contract_counterparties_only():

@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from collections import Counter
 
-from opfor.scenarios.onchain.assets.contract.sources import dex, etherscan, rpc
+from opfor.scenarios.onchain.assets.contract.sources import dex, etherscan, funds, rpc
 from opfor.scenarios.onchain.assets.contract.sources.observations import RelatedObservation
 
 # How many recent transfers to read, how many top counterparties to code-check, and how many
@@ -70,6 +70,10 @@ def pivot(contract) -> tuple[RelatedObservation, ...]:
     token is pivoted, a pool is already the leaf a token pointed at. Deduped by address, the
     shallow pools first so a contract seen both ways keeps its richer origin."""
     if contract.role != "token":
+        return ()
+    # A money token, WETH or a stable, is a quote token across the chain, so pivoting it would pull
+    # the whole ecosystem back rather than one project's fund contracts. Skip it.
+    if contract.address.lower() in funds.value_token_addresses(contract.chain):
         return ()
     related: dict[str, RelatedObservation] = {}
     for obs in dex.pivot(contract):

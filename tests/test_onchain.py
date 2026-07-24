@@ -166,6 +166,53 @@ def test_identify_needs_two_markers_so_a_shared_name_does_not_misclassify():
     assert identify_role(Evidence(functions=("deposit", "withdraw", "redeem"))) == "vault"
 
 
+def test_deep_pivot_keeps_frequent_contract_counterparties_only():
+    from opfor.scenarios.onchain.assets.contract.sources.pivot import counterparty_pivot
+    from opfor.scenarios.onchain.assets.contract.types import ContractData
+
+    staking = "0xaaaa000000000000000000000000000000000001"
+    eoa = "0xbbbb000000000000000000000000000000000002"
+    dead = "0x000000000000000000000000000000000000dead"
+    token = ContractData(chain="bsc", address=_TOKEN, role="token")
+    transfers = (
+        [{"from": eoa, "to": staking}] * 5      # staking receives the token often, a custody contract
+        + [{"from": staking, "to": eoa}] * 2
+        + [{"from": eoa, "to": dead}] * 3        # burns, a sink that is never a target
+        + [{"from": _TOKEN, "to": eoa}]          # the token itself, excluded
+    )
+    contracts = {staking}  # the staking address holds code, the eoa does not
+
+    related = counterparty_pivot(
+        token, fetch_transfers=lambda addr, chain: transfers,
+        is_contract=lambda addr, chain: addr in contracts)
+
+    addresses = {r.address for r in related}
+    assert addresses == {staking}  # eoa dropped as not a contract, dead and token excluded
+    assert related[0].role_hint == "unknown" and related[0].via == "transfer counterparty"
+
+
+def test_deep_pivot_caps_breadth():
+    from opfor.scenarios.onchain.assets.contract.sources.pivot import counterparty_pivot
+    from opfor.scenarios.onchain.assets.contract.types import ContractData
+
+    many = [f"0x{i:040x}" for i in range(1, 30)]
+    transfers = [{"from": _TOKEN, "to": addr} for addr in many]
+    related = counterparty_pivot(
+        ContractData(chain="bsc", address=_TOKEN, role="token"),
+        fetch_transfers=lambda a, c: transfers, is_contract=lambda a, c: True, max_deep=8)
+    assert len(related) == 8  # bounded so a single hop does not flood MAP
+
+
+def test_pivot_only_pivots_tokens():
+    from opfor.scenarios.onchain.assets.contract.sources.pivot import counterparty_pivot
+    from opfor.scenarios.onchain.assets.contract.types import ContractData
+
+    # a pool is the leaf a token pointed at, it is not itself pivoted
+    pool = ContractData(chain="bsc", address=_POOL, role="pool")
+    related = counterparty_pivot(pool, fetch_transfers=lambda a, c: [], is_contract=lambda a, c: True)
+    assert related == []
+
+
 def test_signal_and_guard_scans_are_mechanical():
     detections = load_detections(DETECTIONS)
     risk, central = scan_source(_VAULT_SOURCE, detections.signatures)

@@ -11,8 +11,9 @@ structured `findings.json` and a human `report.md`.
 
 The engine underneath is generic. It names no host, product, or person, so the mission lives
 as scenario data, capabilities, and knowledge. A scenario changes by swapping those, never by
-editing the engine. Today one scenario, `attacksurface`, carries the mission, and `mock` is the
-kernel's own fixture.
+editing the engine. `attacksurface` carries the mission, `mock` is the kernel's own fixture, and
+`onchain` is a second scenario on the same kernel, a recon-only sweep of a chain's contracts that
+proves the engine is generic without an engine change.
 
 The architecture is a blackboard, the world model held outside any model context, read and
 written by narrow capabilities, with a planner that proposes and a triage that judges, all
@@ -81,13 +82,18 @@ sequenced along a fixed lifecycle spine so a run either closes or says why it di
   holding its `knowledge/` and data files.
 - `scenarios/registry.py` is the one place that lists scenarios. `mock` is the reference,
   the smallest run that closes the loop, and the kernel's own fixture.
-- `attacksurface` is the mission scenario, the only one the CLI runs. It maps the mission onto
-  the spine. MAP discovers the subdomains, ENRICH identifies each host and analyzes its service
-  state, the interfaces it exposes, the product it runs and that product's CVEs. TRIAGE judges
-  the findings, the exposed interfaces, the known vulnerabilities, and the unauthorized-access
-  holes. The opt-in EXPLOIT and CONFIRM write and confirm an accurate PoC. Its terminal is
-  TRIAGE by default, raised to EXPLOIT or CONFIRM only when the operator opts in and authorizes
-  the intrusive tier.
+- `attacksurface` is the mission scenario. It maps the mission onto the spine. MAP discovers the
+  subdomains, ENRICH identifies each host and analyzes its service state, the interfaces it
+  exposes, the product it runs and that product's CVEs. TRIAGE judges the findings, the exposed
+  interfaces, the known vulnerabilities, and the unauthorized-access holes. The opt-in EXPLOIT and
+  CONFIRM write and confirm an accurate PoC. Its terminal is TRIAGE by default, raised to EXPLOIT
+  or CONFIRM only when the operator opts in and authorizes the intrusive tier.
+- `onchain` is a second CLI-runnable scenario, recon-only. From a chain it sweeps the active DEX
+  pools, pivots from each token or pool to the fund-management contracts behind it, identifies the
+  role, reads the funds, enumerates the exposed interfaces, and matches risk signals, then TRIAGE
+  judges which contracts are worth a manual audit. Its terminal is TRIAGE, there is no intrusive
+  tier and no transaction is ever sent, reading public chain data is passive. It exists to keep the
+  kernel honest to its own claim that a scenario is data, not an engine edit.
 - Knowledge markdown and data files such as wordlists or fingerprint tables are read by the
   planner and triage, never by a capability.
 

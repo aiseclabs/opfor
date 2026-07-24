@@ -68,6 +68,21 @@ def sweep(survey) -> tuple[PoolObservation, ...]:
     return tuple(seen.values())
 
 
+def token_price_usd(address: str, chain: str) -> float | None:
+    """The USD price of a token, read from its deepest DEX pool. None when no priced pool is seen,
+    so the funds read counts what it can price and no more."""
+    data = _get_json(f"{_DEXSCREENER}/latest/dex/tokens/{address}")
+    best: tuple[float, float] | None = None
+    for pair in data.get("pairs") or []:
+        if pair.get("chainId") != chain:
+            continue
+        price = pair.get("priceUsd")
+        liquidity = float((pair.get("liquidity") or {}).get("usd") or 0)
+        if price and (best is None or liquidity > best[1]):
+            best = (float(price), liquidity)
+    return best[0] if best is not None else None
+
+
 def pivot(contract) -> tuple[RelatedObservation, ...]:
     """Find the pools that reference this token, the shallow first hop. For a token it queries the
     token's pairs, for a pool it does nothing, the pool is already the leaf a token pointed at."""

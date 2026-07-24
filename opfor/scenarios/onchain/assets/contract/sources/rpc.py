@@ -1,12 +1,9 @@
-"""The RPC source seam, the default reads over a chain's public JSON-RPC endpoint.
+"""The RPC source seam, the low-level reads over a chain's public JSON-RPC endpoint.
 
-It reads the funds a contract manages and whether an address is a contract. For a pool or token
-the DEX sweep already priced the liquidity, so the funds read reuses that hint, no second call.
-For any other contract a full read means summing native, stablecoin, and LP balances priced to
-USD, which needs per-token balance calls and a price feed, the tracked next increment, so the
-default reads the native balance to prove the contract is live and notes the priced read as
-unwired. `is_contract` backs the pivot's filter, an address with code is a contract, an
-externally owned account has none. A test injects its own seam.
+It reads a native balance, an ERC20 token balance, and whether an address holds code. The funds
+seam composes the balance reads with DEX prices, the pivot uses `is_contract` to keep a contract
+counterparty and drop an externally owned account. A test injects its own callables, so no read
+touches the network in a test.
 """
 
 from __future__ import annotations
@@ -14,10 +11,10 @@ from __future__ import annotations
 import json
 import urllib.request
 
-from opfor.scenarios.onchain.assets.contract.sources.observations import FundObservation
-
 _TIMEOUT = 15.0
 _RPC_URL = {"bsc": "https://bsc-dataseed.binance.org"}
+# The ERC20 balanceOf selector, keccak("balanceOf(address)")[:4].
+_BALANCE_OF = "0x70a08231"
 
 
 def _rpc_call(rpc_url: str, method: str, params: list):
@@ -30,20 +27,23 @@ def _rpc_call(rpc_url: str, method: str, params: list):
         return json.loads(response.read().decode("utf-8")).get("result")
 
 
-def read_funds(contract, hint_usd: float) -> FundObservation:
-    """The funds the contract manages. A pool or token reuses the DEX liquidity hint. Any other
-    contract reports the priced token read as unwired and falls back to a native-balance liveness
-    check, so the figure is conservative, never guessed."""
-    if hint_usd and hint_usd > 0:
-        return FundObservation(funds_at_risk_usd=hint_usd, assets=("dex_liquidity",),
-                               note="reused DEX sweep liquidity")
-    rpc_url = _RPC_URL.get(contract.chain)
+def native_wei(address: str, chain: str) -> int:
+    """The native-coin balance of an address in wei, or 0 when the chain has no RPC configured."""
+    rpc_url = _RPC_URL.get(chain)
     if rpc_url is None:
-        return FundObservation(note=f"no rpc configured for chain {contract.chain!r}")
-    wei = int(_rpc_call(rpc_url, "eth_getBalance", [contract.address, "latest"]) or "0x0", 16)
-    return FundObservation(
-        funds_at_risk_usd=0.0, assets=("native",) if wei > 0 else (),
-        note=f"native balance {wei} wei, priced token-balance read not wired in the default seam")
+        return 0
+    return int(_rpc_call(rpc_url, "eth_getBalance", [address, "latest"]) or "0x0", 16)
+
+
+def token_balance(token: str, holder: str, chain: str) -> int:
+    """The ERC20 balance of `holder` in `token`, raw, undivided by decimals. Zero when the chain has
+    no RPC configured or the call returns empty."""
+    rpc_url = _RPC_URL.get(chain)
+    if rpc_url is None:
+        return 0
+    data = _BALANCE_OF + holder.lower().replace("0x", "").rjust(64, "0")
+    result = _rpc_call(rpc_url, "eth_call", [{"to": token, "data": data}, "latest"])
+    return int(result, 16) if result and result != "0x" else 0
 
 
 def is_contract(address: str, chain: str) -> bool:

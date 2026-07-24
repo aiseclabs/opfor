@@ -68,9 +68,11 @@ def _signals_rule(world: World) -> list[Task]:
 
 
 def map_rules() -> list:
-    """The contract MAP rules, sweep the survey then pivot each token or pool."""
+    """The contract MAP rules, sweep the survey then pivot each token or pool. The sweep runs only
+    when the survey names no anchors, so a focused anchor run audits exactly the given contracts
+    rather than sweeping the whole chain."""
     return [
-        each("survey", run="sweep_pools", unless_fact="swept"),
+        each("survey", run="sweep_pools", unless_fact="swept", where=lambda s: not s.anchors),
         _pivot_rule,
     ]
 

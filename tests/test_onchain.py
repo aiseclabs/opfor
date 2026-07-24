@@ -166,6 +166,40 @@ def test_identify_needs_two_markers_so_a_shared_name_does_not_misclassify():
     assert identify_role(Evidence(functions=("deposit", "withdraw", "redeem"))) == "vault"
 
 
+def test_an_anchor_run_audits_the_given_contract_and_skips_the_sweep():
+    # a focused run: the operator names a contract to audit, no chain sweep
+    scenario = onchain.build(sweep_fn=_fake_sweep, pivot_fn=_fake_pivot, source_fn=_fake_source,
+                             identify_fn=identify_role, funds_fn=_fake_funds)
+    world = onchain.seed("focus", chain="bsc", anchors=[_VAULT])
+    report = engine_run(scenario, world, scope=Scope(max_tier="recon"), budget=Budget(500))
+
+    assert report.closed
+    ids = {node.id for node in world.nodes("contract")}
+    assert f"contract:bsc:{_VAULT}" in ids  # the anchor was audited
+    assert f"contract:bsc:{_POOL}" not in ids  # the sweep did not run, so no pool nodes
+    assert len(report.findings) == 1 and report.findings[0].where == _VAULT
+
+
+def test_compute_funds_prices_native_and_value_tokens():
+    from opfor.scenarios.onchain.assets.contract.sources.funds import compute_funds
+    from opfor.scenarios.onchain.assets.contract.types import ContractData
+
+    wbnb, usdt, cake = "0xWBNB", "0xUSDT", "0xCAKE"
+    value_tokens = ((wbnb, "WBNB", "native"), (usdt, "USDT", "stable"), (cake, "CAKE", "priced"))
+    balances = {usdt.lower(): 1_000 * 10 ** 18, cake.lower(): 50 * 10 ** 18}  # holds 1000 USDT, 50 CAKE
+    prices = {wbnb.lower(): 600.0, cake.lower(): 2.0}  # BNB $600, CAKE $2
+
+    total, assets = compute_funds(
+        ContractData(chain="bsc", address="0xvault", role="unknown"),
+        native_wei_fn=lambda addr, chain: 10 ** 18,  # 1 native coin
+        token_balance_fn=lambda token, holder, chain: balances.get(token.lower(), 0),
+        price_fn=lambda addr, chain: prices.get(addr.lower()),
+        value_tokens=value_tokens)
+
+    assert total == 600.0 + 1_000.0 + 100.0  # 1 BNB*600 + 1000 USDT*1 + 50 CAKE*2
+    assert set(assets) == {"native", "USDT", "CAKE"}  # WBNB balance was zero, so not counted
+
+
 def test_deep_pivot_keeps_frequent_contract_counterparties_only():
     from opfor.scenarios.onchain.assets.contract.sources.pivot import counterparty_pivot
     from opfor.scenarios.onchain.assets.contract.types import ContractData

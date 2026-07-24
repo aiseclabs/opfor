@@ -22,8 +22,8 @@ from opfor.scenarios.onchain.assets.contract.sources.observations import Related
 # How many recent transfers to read, how many top counterparties to code-check, and how many
 # fund contracts to keep. Each bounds a fan-out that would otherwise flood MAP.
 _TRANSFER_SCAN = 200
-_COUNTERPARTY_CHECK = 25
-_MAX_DEEP = 8
+_COUNTERPARTY_CHECK = 12
+_MAX_DEEP = 5
 # Burn and mint sinks that are never audit targets, dropped before ranking.
 _DEAD = frozenset({
     "0x0000000000000000000000000000000000000000",

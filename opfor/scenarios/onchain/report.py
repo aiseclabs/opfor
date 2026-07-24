@@ -39,7 +39,9 @@ def contract_records(world: World, findings) -> list[dict]:
         identified = world.latest("identified", node.id)
         role = identified.payload.role if identified is not None else payload.role
         funded = world.latest("funded", node.id)
-        funds = funded.payload.funds_at_risk_usd if funded is not None else 0.0
+        # A fund contract carries a priced funds fact. A pool is not enriched, so it falls back to
+        # the liquidity the sweep saw, keeping it in the inventory without spending ENRICH on it.
+        funds = funded.payload.funds_at_risk_usd if funded is not None else payload.liquidity_usd
         signals = world.latest("signals", node.id)
         risk_flags = list(signals.payload.flags) if signals is not None else []
         central = list(signals.payload.centralization) if signals is not None else []

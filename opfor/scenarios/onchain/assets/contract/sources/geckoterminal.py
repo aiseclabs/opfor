@@ -21,8 +21,8 @@ _TIMEOUT = 15.0
 _NETWORK = {"ethereum": "eth", "bsc": "bsc"}
 # How many recent pools to read across pages, and the cap on what a sweep hands to ENRICH so a
 # broad discovery does not fan out past the budget.
-_PAGES = 3
-_MAX_POOLS = 30
+_PAGES = 2
+_MAX_POOLS = 5
 
 
 def _get(url: str):

@@ -13,13 +13,17 @@ from opfor.core import Task, World, each
 
 CLASS = "contract"
 
-# A pivot runs only from a token or a pool, the layer that has a fund contract behind it. A
-# contract already pivoted from something is not pivoted again, so the walk is one hop, bounded.
-_PIVOTABLE_ROLES = ("pool", "token")
+# A pivot runs only from a token, the thing a fund contract sits behind. A pool is the leaf a
+# token pointed at, so it is not pivoted, and a contract already pivoted from something is not
+# pivoted again, so the walk is one hop, bounded.
+_PIVOTABLE_ROLES = ("token",)
+# A pool is not an audit target and is never enriched, it exists only to spawn its token nodes and
+# sit in the inventory. Enriching it would spend the budget on source and balances triage discards.
+_SKIP_ENRICH_ROLES = ("pool",)
 
 
 def _pivot_rule(world: World) -> list[Task]:
-    """Pivot each swept token or pool to the fund contracts behind it, once per contract."""
+    """Pivot each swept token to the fund contracts behind it, once per token."""
     tasks: list[Task] = []
     for node in world.nodes("contract"):
         if node.payload.role not in _PIVOTABLE_ROLES:
@@ -27,6 +31,18 @@ def _pivot_rule(world: World) -> list[Task]:
         if world.has_fact(node.id, "related"):
             continue
         tasks.append(Task(capability="pivot_related", node=node.id))
+    return tasks
+
+
+def _fetch_rule(world: World) -> list[Task]:
+    """Fetch source for each contract that is not a skipped leaf and lacks it."""
+    tasks: list[Task] = []
+    for node in world.nodes("contract"):
+        if node.payload.role in _SKIP_ENRICH_ROLES:
+            continue
+        if world.has_fact(node.id, "sourced"):
+            continue
+        tasks.append(Task(capability="fetch_source", node=node.id))
     return tasks
 
 
@@ -81,7 +97,7 @@ def enrich_rules() -> list:
     """The contract ENRICH rules, fetch source then analyze. The four analyses gate on the source
     fact, so they run as soon as a contract is sourced and in any order among themselves."""
     return [
-        each("contract", run="fetch_source", unless_fact="sourced"),
+        _fetch_rule,
         _identify_rule,
         _funds_rule,
         _interfaces_rule,

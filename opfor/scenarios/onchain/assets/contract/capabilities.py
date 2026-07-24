@@ -18,6 +18,7 @@ from opfor.scenarios.onchain.assets.contract.signals import (
     guarded_functions,
     scan_source,
 )
+from opfor.scenarios.onchain.assets.contract.sources.funds import value_token_addresses
 from opfor.scenarios.onchain.assets.contract.types import (
     ContractData,
     FundFact,
@@ -55,6 +56,10 @@ class SweepPools(Capability):
             pools = self._sweep(survey)
         except Exception as exc:
             return _net_failed("dex sweep", exc)
+        # A value token, WETH or a stable, is money not an audit target, so it is not made a node.
+        # This keeps the quote side of every pool out of ENRICH, where it would only be fetched and
+        # then skipped, and leaves the project token as the thing to pivot.
+        skip = value_token_addresses(survey.chain)
         nodes: list[Node] = []
         for pool in pools:
             nodes.append(Node(id=_node_id(pool.chain, pool.address), type="contract",
@@ -66,7 +71,7 @@ class SweepPools(Capability):
                                                    age_days=pool.age_days)))
             for address, symbol in ((pool.base_address, pool.base_symbol),
                                     (pool.quote_address, pool.quote_symbol)):
-                if address:
+                if address and address.lower() not in skip:
                     nodes.append(Node(id=_node_id(pool.chain, address), type="contract",
                                       payload=ContractData(chain=pool.chain, address=address,
                                                            role="token", source="swept",

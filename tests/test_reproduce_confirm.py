@@ -443,3 +443,66 @@ def test_readonly_fetch_uses_a_non_following_redirect_handler():
     # side effect
     handler = _NoRedirect()
     assert handler.redirect_request(None, None, 302, "Found", {}, "https://evil/") is None
+
+
+def test_proxy_prefixes_reads_a_mount_from_an_observed_redirect_only():
+    """A reverse-proxy mount is read from a redirect that relocates a probe onto a leading segment
+    it lacked, /grafana before /login. A root-served app that redirects to a bare /login names no
+    mount, and an off-host SSO redirect is not a local mount, so neither yields a prefix."""
+    from opfor.core import Fact, Node, World
+    from opfor.scenarios.attacksurface.assets.domain.types import HTTP, Endpoint
+    from opfor.scenarios.attacksurface.lifecycle.reproduce import proxy_prefixes
+
+    world = World()
+    world.add(Node(id="endpoint:h/", type="endpoint", payload=Endpoint(
+        url="https://h/", path="/", status=302, location="https://h/grafana/login")))
+    world.add(Node(id="endpoint:h2/", type="endpoint", payload=Endpoint(
+        url="https://h2/", path="/", status=302, location="/login")))
+    world.absorb([Fact(kind="http", about="x", payload=HTTP(
+        alive=True, url="https://h/x", status=302, location="https://sso.example/auth/callback"))])
+
+    assert proxy_prefixes(world, "h") == ("/grafana",)  # only the grounded mount, not the SSO host
+    assert proxy_prefixes(world, "h2") == ()  # a bare /login redirect is the app's own, no mount
+
+
+def test_the_reproduce_loop_reproduces_through_a_rebase_when_the_seed_misses():
+    """End to end at the loop level: the seed request misses because the app is mounted under a
+    proxy prefix, the observed redirect names that prefix, and the loop adapts by rebasing onto it
+    until an attempt bears the marker, so a recipe written for a root-served app still reproduces."""
+    from opfor.core import Node, World
+    from opfor.scenarios.attacksurface.assets.domain.types import Endpoint
+    from opfor.scenarios.attacksurface.lifecycle.reproduce import (
+        FindingClaim, PoCRequest, ReproduceFinding, reproduce_rule)
+    from opfor.scenarios.attacksurface.lifecycle.technique import MAX_VARIANTS
+
+    passwd = "root:x:0:0:root:/root:/bin/bash\n"
+    seed_url = "https://h/public/plugins/x/..%2f..%2f..%2fetc/passwd"
+    rebased_url = "https://h/grafana/public/plugins/x/..%2f..%2f..%2fetc/passwd"
+
+    def fetch(url):
+        # only the real mount under /grafana serves the file, the root probe answers a 404
+        hit = url == rebased_url
+        return Response(status=200 if hit else 404, url=url, content_type="text/plain",
+                        body=passwd if hit else "not found")
+
+    world = World()
+    world.add(Node(id="endpoint:h/", type="endpoint", payload=Endpoint(
+        url="https://h/", path="/", status=302, location="https://h/grafana/login")))
+    fid = "finding:known-vulnerability:h"
+    world.add(Node(id=fid, type="finding", payload=FindingClaim(
+        finding_id=fid, title="file read", severity="HIGH", where=seed_url,
+        request=PoCRequest(method="GET", url=seed_url, expect="body word matches (root:)",
+                           source="endpoint:x"))))
+
+    cap = ReproduceFinding(fetch)
+    # drive the per-finding loop by hand as the engine's per-phase fixpoint would: propose, run,
+    # absorb, until the loop proposes no further attempt
+    for _ in range(MAX_VARIANTS + 1):
+        tasks = reproduce_rule(world)
+        if not tasks:
+            break
+        world.absorb(cap.run(tasks[0], world).facts)
+
+    receipts = {r.variant: r for r in (f.payload for f in world.facts("reproduction"))}
+    assert receipts["seed"].hit is False  # the recipe as written does not reach the file
+    assert receipts["rebase:/grafana"].hit is True  # adapted onto the observed proxy mount

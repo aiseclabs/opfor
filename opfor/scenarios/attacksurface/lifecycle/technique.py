@@ -11,9 +11,9 @@ per invariant 1 and the widened grounding of the closed-loop design. The marker 
 deterministic and decides only whether the loop keeps trying, the real verdict stays with the
 confirm judge.
 
-A path-rebase variator, reaching an app served behind a reverse-proxy prefix, is left for a later
-change, since a reliable proxy-prefix signal is not yet gathered and treating every probed path as a
-prefix produces noise. The `plan_variants` rebase path stays, tested, for when that signal exists.
+A path-rebase variator reaches an app served behind a reverse-proxy prefix. It runs only on a prefix
+the caller passes, a grounded one `reproduce.proxy_prefixes` reads from the host's observed
+redirects, never a guess over every probed path, which would be noise.
 """
 
 from __future__ import annotations

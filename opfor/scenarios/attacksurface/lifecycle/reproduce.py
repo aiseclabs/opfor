@@ -119,12 +119,64 @@ def scrub(text: str) -> str:
     return _SECRET.sub(lambda m: m.group(1) + "[REDACTED]", text or "")
 
 
+def _redirect_path(location: str, host: str) -> str:
+    """The path of a redirect Location, or empty when it points off `host`. An absolute Location to
+    another host, an SSO login say, is not a local mount, so it names no prefix."""
+    parts = urlparse(location)
+    if parts.hostname and parts.hostname != host:
+        return ""
+    return parts.path
+
+
+def _observed_redirects(world: World, host: str) -> list[tuple[str, str]]:
+    """Pairs of probed path and redirect Location observed on `host`, read from the endpoint nodes
+    and http facts the MAP and ENRICH phases left on the blackboard."""
+    payloads = [node.payload for node in world.nodes("endpoint")]
+    payloads += [fact.payload for fact in world.facts("http")]
+    out: list[tuple[str, str]] = []
+    for payload in payloads:
+        location = getattr(payload, "location", "") or ""
+        url = getattr(payload, "url", "") or ""
+        if location and urlparse(url).hostname == host:
+            out.append((urlparse(url).path or "/", location))
+    return out
+
+
+def proxy_prefixes(world: World, host: str) -> tuple[str, ...]:
+    """The reverse-proxy mount prefixes for `host`, grounded in observed redirects.
+
+    A proxy serving an app under a path prefix relocates a probe onto that prefix, so a probed path
+    is answered with a redirect whose Location carries a leading segment the probe lacked, the
+    mount. A root-served app instead redirects within its own paths, `/login` say, and names no such
+    prefix, so this reads an observed signal rather than guessing over every path, which the
+    closed-loop design ruled out as noise. The seed attempt still runs first, so a spurious prefix
+    costs one bounded attempt, never the verdict.
+    """
+    prefixes: list[str] = []
+    seen: set[str] = set()
+    for src_path, location in _observed_redirects(world, host):
+        segments = _redirect_path(location, host).split("/")
+        # a mount needs a leading segment before the landing path, /grafana before /login, so a
+        # bare /login redirect, one segment, names no mount
+        if len(segments) < 3 or not segments[1]:
+            continue
+        prefix = "/" + segments[1]
+        # a probe already under the prefix is the app's own redirect, not a relocation onto a mount
+        if src_path == prefix or src_path.startswith(prefix + "/"):
+            continue
+        if prefix not in seen:
+            seen.add(prefix)
+            prefixes.append(prefix)
+    return tuple(prefixes)
+
+
 def _variants_for(request, world: World) -> tuple[Variant, ...]:
-    """The variation set for a finding's seed request, seed first, then the generic depth and
-    encoding adaptations. The capability and the rule both call this, so both agree on which variant
-    a label names. A path rebase is not planned here yet, it awaits a reliable proxy-prefix signal,
-    so `world` is unused for now and kept for that next change."""
-    return plan_variants(request)
+    """The variation set for a finding's seed request, seed first, then the generic adaptations: a
+    path rebase onto any reverse-proxy prefix the host's observed redirects name, then the depth and
+    encoding traversal corrections. The capability and the rule both call this, so both agree on
+    which variant a label names."""
+    host = urlparse(request.url).hostname or ""
+    return plan_variants(request, base_paths=proxy_prefixes(world, host))
 
 
 def _pick_variant(request, world: World, label: str) -> Variant:

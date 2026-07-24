@@ -6,11 +6,8 @@ import pytest
 
 from opfor.core import Node, World
 
-from dataclasses import replace
-
 from opfor.scenarios.attacksurface.assets.domain.sources.observations import Response
 from tests.surface_fixtures import (
-    _resolve,
     _run,
     _run_capturing,
     _seed,
@@ -290,86 +287,6 @@ def test_sql_dump_clue_covers_every_probed_sql_path():
     sql = [c for c in clues if c.get("id") == "exposed-sql-dump"]
     # a suffix path so /dump.sql, /db.sql, /database.sql all match, not only /backup.sql
     assert sql and sql[0]["path"] == ".sql"
-
-def test_cloud_bucket_from_url_recognizes_provider_forms():
-    from opfor.scenarios.attacksurface.assets.domain import sources as domains
-
-    s3v = domains.cloud_bucket_from_url("https://my-bucket.s3.amazonaws.com/key.txt")
-    assert s3v.provider == "s3" and s3v.bucket == "my-bucket"
-    s3r = domains.cloud_bucket_from_url("https://s3.eu-west-1.amazonaws.com/other-bucket/x")
-    assert s3r.provider == "s3" and s3r.bucket == "other-bucket"
-    gcs = domains.cloud_bucket_from_url("https://storage.googleapis.com/data-bucket/o")
-    assert gcs.provider == "gcs" and gcs.bucket == "data-bucket"
-    # a bare host, the shape a CNAME takes, is recognized without a scheme
-    cname = domains.cloud_bucket_from_url("assets-bucket.s3.us-east-2.amazonaws.com")
-    assert cname.provider == "s3" and cname.bucket == "assets-bucket"
-    az = domains.cloud_bucket_from_url("https://acct.blob.core.windows.net/container/blob")
-    assert az.provider == "azure" and az.bucket == "acct/container"
-    # an azure account with no container cannot be listed, so it is not a bucket here
-    assert domains.cloud_bucket_from_url("acct.blob.core.windows.net") is None
-    # a non-cloud url is not a bucket
-    assert domains.cloud_bucket_from_url("https://example.com/path") is None
-    # the reference extractor keeps only cloud-storage hosts
-    refs = domains.cloud_refs_in_text('a="https://x.s3.amazonaws.com/k"; b="https://example.com/y"')
-    assert refs == ["https://x.s3.amazonaws.com/k"]
-    # a public object listing is told apart from a generic 200 page
-    assert domains.bucket_listable("<ListBucketResult><Contents>x</Contents></ListBucketResult>")
-    assert not domains.bucket_listable("<html>welcome</html>")
-
-def test_bucket_scan_checks_buckets_the_target_reveals_by_cname():
-    listing = "<ListBucketResult><Contents><Key>dump.sql</Key></Contents></ListBucketResult>"
-
-    def resolve(name):
-        base = _resolve(name)
-        if name == "admin.example.com":
-            return replace(base, cnames=("example-backup.s3.amazonaws.com",))
-        if name == "www.example.com":
-            return replace(base, cnames=("example-private.s3.amazonaws.com",))
-        return base
-
-    def probe_url(url):
-        if "example-backup.s3" in url:
-            return Response(status=200, url=url, content_type="application/xml", body=listing)
-        if "example-private.s3" in url:
-            return Response(status=403, url=url, content_type="application/xml")
-        return Response(status=404, url=url)
-
-    report, _scenario, world = _run_capturing(resolve_fn=resolve, probe_url_fn=probe_url)
-    buckets = [b for f in world.facts("buckets") for b in f.payload.buckets]
-    listable = [b for b in buckets if b.state == "listable"]
-    assert any(b.name == "example-backup" and b.provider == "s3"
-               and b.evidence == "CNAME from admin.example.com" for b in listable), \
-        "expected the listable example-backup S3 bucket discovered by CNAME"
-    assert any(b.name == "example-private" and b.state == "private" for b in buckets), \
-        "expected the private example-private bucket"
-
-def test_bucket_scan_records_a_coverage_gap_when_a_probe_errors():
-    listing = "<ListBucketResult><Contents><Key>dump.sql</Key></Contents></ListBucketResult>"
-
-    def resolve(name):
-        base = _resolve(name)
-        if name == "admin.example.com":
-            return replace(base, cnames=("example-backup.s3.amazonaws.com",))
-        if name == "www.example.com":
-            return replace(base, cnames=("example-private.s3.amazonaws.com",))
-        return base
-
-    def probe_url(url):
-        if "example-backup.s3" in url:
-            return Response(status=200, url=url, content_type="application/xml", body=listing)
-        if "example-private.s3" in url:
-            raise TimeoutError("bucket probe timed out")
-        return Response(status=404, url=url)
-
-    report, _scenario, world = _run_capturing(resolve_fn=resolve, probe_url_fn=probe_url)
-    # the reachable bucket is still reported, the errored one is a coverage gap, not a silent drop
-    buckets = [b for f in world.facts("buckets") for b in f.payload.buckets]
-    assert any(b.name == "example-backup" for b in buckets)
-    gaps = [f.payload for f in world.facts("coverage_gap") if f.payload.scan == "bucket_scan"]
-    assert any(g.failed >= 1 for g in gaps), \
-        "an errored bucket probe must record a coverage_gap rather than be silently skipped"
-    assert any(f.data.get("kind") == "coverage_gap" and f.data.get("scan") == "bucket_scan"
-               for f in report.findings)
 
 def test_wayback_passive_urls_become_candidates():
     world = _seed()

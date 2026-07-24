@@ -31,7 +31,6 @@ from opfor.scenarios.attacksurface.assets.domain.capabilities.specs import (
 from opfor.scenarios.attacksurface.assets.domain.capabilities.http import DISCLOSURE_PROBE_PATHS
 from opfor.scenarios.attacksurface.assets.domain.capabilities import (
     BackupScan,
-    BucketScan,
     CVELookup,
     DiscoverDomains,
     ProbeEndpoints,
@@ -111,7 +110,7 @@ def _template_chains(nuclei_dir) -> tuple:
 
 
 def assemble(*, enumerate_fn, resolve_fn, probe_fn, fetch_fn, fetch_doc_fn,
-             introspect_fn, wayback_fn, probe_url_fn,
+             introspect_fn, wayback_fn,
              identify_fn=None, cve_fn=None) -> ClassBundle:
     """The domain class's contribution. The seams are the passive and active sources, injected so
     a test drives the class with fixtures. The run maps exactly the operator's seed roots and
@@ -135,7 +134,6 @@ def assemble(*, enumerate_fn, resolve_fn, probe_fn, fetch_fn, fetch_doc_fn,
         SourceMapScan(fetch_doc_fn),
         SecretScan(fetch_doc_fn),
         BackupScan(fetch_fn),
-        BucketScan(probe_url_fn),
     ]
     # The per-product knowledge units identify a known product without a model call, with the
     # exact version a version header or endpoint carries. They wrap the injected model identify

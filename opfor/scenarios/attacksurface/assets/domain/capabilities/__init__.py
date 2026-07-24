@@ -24,11 +24,9 @@ from opfor.scenarios.attacksurface.assets.domain.capabilities.specs import (
     GraphQLIntrospect,
     ProbeSpec,
 )
-from opfor.scenarios.attacksurface.assets.domain.capabilities.storage import BucketScan
 
 __all__ = [
     "BackupScan",
-    "BucketScan",
     "CVELookup",
     "DiscoverDomains",
     "ProbeEndpoints",

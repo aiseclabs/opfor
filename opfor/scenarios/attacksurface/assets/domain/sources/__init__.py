@@ -63,13 +63,7 @@ from opfor.scenarios.attacksurface.assets.domain.sources.javascript import (
     source_map_from_text,
     urls_in_javascript,
 )
-from opfor.scenarios.attacksurface.assets.domain.sources.storage import (
-    bucket_listable,
-    cloud_bucket_from_url,
-    cloud_refs_in_text,
-)
 from opfor.scenarios.attacksurface.assets.domain.sources.observations import (
-    BucketReference,
     Liveness,
     Resolution,
     Response,
@@ -80,17 +74,13 @@ from opfor.scenarios.attacksurface.assets.domain.sources.observations import (
 # The public source names this facade re-exports, declared so the public surface is explicit
 # and a name that stops being used through the facade is caught rather than lingering.
 __all__ = [
-    "BucketReference",
     "Enumeration",
     "Liveness",
     "Resolution",
     "Response",
     "SourceMapClues",
     "backup_candidates",
-    "bucket_listable",
     "certspotter_subdomains",
-    "cloud_bucket_from_url",
-    "cloud_refs_in_text",
     "cves_from_nvd",
     "dnsdumpster_subdomains",
     "chain_fetch",

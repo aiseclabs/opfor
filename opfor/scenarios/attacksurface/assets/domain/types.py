@@ -206,38 +206,6 @@ class BackupReport:
 
 
 @dataclass(frozen=True, kw_only=True)
-class CloudRefs:
-    """The cloud-storage urls a host's pages reference, harvested so a bucket is discovered
-    from what the target itself loads rather than guessed. Empty is a real negative."""
-
-    urls: tuple[str, ...] = ()
-
-
-@dataclass(frozen=True, kw_only=True)
-class Bucket:
-    """One cloud object-storage bucket discovered from evidence, a url the target references or
-    a subdomain CNAME that points at it, `evidence` records which. `state` is `listable` when
-    an anonymous list returned objects, or `private` when the bucket exists but refused the
-    list. Whether a listable bucket holds sensitive objects is triage's judgment, this is the
-    raw fact."""
-
-    name: str
-    provider: str
-    url: str
-    state: str
-    evidence: str = ""
-    status: int | None = None
-
-
-@dataclass(frozen=True, kw_only=True)
-class BucketReport:
-    """The cloud buckets the run discovered and checked. Empty is a real negative, no
-    referenced url or CNAME named a reachable bucket, not a failure."""
-
-    buckets: tuple[Bucket, ...] = ()
-
-
-@dataclass(frozen=True, kw_only=True)
 class CoverageGap:
     """A scan that finished but skipped items on per-item errors, so the surface it reports
     is partial. A fact about the reach of the run, not a semantic judgment, so a silently

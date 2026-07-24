@@ -224,15 +224,16 @@ def test_harvest_crash_still_records_harvested_and_a_gap(monkeypatch):
     world.absorb([Fact(kind="resolved", about="domain:h",
                        payload=Resolved(resolvable=True, addresses=("1.2.3.4",)))])
 
-    def boom(_text):
+    def boom(_html):
         raise RuntimeError("harvest parse blew up")
 
     # an un-tolerated error outside the per-source guards, so the run must still emit the
     # harvested fact plus a gap, else a factless live host silently suppresses endpoint
     # enumeration for every host while the run still closes
-    monkeypatch.setattr(cap_http, "cloud_refs_in_text", boom)
-    out = HarvestPaths(lambda *a: {"text": "<html></html>"},
-                       lambda *a: {"text": "<html></html>"}, lambda *a: set()).run(
+    monkeypatch.setattr(cap_http, "_home_paths", boom)
+    out = HarvestPaths(lambda *a: Response(status=200, body="<html></html>"),
+                       lambda *a: Response(status=200, body="<html></html>"),
+                       lambda *a: set()).run(
         Task(capability="domain_harvest", node="domain:h"), world)
     assert isinstance(out, Done)
     kinds = {f.kind for f in out.facts}

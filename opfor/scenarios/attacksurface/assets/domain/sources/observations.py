@@ -67,13 +67,3 @@ class SourceMapClues:
     sources_count: int
     has_sources_content: bool
     sample_sources: tuple[str, ...] = ()
-
-
-@dataclass(frozen=True)
-class BucketReference:
-    """A cloud-storage bucket a url or CNAME names: the provider, the bucket, and the anonymous
-    list-check url. Derived from something the target revealed, never guessed by name."""
-
-    provider: str
-    bucket: str
-    list_url: str

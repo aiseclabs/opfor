@@ -168,12 +168,6 @@ def _cves(product, version, cpe=""):
     return []
 
 
-def _probe_url(url):
-    # By default every derived bucket name is absent, so the bucket scan is a quiet no-op. A
-    # test that drives a listable bucket overrides this seam.
-    return Response(status=404, url=url)
-
-
 def _make(**over):
     """Build the scenario with every seam faked, so no test touches the network or the
     model. A MockProvider stands in for the triage model, returning an empty result by
@@ -181,8 +175,7 @@ def _make(**over):
     provider to drive a canned model reply."""
     seams = dict(enumerate_fn=_enumerate,
                  resolve_fn=_resolve, probe_fn=_probe, fetch_fn=_fetch, fetch_doc_fn=_fetch_doc,
-                 introspect_fn=_introspect, wayback_fn=_wayback, identify_fn=_identify, cve_fn=_cves,
-                 probe_url_fn=_probe_url)
+                 introspect_fn=_introspect, wayback_fn=_wayback, identify_fn=_identify, cve_fn=_cves)
     seams.update(over)
     seams.setdefault("provider", MockProvider(default='{"findings": []}'))
     seams.setdefault("model", "test-model")
@@ -277,7 +270,6 @@ __all__ = [
     '_probe',
     '_identify',
     '_cves',
-    '_probe_url',
     '_make',
     '_scenario',
     '_seed',

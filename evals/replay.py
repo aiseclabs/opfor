@@ -90,12 +90,9 @@ def _seams(cassette: dict) -> dict:
     def wayback_fn(h):
         return set()
 
-    def probe_url_fn(url):
-        return Response(status=404, url=url)
-
     return dict(enumerate_fn=enumerate_fn, resolve_fn=resolve_fn, probe_fn=probe_fn,
                 fetch_fn=fetch_fn, fetch_doc_fn=fetch_doc_fn, introspect_fn=introspect_fn,
-                wayback_fn=wayback_fn, probe_url_fn=probe_url_fn)
+                wayback_fn=wayback_fn)
 
 
 def profile_for(cassette: dict):

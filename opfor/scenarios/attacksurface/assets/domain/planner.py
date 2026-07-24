@@ -279,28 +279,6 @@ def _backup_rule(world: World, config: DomainPlanConfig) -> list[Task]:
     return tasks
 
 
-def _bucket_rule(world: World) -> list[Task]:
-    """Check the cloud buckets the target reveals, once per run on the org node.
-
-    It waits until every domain is resolved and every live host is harvested, so the CNAME and
-    referenced-url evidence the scan reads is complete before it fires, not empty because it
-    ran before any host was probed. It reads only public cloud endpoints, so it needs no scope
-    host."""
-    domains = world.nodes("domain")
-    if not domains or any(not world.has_fact(node.id, "resolved") for node in domains):
-        return []
-    if any(not world.has_fact(node.id, "harvested") for node in _live_domains(world)):
-        return []
-    tasks: list[Task] = []
-    for node in world.nodes("org"):
-        if not class_enabled(node.payload, CLASS):
-            continue
-        if world.has_fact(node.id, "buckets"):
-            continue
-        tasks.append(Task(capability="bucket_scan", node=node.id))
-    return tasks
-
-
 def _profile_rule(world: World) -> list[Task]:
     """Profile every live host once its surface is enumerated, deriving its product, front-end
     frameworks, and edge into one host_profile fact.
@@ -384,7 +362,6 @@ def enrich_rules(config: DomainPlanConfig, *, with_profile: bool = False, with_c
         _source_map_rule,
         lambda world: _secret_scan_rule(world, config),
         lambda world: _backup_rule(world, config),
-        _bucket_rule,
     ]
     if with_profile:
         rules.append(_profile_rule)

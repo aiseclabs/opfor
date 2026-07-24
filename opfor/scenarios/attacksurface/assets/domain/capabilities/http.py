@@ -19,7 +19,6 @@ from opfor.scenarios.attacksurface.assets.domain.responses import (
 from opfor.scenarios.attacksurface.assets.domain.sources.parsers import path_permutations
 from opfor.scenarios.attacksurface.assets.domain.sources.http import _BODY_VERSION
 from opfor.scenarios.attacksurface.assets.domain.sources import (
-    cloud_refs_in_text,
     paths_in_javascript,
     robots_entries,
     same_host_path,
@@ -29,7 +28,6 @@ from opfor.scenarios.attacksurface.assets.domain.sources import (
 )
 from opfor.scenarios.attacksurface.assets.domain.types import (
     Candidates,
-    CloudRefs,
     Endpoint,
     HTTP,
 )
@@ -112,7 +110,6 @@ class HarvestPaths(Capability):
         resolved = world.latest("resolved", task.node)
         addresses = resolved.payload.addresses if resolved else ()
         by_host: dict[str, set[str]] = {}
-        cloud_refs: set[str] = set()
 
         def add(host: str, path: str) -> None:
             if host and path and path.startswith("/"):
@@ -121,7 +118,6 @@ class HarvestPaths(Capability):
         try:
             home_doc = _safe(lambda: self._fetch_doc(name, "/"))
             home = home_doc.body if home_doc else ""
-            cloud_refs.update(cloud_refs_in_text(home))
             for path in _home_paths(home):
                 add(name, path)
             for path in _safe(lambda: self._robots(name, addresses)) or []:
@@ -130,7 +126,6 @@ class HarvestPaths(Capability):
                 add(name, path)
             for script in script_sources(home, name)[:self._MAX_SCRIPTS]:
                 body = _safe(lambda s=script: self._fetch_doc(name, s).body) or ""
-                cloud_refs.update(cloud_refs_in_text(body))
                 for path in paths_in_javascript(body):
                     add(name, path)
                 for url in urls_in_javascript(body):
@@ -164,9 +159,6 @@ class HarvestPaths(Capability):
                 f"{name}: home document {reason}, candidate paths were not gathered"])
             if gap is not None:
                 facts.append(Fact(kind="coverage_gap", about=task.node, payload=gap))
-        if cloud_refs:
-            facts.append(Fact(kind="cloud_refs", about=task.node,
-                              payload=CloudRefs(urls=tuple(sorted(cloud_refs)))))
         for host, paths in by_host.items():
             node_id = f"domain:{host}"
             if world.node(node_id) is None:

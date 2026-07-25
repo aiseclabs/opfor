@@ -194,7 +194,8 @@ class AuditTriage(Triage):
         infrastructure, are facts about the surface shared with the report so the two never drift.
         A contract with nothing to weigh, no funds and no signals, carries no evidence to judge."""
         if structural_exclusion(node.payload.chain, node.payload.address, facts["role"],
-                                self._known) is not None:
+                                self._known,
+                                is_implementation=node.payload.source == "implementation") is not None:
             return False
         return bool(facts["funds"] > 0 or facts["open_paths"] or facts["risk_flags"])
 

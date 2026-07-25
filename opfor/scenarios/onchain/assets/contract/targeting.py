@@ -23,17 +23,20 @@ _DEX_LAYER_ROLES = ("pool", "token")
 
 
 def structural_exclusion(chain: str, address: str, role: str,
-                         known_infrastructure: dict[str, frozenset[str]] | None) -> str | None:
+                         known_infrastructure: dict[str, frozenset[str]] | None,
+                         is_implementation: bool = False) -> str | None:
     """Why a contract is not an audit target on structural grounds, or None when it is a candidate.
 
     The reason is a short slug, so the report can record why a contract was excluded rather than
     dropping it silently. None means the contract passes the structural filter and is a candidate,
-    whether it then rises to a finding is triage's model call.
+    whether it then rises to a finding is triage's model call. A proxy implementation is exempt from
+    the DEX-layer rule, it was resolved deliberately as the code behind a funded proxy, so even when
+    the model reads its token-like ABI as `token` it is logic worth auditing, not a raw pair.
     """
     if not is_evm_address(address):
         return "malformed-address"
     addr = address.lower()
-    if role in _DEX_LAYER_ROLES:
+    if role in _DEX_LAYER_ROLES and not is_implementation:
         return "dex-layer"
     if addr in NULL_ADDRESSES:
         return "null-address"

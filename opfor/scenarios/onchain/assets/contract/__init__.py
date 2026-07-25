@@ -18,6 +18,7 @@ from opfor.scenarios.onchain.assets.contract.capabilities import (
     IdentifyContract,
     PivotRelated,
     ReadFunds,
+    ResolveProxy,
     ScanSignals,
     SweepPools,
 )
@@ -40,7 +41,7 @@ class ClassBundle:
     knowledge_dir: Path
 
 
-def assemble(*, sweep_fn, pivot_fn, source_fn, identify_fn, funds_fn) -> ClassBundle:
+def assemble(*, sweep_fn, pivot_fn, source_fn, identify_fn, funds_fn, resolve_fn) -> ClassBundle:
     """The contract class's contribution. The seams are the public sources, injected so a test
     drives the class with fixtures. The detection data is loaded once here at assemble time, not
     at import, so the content root stays swappable and importing the class triggers no file IO."""
@@ -50,6 +51,7 @@ def assemble(*, sweep_fn, pivot_fn, source_fn, identify_fn, funds_fn) -> ClassBu
         PivotRelated(pivot_fn),
         FetchSource(source_fn),
         IdentifyContract(identify_fn),
+        ResolveProxy(resolve_fn),
         ReadFunds(funds_fn),
         EnumInterfaces(detections),
         ScanSignals(detections),

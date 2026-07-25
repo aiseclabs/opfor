@@ -87,14 +87,22 @@ def contract_records(world: World, findings, known_infrastructure=None) -> list[
             source_state = "verified"
         else:
             source_state = "unverified"
+        # A resolved proxy implementation is where the audited logic actually lives, so it is flagged
+        # and ranked high among the targets, the correction over auditing the thin forwarding shell.
+        is_impl = payload.source == "implementation"
         # A contract earns a record when it holds funds, carries a finding, exposes a fund path, or
-        # matched a signal, so the report lists the surface that matters, not every swept token.
-        if not (funds > 0 or finding_ids or interfaces or risk_flags):
+        # matched a signal, so the report lists the surface that matters, not every swept token. A
+        # proxy implementation earns one too, its logic is the target even when its own balance is
+        # zero, so the resolution's result is never dropped before it is even recorded.
+        if not (funds > 0 or finding_ids or interfaces or risk_flags or is_impl):
             continue
-        excluded = structural_exclusion(payload.chain, payload.address, role, known)
+        excluded = structural_exclusion(payload.chain, payload.address, role, known,
+                                        is_implementation=is_impl)
         # Below the funds floor and carrying no finding, a contract is not worth an audit slot, so it
-        # is excluded like the structural cases, after them so a structural reason wins the label.
-        if excluded is None and not finding_ids and funds < floor:
+        # is excluded like the structural cases, after them so a structural reason wins the label. A
+        # proxy implementation is exempt, its funds live in the proxy it stands behind, not in itself,
+        # so its own near-zero balance must not drop the very code the proxy resolution brought in.
+        if excluded is None and not finding_ids and funds < floor and not is_impl:
             excluded = "below-funds-floor"
         # A contract that carries a finding is a target whatever its structure, triage minted it, so
         # a finding always wins over a structural exclusion rather than being hidden by it.
@@ -108,6 +116,7 @@ def contract_records(world: World, findings, known_infrastructure=None) -> list[
             "source_auditable": source_state == "verified",
             "funds_at_risk_usd": round(funds, 2),
             "audit_target": audit_target,
+            "proxy_implementation": is_impl,
         }
         if not audit_target and excluded is not None:
             record["excluded"] = excluded
@@ -125,13 +134,14 @@ def contract_records(world: World, findings, known_infrastructure=None) -> list[
     # The ranking, deliberately not by funds first. Funds correlate with the most-audited public
     # infrastructure, so a pure balance sort promotes the least productive targets, the defect the
     # target-selection analysis found. Instead: audit targets first, then the finding-bearing, then
-    # the source-auditable, then the signal-rich, and only then the richest, with funds as the last
-    # discriminator. The excluded inventory sorts last however large its balance.
+    # resolved proxy implementations, the code behind the funds, then the source-auditable, then the
+    # signal-rich, and only then the richest, with funds as the last discriminator. The excluded
+    # inventory sorts last however large its balance.
     def _rank(record: dict) -> tuple:
         signal_richness = len(record.get("risk_flags", [])) + len(record.get("fund_paths", []))
         return (not record["audit_target"], not record.get("findings"),
-                not record.get("source_auditable"), -signal_richness,
-                -record["funds_at_risk_usd"], record["address"])
+                not record.get("proxy_implementation"), not record.get("source_auditable"),
+                -signal_richness, -record["funds_at_risk_usd"], record["address"])
 
     return sorted(records, key=_rank)
 

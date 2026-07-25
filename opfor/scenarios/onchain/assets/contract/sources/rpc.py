@@ -16,6 +16,10 @@ from opfor.scenarios.onchain.assets.contract.sources import etherscan
 _BALANCE_OF = "0x70a08231"
 # The ERC20 decimals() selector, keccak("decimals()")[:4].
 _DECIMALS = "0x313ce567"
+# The EIP-1967 implementation storage slot, keccak("eip1967.proxy.implementation") - 1. A standard
+# upgradeable proxy holds the address of the code behind it here, so reading the slot recovers the
+# implementation the proxy forwards to, the contract that actually holds the auditable logic.
+_EIP1967_IMPL_SLOT = "0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc"
 
 
 def _to_int(value) -> int:
@@ -52,3 +56,16 @@ def is_contract(address: str, chain: str) -> bool:
     counterparties rather than failing the whole run."""
     code = etherscan.proxy(chain, "eth_getCode", {"address": address, "tag": "latest"})
     return isinstance(code, str) and code not in ("0x", "0x0", "")
+
+
+def implementation_address(proxy: str, chain: str) -> str:
+    """The implementation address behind an EIP-1967 proxy, read from its implementation storage
+    slot, or empty when the slot is zero or the explorer is not configured. The slot holds a 32-byte
+    word whose low 20 bytes are the address, so auditing the implementation reaches the code the
+    proxy runs rather than the thin forwarding shell."""
+    word = etherscan.proxy(chain, "eth_getStorageAt",
+                           {"address": proxy, "position": _EIP1967_IMPL_SLOT, "tag": "latest"})
+    if not isinstance(word, str) or not word.startswith("0x"):
+        return ""
+    address = "0x" + word[2:].rjust(64, "0")[-40:]
+    return address if _to_int(address) != 0 else ""

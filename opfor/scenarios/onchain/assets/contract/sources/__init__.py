@@ -20,3 +20,4 @@ sweep = geckoterminal.discover
 pivot = pivot_src.pivot
 fetch_source = explorer.fetch_source
 read_funds = funds_src.read_funds
+resolve_impl = rpc.implementation_address

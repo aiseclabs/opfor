@@ -109,7 +109,8 @@ def _run(triage_responses=None):
     provider = MockProvider(responses=triage_responses if triage_responses is not None
                             else [_reply(_VAULT_VERDICT)])
     scenario = onchain.build(sweep_fn=_fake_sweep, pivot_fn=_fake_pivot, source_fn=_fake_source,
-                             identify_fn=_fake_identify, funds_fn=_fake_funds, provider=provider)
+                             identify_fn=_fake_identify, funds_fn=_fake_funds,
+                             resolve_fn=lambda addr, chain: "", provider=provider)
     world = onchain.seed("bsc-test", chain="bsc")
     report = engine_run(scenario, world, scope=Scope(max_tier="recon"), budget=Budget(500))
     return report, world
@@ -280,6 +281,100 @@ def test_ranking_does_not_let_funds_alone_promote_an_opaque_contract():
     assert order.index(lean) < order.index(whale)
 
 
+def test_resolve_proxy_brings_the_implementation_in_as_a_contract():
+    from opfor.core import Task, World, Node
+    from opfor.scenarios.onchain.assets.contract.capabilities import ResolveProxy
+    from opfor.scenarios.onchain.assets.contract.types import ContractData
+
+    proxy = "0x230f1e241c621d5af670dad83ebcdd18971e2995"
+    impl = "0x98b3f0db84ca50a776f7cc340f429198c917f6f1"
+    world = World()
+    nid = f"contract:ethereum:{proxy}"
+    world.add(Node(id=nid, type="contract",
+                   payload=ContractData(chain="ethereum", address=proxy, role="proxy")))
+    outcome = ResolveProxy(lambda addr, chain: impl).run(
+        Task(capability="resolve_proxy", node=nid), world)
+    yielded = [n for f in outcome.facts for n in f.yields]
+    assert any(f.kind == "impl_resolved" for f in outcome.facts)  # recorded so the rule stops
+    assert len(yielded) == 1
+    node = yielded[0]
+    assert node.payload.address == impl and node.payload.source == "implementation"
+    assert node.payload.related_to == proxy  # the impl points back to the proxy for ranking
+
+    # a non-proxy or an empty slot yields no implementation node, but still records the fact
+    empty = ResolveProxy(lambda addr, chain: "").run(Task(capability="resolve_proxy", node=nid), world)
+    assert [n for f in empty.facts for n in f.yields] == []
+    assert any(f.kind == "impl_resolved" for f in empty.facts)
+
+
+def test_implementation_address_reads_the_low_20_bytes_of_the_slot(monkeypatch):
+    from opfor.scenarios.onchain.assets.contract.sources import rpc
+
+    impl = "98b3f0db84ca50a776f7cc340f429198c917f6f1"
+    word = "0x" + impl.rjust(64, "0")  # a 32-byte word, address in the low 20 bytes
+    monkeypatch.setattr(rpc.etherscan, "proxy", lambda chain, action, params: word)
+    assert rpc.implementation_address("0xproxy", "ethereum") == "0x" + impl
+    # a zero slot means not a proxy, so no implementation
+    monkeypatch.setattr(rpc.etherscan, "proxy", lambda chain, action, params: "0x" + "0" * 64)
+    assert rpc.implementation_address("0xproxy", "ethereum") == ""
+
+
+def test_report_ranks_a_proxy_implementation_ahead_of_a_richer_plain_target():
+    from opfor.core import Fact, Node, World
+    from opfor.scenarios.onchain.report import contract_records
+    from opfor.scenarios.onchain.assets.contract.types import ContractData, FundFact, IdentityFact, SourceFact
+
+    impl = "0xaaaa000000000000000000000000000000000030"    # a proxy implementation, modest funds
+    plain = "0xbbbb000000000000000000000000000000000031"   # a plain verified target, richer
+    world = World()
+    world.add(Node(id=f"contract:ethereum:{impl}", type="contract",
+                   payload=ContractData(chain="ethereum", address=impl, role="vault",
+                                        source="implementation", related_to="0xproxy")))
+    world.add(Node(id=f"contract:ethereum:{plain}", type="contract",
+                   payload=ContractData(chain="ethereum", address=plain, role="vault", source="pivoted")))
+    for addr, funds in ((impl, 50_000), (plain, 500_000)):
+        nid = f"contract:ethereum:{addr}"
+        world.absorb([Fact(kind="identified", about=nid, payload=IdentityFact(role="vault")),
+                      Fact(kind="funded", about=nid, payload=FundFact(funds_at_risk_usd=funds)),
+                      Fact(kind="sourced", about=nid, payload=SourceFact(verified=True, source_text="x"))])
+
+    order = [c["address"] for c in contract_records(world, [])]
+    assert order.index(impl) < order.index(plain)  # the implementation leads despite less funds
+    rec = {c["address"]: c for c in contract_records(world, [])}
+    assert rec[impl]["proxy_implementation"] is True and rec[plain]["proxy_implementation"] is False
+
+
+def test_a_zero_balance_proxy_implementation_survives_the_funds_floor():
+    from opfor.core import Fact, Node, World
+    from opfor.scenarios.onchain.report import contract_records
+    from opfor.scenarios.onchain.assets.contract.types import ContractData, FundFact, IdentityFact, SourceFact
+
+    # a proxy implementation holds no funds itself, they live in the proxy, so the floor must not
+    # drop the very code the proxy resolution brought in to audit
+    impl = "0xaaaa000000000000000000000000000000000040"
+    world = World()
+    nid = f"contract:ethereum:{impl}"
+    world.add(Node(id=nid, type="contract",
+                   payload=ContractData(chain="ethereum", address=impl, role="unknown",
+                                        source="implementation", related_to="0xproxy")))
+    world.absorb([Fact(kind="identified", about=nid, payload=IdentityFact(role="unknown")),
+                  Fact(kind="funded", about=nid, payload=FundFact(funds_at_risk_usd=0)),
+                  Fact(kind="sourced", about=nid, payload=SourceFact(verified=True, source_text="x"))])
+
+    rec = {c["address"]: c for c in contract_records(world, [])}
+    assert rec[impl]["audit_target"] is True and "excluded" not in rec[impl]
+
+
+def test_a_proxy_implementation_read_as_a_token_is_not_dex_layer_excluded():
+    # an upgradeable token's implementation the model reads as `token` is still logic worth auditing,
+    # not a raw swept pair, so the dex-layer exclusion must not drop the code proxy resolution found
+    from opfor.scenarios.onchain.assets.contract.targeting import structural_exclusion
+
+    addr = "0x98b3f0db84ca50a776f7cc340f429198c917f6f1"
+    assert structural_exclusion("ethereum", addr, "token", None) == "dex-layer"  # a swept token
+    assert structural_exclusion("ethereum", addr, "token", None, is_implementation=True) is None
+
+
 def test_onchain_is_registered_and_runnable():
     from opfor.scenarios.registry import known_scenarios, report_adapter, run_adapter
 
@@ -342,7 +437,8 @@ def test_an_anchor_run_audits_the_given_contract_and_skips_the_sweep():
     # a focused run: the operator names a contract to audit, no chain sweep
     provider = MockProvider(responses=[_reply(_VAULT_VERDICT)])
     scenario = onchain.build(sweep_fn=_fake_sweep, pivot_fn=_fake_pivot, source_fn=_fake_source,
-                             identify_fn=_fake_identify, funds_fn=_fake_funds, provider=provider)
+                             identify_fn=_fake_identify, funds_fn=_fake_funds,
+                             resolve_fn=lambda addr, chain: "", provider=provider)
     world = onchain.seed("focus", chain="bsc", anchors=[_VAULT])
     report = engine_run(scenario, world, scope=Scope(max_tier="recon"), budget=Budget(500))
 

@@ -159,6 +159,38 @@ class IdentifyContract(Capability):
                                 payload=IdentityFact(role=role, evidence="functions and source")),))
 
 
+class ResolveProxy(Capability):
+    """ENRICH: resolve the implementation behind a proxy and bring it in as a contract to audit.
+
+    A proxy is a thin forwarding shell, the code that holds the funds' logic is its implementation,
+    so auditing the proxy alone misses the real surface. This reads the implementation address
+    through the resolve seam and, when there is one, emits it as a new contract node the enrich
+    pipeline then fetches and judges. It records `impl_resolved` either way, so the rule does not
+    re-run, and the implementation carries `related_to` the proxy so the report can prioritize it.
+    """
+
+    name = "resolve_proxy"
+    phase = Phase.ENRICH
+    osint = True
+
+    def __init__(self, resolve_fn) -> None:
+        self._resolve = resolve_fn
+
+    def run(self, task: Task, world: World) -> Outcome:
+        contract = world.node(task.node).payload
+        try:
+            impl = self._resolve(contract.address, contract.chain)
+        except Exception as exc:
+            return _net_failed("proxy implementation read", exc)
+        nodes: tuple[Node, ...] = ()
+        if impl:
+            nodes = (Node(id=_node_id(contract.chain, impl), type="contract",
+                          payload=ContractData(chain=contract.chain, address=impl, role="unknown",
+                                               source="implementation",
+                                               related_to=contract.address)),)
+        return Done(facts=(Fact(kind="impl_resolved", about=task.node, yields=nodes),))
+
+
 class ReadFunds(Capability):
     """ENRICH: read the funds a contract manages, reusing the DEX liquidity as a hint for a pool."""
 

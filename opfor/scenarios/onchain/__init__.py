@@ -67,6 +67,7 @@ def build(
     source_fn=contract_src.fetch_source,
     identify_fn=None,
     funds_fn=contract_src.read_funds,
+    resolve_fn=contract_src.resolve_impl,
     provider: Provider | None = None,
     model: str | None = None,
     challenger: Provider | None = None,
@@ -95,7 +96,7 @@ def build(
     challenger, challenger_model, judge, judge_model = _adversarial_roles(
         provider, model, challenger, challenger_model, judge, judge_model)
     bundle = assemble(sweep_fn=sweep_fn, pivot_fn=pivot_fn, source_fn=source_fn,
-                      identify_fn=identify_fn, funds_fn=funds_fn)
+                      identify_fn=identify_fn, funds_fn=funds_fn, resolve_fn=resolve_fn)
     rules = {Phase.MAP: list(bundle.map_rules), Phase.ENRICH: list(bundle.enrich_rules)}
     known = load_known_infrastructure(bundle.knowledge_dir)
     return Scenario(

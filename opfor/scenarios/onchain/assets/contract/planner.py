@@ -75,6 +75,22 @@ def _funds_rule(world: World) -> list[Task]:
     return tasks
 
 
+def _resolve_proxy_rule(world: World) -> list[Task]:
+    """Resolve the implementation once a contract is identified as a proxy, so the code the proxy
+    forwards to is brought in and audited rather than the thin shell. Gated on the identified role,
+    so the implementation read runs only where it can pay off, not on every contract."""
+    tasks: list[Task] = []
+    for node in world.nodes("contract"):
+        identified = world.latest("identified", node.id)
+        role = identified.payload.role if identified is not None else node.payload.role
+        if role != "proxy":
+            continue
+        if world.has_fact(node.id, "impl_resolved"):
+            continue
+        tasks.append(Task(capability="resolve_proxy", node=node.id))
+    return tasks
+
+
 def _interfaces_rule(world: World) -> list[Task]:
     return _after_source_rule(world, "enum_interfaces", "interfaces")
 
@@ -99,6 +115,7 @@ def enrich_rules() -> list:
     return [
         _fetch_rule,
         _identify_rule,
+        _resolve_proxy_rule,
         _funds_rule,
         _interfaces_rule,
         _signals_rule,

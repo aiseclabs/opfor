@@ -10,8 +10,20 @@ tested with fixtures and the default wiring speaks to the live RPC and DEX.
 
 from __future__ import annotations
 
+import re
+
 from opfor.scenarios.onchain.assets.contract.sources import dex, rpc
 from opfor.scenarios.onchain.assets.contract.sources.observations import FundObservation
+
+# A 20-byte EVM address, `0x` and forty hex digits. A discovery source can hand back a 32-byte pool
+# id or some other identifier that is not an address, and priced against it the figure is noise, so
+# the sweep keeps only nodes whose address is well formed.
+_EVM_ADDRESS = re.compile(r"^0x[0-9a-fA-F]{40}$")
+
+
+def is_evm_address(address: str) -> bool:
+    """Whether a string is a well-formed 20-byte EVM address."""
+    return bool(_EVM_ADDRESS.match(address or ""))
 
 # The value tokens per chain, the assets counted toward funds at risk. Each entry carries its own
 # decimals, since a stable is 6 decimals on Ethereum but 18 on BSC. `native` prices at the

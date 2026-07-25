@@ -333,9 +333,9 @@ def test_triage_surfaces_an_unverified_high_value_contract():
 
     def _world(funds: float) -> World:
         world = World()
-        nid = "contract:ethereum:0xopaque"
+        nid = "contract:ethereum:0xabcd000000000000000000000000000000000001"
         world.add(Node(id=nid, type="contract",
-                       payload=ContractData(chain="ethereum", address="0xopaque", role="unknown",
+                       payload=ContractData(chain="ethereum", address="0xabcd000000000000000000000000000000000001", role="unknown",
                                             source="pivoted", related_to="0xtoken")))
         world.absorb([Fact(kind="sourced", about=nid, payload=SourceFact(verified=False, note="unverified")),
                       Fact(kind="identified", about=nid, payload=IdentityFact(role="unknown")),
@@ -343,7 +343,7 @@ def test_triage_surfaces_an_unverified_high_value_contract():
         return world
 
     # unverified but $5M: the model surfaces it on the unverified-high-value class
-    big = MockProvider(responses=[_reply({"address": "0xopaque", "category": "unverified-high-value",
+    big = MockProvider(responses=[_reply({"address": "0xabcd000000000000000000000000000000000001", "category": "unverified-high-value",
                                           "priority": "U", "severity": "MEDIUM",
                                           "title": "opaque high-value", "evidence": "$5M unverified"})])
     findings = AuditTriage(KNOWLEDGE, provider=big, model="m").judge(_world(5_000_000))
@@ -436,6 +436,39 @@ def test_sweep_skips_the_null_and_burn_sinks():
     yielded = {n.payload.address.lower() for f in outcome.facts for n in f.yields}
     assert _TOKEN.lower() in yielded  # the real project token is kept
     assert zero not in yielded  # the null sink is skipped, never a node
+
+
+def test_sweep_skips_a_malformed_pool_address_but_keeps_its_valid_token():
+    # a discovery source can hand back a 32-byte pool id instead of a 20-byte address, it must not
+    # become a phantom contract node whose funds are pool metadata rather than a real balance
+    from opfor.core import Task, World, Node
+    from opfor.scenarios.onchain.assets.contract.capabilities import SweepPools
+    from opfor.scenarios.onchain.assets.contract.sources.observations import PoolObservation
+    from opfor.scenarios.onchain.seed import Survey
+
+    bad_pool_id = "0x19d044e9f31155f162928a04f261ea2af6f811130bbc850398cfaed377d7fdb9"  # 32 bytes
+    pool = PoolObservation(address=bad_pool_id, chain="ethereum", dex_id="uniswap", url="u",
+                           base_address=_TOKEN, base_symbol="PRJ",
+                           quote_address="0xnothex", quote_symbol="?", liquidity_usd=90_000.0)
+    world = World()
+    world.add(Node(id="survey:ethereum", type="survey",
+                   payload=Survey(name="t", chain="ethereum")))
+    outcome = SweepPools(lambda s: (pool,)).run(Task(capability="sweep_pools", node="survey:ethereum"),
+                                                world)
+    yielded = {n.payload.address.lower() for f in outcome.facts for n in f.yields}
+    assert bad_pool_id.lower() not in yielded  # the 32-byte id is not a node
+    assert "0xnothex" not in yielded  # a non-hex token side is dropped too
+    assert _TOKEN.lower() in yielded  # the well-formed project token survives
+
+
+def test_is_evm_address_accepts_only_a_20_byte_hex_address():
+    from opfor.scenarios.onchain.assets.contract.sources.funds import is_evm_address
+
+    assert is_evm_address("0x" + "a" * 40)
+    assert not is_evm_address("0x" + "a" * 64)  # a 32-byte id
+    assert not is_evm_address("0x" + "a" * 39)  # too short
+    assert not is_evm_address("0xNOTHEXNOTHEXNOTHEXNOTHEXNOTHEXNOTHEX0000")  # non-hex
+    assert not is_evm_address("")
 
 
 def test_triage_drops_a_null_address_even_when_it_reports_funds():

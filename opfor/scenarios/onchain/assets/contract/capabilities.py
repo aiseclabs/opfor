@@ -20,6 +20,7 @@ from opfor.scenarios.onchain.assets.contract.signals import (
 )
 from opfor.scenarios.onchain.assets.contract.sources.funds import (
     NULL_ADDRESSES,
+    is_evm_address,
     value_token_addresses,
 )
 from opfor.scenarios.onchain.assets.contract.types import (
@@ -67,16 +68,20 @@ class SweepPools(Capability):
         skip = value_token_addresses(survey.chain) | NULL_ADDRESSES
         nodes: list[Node] = []
         for pool in pools:
-            nodes.append(Node(id=_node_id(pool.chain, pool.address), type="contract",
-                              payload=ContractData(chain=pool.chain, address=pool.address,
-                                                   role="pool", source="swept", dex_id=pool.dex_id,
-                                                   url=pool.url, base_symbol=pool.base_symbol,
-                                                   quote_symbol=pool.quote_symbol,
-                                                   liquidity_usd=pool.liquidity_usd,
-                                                   age_days=pool.age_days)))
+            # A discovery source can hand back a 32-byte pool id rather than the pool's address, so a
+            # malformed pool address is not made a node, it would only be a phantom contract whose
+            # funds are pool metadata, not a real balance. Its tokens are still checked on their own.
+            if is_evm_address(pool.address):
+                nodes.append(Node(id=_node_id(pool.chain, pool.address), type="contract",
+                                  payload=ContractData(chain=pool.chain, address=pool.address,
+                                                       role="pool", source="swept", dex_id=pool.dex_id,
+                                                       url=pool.url, base_symbol=pool.base_symbol,
+                                                       quote_symbol=pool.quote_symbol,
+                                                       liquidity_usd=pool.liquidity_usd,
+                                                       age_days=pool.age_days)))
             for address, symbol in ((pool.base_address, pool.base_symbol),
                                     (pool.quote_address, pool.quote_symbol)):
-                if address and address.lower() not in skip:
+                if address and is_evm_address(address) and address.lower() not in skip:
                     nodes.append(Node(id=_node_id(pool.chain, address), type="contract",
                                       payload=ContractData(chain=pool.chain, address=address,
                                                            role="token", source="swept",

@@ -28,6 +28,7 @@ from opfor.core import (Finding, Message, Provider, SEVERITIES, Triage, World, i
                         require_json_object)
 from opfor.scenarios.onchain.assets.contract.sources.funds import (
     NULL_ADDRESSES,
+    is_evm_address,
     value_token_addresses,
 )
 
@@ -201,6 +202,10 @@ class AuditTriage(Triage):
         if facts["role"] in _NOT_AUDIT_TARGET:
             return False
         address = node.payload.address.lower()
+        # A malformed address, a 32-byte pool id or a mistyped anchor, is not a contract to audit,
+        # so it is dropped here too, defense in depth over the sweep's own format check.
+        if not is_evm_address(node.payload.address):
+            return False
         # The null and burn sinks are where tokens go to die, so their balance is the chain's burned
         # supply, not funds at risk. They are dropped here too, so one arriving by any path than the
         # sweep, a pivot or an anchor, never becomes a false high-value finding.

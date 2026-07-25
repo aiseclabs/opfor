@@ -423,6 +423,37 @@ def test_triage_drops_a_null_address_even_when_it_reports_funds():
     assert AuditTriage(KNOWLEDGE, provider=MockProvider(), model="m").judge(world) == []
 
 
+def test_etherscan_throttle_serializes_calls_to_stay_under_the_rate_limit(monkeypatch):
+    from opfor.scenarios.onchain.assets.contract.sources import etherscan
+
+    clock = {"t": 100.0}
+    slept = []
+    monkeypatch.setattr(etherscan.time, "monotonic", lambda: clock["t"])
+    monkeypatch.setattr(etherscan.time, "sleep", lambda s: slept.append(s))
+    etherscan._next_call[0] = 0.0
+    # the first call does not wait, it only schedules the next slot
+    etherscan._etherscan_wait(0.22)
+    assert slept == []
+    # a second call before the interval has passed blocks until the slot opens
+    etherscan._etherscan_wait(0.22)
+    assert slept and abs(slept[-1] - 0.22) < 0.01
+    # a zero interval disables the throttle, for a paid plan
+    slept.clear()
+    etherscan._etherscan_wait(0.0)
+    assert slept == []
+
+
+def test_etherscan_min_interval_reads_the_env_and_falls_back_on_a_bad_value(monkeypatch):
+    from opfor.scenarios.onchain.assets.contract.sources import etherscan
+
+    monkeypatch.delenv("OPFOR_ETHERSCAN_MIN_INTERVAL", raising=False)
+    assert etherscan._min_interval() == float(etherscan._MIN_INTERVAL_DEFAULT)
+    monkeypatch.setenv("OPFOR_ETHERSCAN_MIN_INTERVAL", "0")
+    assert etherscan._min_interval() == 0.0  # a paid plan disables the throttle
+    monkeypatch.setenv("OPFOR_ETHERSCAN_MIN_INTERVAL", "not-a-number")
+    assert etherscan._min_interval() == float(etherscan._MIN_INTERVAL_DEFAULT)  # bad value falls back
+
+
 def test_signal_and_guard_scans_are_mechanical():
     detections = load_detections(DETECTIONS)
     risk, central = scan_source(_VAULT_SOURCE, detections.signatures)

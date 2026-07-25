@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import os
+import threading
 import time
 import urllib.parse
 import urllib.request
@@ -18,10 +19,43 @@ import urllib.request
 _API = "https://api.etherscan.io/v2/api"
 _TIMEOUT = 15.0
 # The free tier caps calls per second, and a throttled reply comes back as an HTTP 200 whose body
-# says so, not as an error. Back off and retry a few times, then fail loud, so a throttled read is
-# never mistaken for an unverified contract or an empty result, invariant 5.
+# says so, not as an error. Two defenses stack. First a process-wide throttle paces every call so a
+# burst of balance reads, one contract's funds read alone fires several, stays under the cap rather
+# than tripping it, see `_etherscan_wait`. Second, a reply that is throttled anyway is backed off
+# and retried a few times, then fails loud, so a throttled read is never mistaken for an unverified
+# contract or an empty result, invariant 5.
 _MAX_RETRIES = 5
 _BACKOFF = 0.6
+# The minimum seconds between calls, so the run holds under the free 5 per second cap with margin.
+# One contract's funds read fires a balanceOf per value token plus native and decimals, so without
+# pacing a single read bursts past the cap. `OPFOR_ETHERSCAN_MIN_INTERVAL` tunes it, 0 disables it
+# for a paid plan. The throttle is process-wide so it holds even if reads ever run concurrently.
+_MIN_INTERVAL_DEFAULT = "0.22"
+_THROTTLE_LOCK = threading.Lock()
+_next_call = [0.0]
+
+
+def _min_interval() -> float:
+    """The configured minimum seconds between calls, read at the call so a changed environment is
+    seen. A non-numeric value falls back to the default rather than failing the read."""
+    raw = os.environ.get("OPFOR_ETHERSCAN_MIN_INTERVAL", _MIN_INTERVAL_DEFAULT)
+    try:
+        return max(0.0, float(raw))
+    except ValueError:
+        return float(_MIN_INTERVAL_DEFAULT)
+
+
+def _etherscan_wait(interval: float) -> None:
+    """Block until at least `interval` seconds have passed since the last call, across all threads,
+    so a burst of reads does not blow the per-second cap. A zero interval is a no-op."""
+    if interval <= 0:
+        return
+    with _THROTTLE_LOCK:
+        now = time.monotonic()
+        wait = _next_call[0] - now
+        if wait > 0:
+            time.sleep(wait)
+        _next_call[0] = time.monotonic() + interval
 # The V2 chain id per chain the scenario speaks. Ethereum is the primary chain, its free tier has
 # full module access, source, transfers, and the proxy RPC. A non-Ethereum chain such as bsc reads
 # verified source on the free tier but not the account and logs modules the deep pivot needs, so it
@@ -62,7 +96,9 @@ def get(chain: str, params: dict):
     which the calling capability turns into a loud failure."""
     query = urllib.parse.urlencode({"chainid": chain_id(chain), **params, "apikey": api_key()})
     request = urllib.request.Request(f"{_API}?{query}", headers={"User-Agent": "opfor-onchain/0.1"})
+    interval = _min_interval()
     for attempt in range(_MAX_RETRIES):
+        _etherscan_wait(interval)
         with urllib.request.urlopen(request, timeout=_TIMEOUT) as response:
             data = json.loads(response.read().decode("utf-8"))
         if not _rate_limited(data):

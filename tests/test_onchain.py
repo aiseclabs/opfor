@@ -375,6 +375,82 @@ def test_a_proxy_implementation_read_as_a_token_is_not_dex_layer_excluded():
     assert structural_exclusion("ethereum", addr, "token", None, is_implementation=True) is None
 
 
+def test_fingerprint_drops_vendored_files_and_hashes_own_code():
+    from opfor.scenarios.onchain.assets.contract.fingerprint import fingerprint
+    import json
+
+    source = json.dumps({"sources": {
+        "src/Vault.sol": {"content": "contract Vault { function withdraw() external {} }"},
+        "@openzeppelin/contracts/token/ERC20.sol": {"content": "contract ERC20 {}"},
+        "lib/v4-core/Currency.sol": {"content": "library Currency {}"},
+    }})
+    own_hashes, own_files, vendored_files = fingerprint("{" + source + "}")  # explorer double-brace wrap
+    assert own_files == 1 and vendored_files == 2  # only Vault.sol is the project's own code
+    assert len(own_hashes) == 1
+
+    # a source that is entirely third-party libraries has no own code
+    allvendor = json.dumps({"sources": {"@openzeppelin/a.sol": {"content": "contract A {}"},
+                                        "solmate/b.sol": {"content": "contract B {}"}}})
+    _, own, vend = fingerprint(allvendor)
+    assert own == 0 and vend == 2
+
+
+def test_report_clusters_two_deployments_of_one_project_into_one_target():
+    from opfor.core import Fact, Node, World
+    from opfor.scenarios.onchain.report import contract_records
+    from opfor.scenarios.onchain.assets.contract.types import (
+        ContractData, CodebaseFact, FundFact, IdentityFact, SourceFact,
+    )
+
+    token = "0xaaaa000000000000000000000000000000000050"    # the project token, smaller
+    rewards = "0xbbbb000000000000000000000000000000000051"  # its rewards contract, richer, inlines the token
+    world = World()
+    for addr, funds, hashes in ((token, 100_000, ("tokensrc",)),
+                                (rewards, 900_000, ("tokensrc", "rewardsrc"))):
+        nid = f"contract:ethereum:{addr}"
+        world.add(Node(id=nid, type="contract",
+                       payload=ContractData(chain="ethereum", address=addr, role="vault")))
+        world.absorb([Fact(kind="identified", about=nid, payload=IdentityFact(role="vault")),
+                      Fact(kind="funded", about=nid, payload=FundFact(funds_at_risk_usd=funds)),
+                      Fact(kind="sourced", about=nid, payload=SourceFact(verified=True, source_text="x")),
+                      Fact(kind="codebase", about=nid, payload=CodebaseFact(own_hashes=hashes, own_files=len(hashes)))])
+
+    recs = {c["address"]: c for c in contract_records(world, [])}
+    # both share the token source hash, so they are one project, the richer one is the primary
+    assert recs[token]["project"] == rewards and recs[rewards]["project"] == rewards
+    assert recs[rewards]["project_primary"] is True and recs[token]["project_primary"] is False
+    # the secondary member sorts below the primary, so the queue shows one target per project first
+    order = [c["address"] for c in contract_records(world, [])]
+    assert order.index(rewards) < order.index(token)
+
+
+def test_a_vendored_contract_is_excluded_from_the_audit_targets():
+    from opfor.core import Fact, Node, World
+    from opfor.scenarios.onchain.report import contract_records
+    from opfor.scenarios.onchain.lifecycle.triage import AuditTriage
+    from opfor.scenarios.onchain.assets.contract.types import (
+        ContractData, CodebaseFact, FundFact, IdentityFact, InterfaceFact, InterfaceFn, SignalFact, SourceFact,
+    )
+
+    addr = "0xcccc000000000000000000000000000000000052"
+    world = World()
+    nid = f"contract:ethereum:{addr}"
+    world.add(Node(id=nid, type="contract",
+                   payload=ContractData(chain="ethereum", address=addr, role="unknown")))
+    world.absorb([Fact(kind="identified", about=nid, payload=IdentityFact(role="unknown")),
+                  Fact(kind="funded", about=nid, payload=FundFact(funds_at_risk_usd=500_000)),
+                  Fact(kind="sourced", about=nid, payload=SourceFact(verified=True, source_text="x")),
+                  Fact(kind="interfaces", about=nid, payload=InterfaceFact(
+                      functions=(InterfaceFn(name="withdraw", is_fund_path=True, guarded=False),))),
+                  Fact(kind="signals", about=nid, payload=SignalFact(flags=("share_accounting",))),
+                  Fact(kind="codebase", about=nid, payload=CodebaseFact(vendored=True, vendored_files=3))])
+
+    rec = {c["address"]: c for c in contract_records(world, [])}[addr]
+    assert rec["audit_target"] is False and rec["excluded"] == "vendored-library"
+    # triage never even judges it, a dependency copy is not a project's own code to audit
+    assert AuditTriage(KNOWLEDGE, provider=MockProvider(), model="m").judge(world) == []
+
+
 def test_onchain_is_registered_and_runnable():
     from opfor.scenarios.registry import known_scenarios, report_adapter, run_adapter
 

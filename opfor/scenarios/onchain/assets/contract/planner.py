@@ -99,6 +99,10 @@ def _signals_rule(world: World) -> list[Task]:
     return _after_source_rule(world, "scan_signals", "signals")
 
 
+def _fingerprint_rule(world: World) -> list[Task]:
+    return _after_source_rule(world, "fingerprint_source", "codebase")
+
+
 def map_rules() -> list:
     """The contract MAP rules, sweep the survey then pivot each token or pool. The sweep runs only
     when the survey names no anchors, so a focused anchor run audits exactly the given contracts
@@ -119,4 +123,5 @@ def enrich_rules() -> list:
         _funds_rule,
         _interfaces_rule,
         _signals_rule,
+        _fingerprint_rule,
     ]

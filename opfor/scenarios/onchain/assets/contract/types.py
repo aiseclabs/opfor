@@ -88,6 +88,20 @@ class InterfaceFact:
 
 
 @dataclass(frozen=True, kw_only=True)
+class CodebaseFact:
+    """The fingerprint of a contract's own source, so two deployments of one project are recognized
+    as one codebase rather than counted as two targets. `own_hashes` are the content hashes of the
+    non-vendored source files, `own_files` and `vendored_files` count each kind, and `vendored` is
+    set when every file is a third-party library, so the contract is a dependency copy, not a
+    project's own code worth an audit slot."""
+
+    own_hashes: tuple[str, ...] = ()
+    own_files: int = 0
+    vendored_files: int = 0
+    vendored: bool = False
+
+
+@dataclass(frozen=True, kw_only=True)
 class SignalFact:
     """The risk-pattern signatures matched against the source. `flags` are the external-attacker
     signals such as `share_accounting`, `centralization` are the owner-power signals kept separate

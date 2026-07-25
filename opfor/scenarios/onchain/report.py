@@ -58,6 +58,7 @@ def contract_records(world: World, findings, known_infrastructure=None) -> list[
     known = load_known_infrastructure(KNOWLEDGE) if known_infrastructure is None \
         else known_infrastructure
     floor = _funds_floor()
+    own_by_address: dict[str, tuple[str, ...]] = {}
     findings_by_address: dict[str, list[str]] = {}
     for finding in findings:
         findings_by_address.setdefault(finding.where.lower(), []).append(finding.id)
@@ -90,6 +91,11 @@ def contract_records(world: World, findings, known_infrastructure=None) -> list[
         # A resolved proxy implementation is where the audited logic actually lives, so it is flagged
         # and ranked high among the targets, the correction over auditing the thin forwarding shell.
         is_impl = payload.source == "implementation"
+        # The codebase fingerprint, so two deployments of one project cluster as one target and a
+        # pure dependency copy is dropped. `own_hashes` are its own source files, used to cluster.
+        codebase = world.latest("codebase", node.id)
+        own_hashes = codebase.payload.own_hashes if codebase is not None else ()
+        is_vendored = codebase is not None and codebase.payload.vendored
         # A contract earns a record when it holds funds, carries a finding, exposes a fund path, or
         # matched a signal, so the report lists the surface that matters, not every swept token. A
         # proxy implementation earns one too, its logic is the target even when its own balance is
@@ -97,7 +103,7 @@ def contract_records(world: World, findings, known_infrastructure=None) -> list[
         if not (funds > 0 or finding_ids or interfaces or risk_flags or is_impl):
             continue
         excluded = structural_exclusion(payload.chain, payload.address, role, known,
-                                        is_implementation=is_impl)
+                                        is_implementation=is_impl, is_vendored=is_vendored)
         # Below the funds floor and carrying no finding, a contract is not worth an audit slot, so it
         # is excluded like the structural cases, after them so a structural reason wins the label. A
         # proxy implementation is exempt, its funds live in the proxy it stands behind, not in itself,
@@ -131,6 +137,11 @@ def contract_records(world: World, findings, known_infrastructure=None) -> list[
         if finding_ids:
             record["findings"] = finding_ids
         records.append(record)
+        if own_hashes:
+            own_by_address[payload.address] = own_hashes
+    # Cluster the records that share own source files into projects, so a project deployed as two
+    # contracts counts as one target and its secondary members sort below the primary.
+    _cluster_projects(records, own_by_address)
     # The ranking, deliberately not by funds first. Funds correlate with the most-audited public
     # infrastructure, so a pure balance sort promotes the least productive targets, the defect the
     # target-selection analysis found. Instead: audit targets first, then the finding-bearing, then
@@ -139,11 +150,55 @@ def contract_records(world: World, findings, known_infrastructure=None) -> list[
     # inventory sorts last however large its balance.
     def _rank(record: dict) -> tuple:
         signal_richness = len(record.get("risk_flags", [])) + len(record.get("fund_paths", []))
-        return (not record["audit_target"], not record.get("findings"),
+        is_secondary = record.get("project") is not None and not record.get("project_primary", True)
+        return (not record["audit_target"], is_secondary, not record.get("findings"),
                 not record.get("proxy_implementation"), not record.get("source_auditable"),
                 -signal_richness, -record["funds_at_risk_usd"], record["address"])
 
     return sorted(records, key=_rank)
+
+
+def _cluster_projects(records: list[dict], own_by_address: dict[str, tuple[str, ...]]) -> None:
+    """Group records that share an own source file into one project, mutating each grouped record
+    with a `project` id, the primary member's address, and `project_primary`. Two deployments of one
+    project, a token and its rewards contract, share their own files, so they cluster and the report
+    counts them as one target with its duplicate sorted below, not as two. A single-member group is
+    not a project and gets no tag. Vendored files are already dropped before the hashes, so a shared
+    library does not merge unrelated projects."""
+    hash_to_addrs: dict[str, list[str]] = {}
+    for addr, hashes in own_by_address.items():
+        for h in hashes:
+            hash_to_addrs.setdefault(h, []).append(addr)
+
+    parent = {addr: addr for addr in own_by_address}
+
+    def find(a: str) -> str:
+        while parent[a] != a:
+            parent[a] = parent[parent[a]]
+            a = parent[a]
+        return a
+
+    for addrs in hash_to_addrs.values():
+        for other in addrs[1:]:
+            parent[find(addrs[0])] = find(other)
+
+    groups: dict[str, list[str]] = {}
+    for addr in own_by_address:
+        groups.setdefault(find(addr), []).append(addr)
+
+    by_address = {r["address"]: r for r in records}
+    for members in groups.values():
+        recs = [by_address[a] for a in members if a in by_address]
+        if len(recs) < 2:
+            continue
+        # The primary is the member worth showing for the project, an audit target over an excluded
+        # one, then a finding-bearing over a quiet one, then the richest, so the group's real target
+        # leads and its duplicates fold under it rather than an excluded member taking the lead.
+        primary = sorted(recs, key=lambda r: (not r.get("audit_target"), not r.get("findings"),
+                                              -r["funds_at_risk_usd"], r["address"]))[0]
+        for r in recs:
+            r["project"] = primary["address"]
+            r["project_primary"] = r["address"] == primary["address"]
 
 
 def report_view(world: World, findings) -> dict:

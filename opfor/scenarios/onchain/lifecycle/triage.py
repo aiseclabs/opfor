@@ -185,8 +185,11 @@ class AuditTriage(Triage):
         central = signals.payload.centralization if signals is not None else ()
         sourced = world.latest("sourced", node.id)
         verified = sourced is not None and sourced.payload.verified
+        codebase = world.latest("codebase", node.id)
+        vendored = codebase is not None and codebase.payload.vendored
         return {"role": role, "funds": funds, "open_paths": open_paths, "guarded": guarded,
-                "risk_flags": risk_flags, "central": central, "verified": verified}
+                "risk_flags": risk_flags, "central": central, "verified": verified,
+                "vendored": vendored}
 
     def _is_target(self, node, facts: dict) -> bool:
         """Whether a contract belongs in the surface the model judges. The structural exclusions, a
@@ -195,7 +198,8 @@ class AuditTriage(Triage):
         A contract with nothing to weigh, no funds and no signals, carries no evidence to judge."""
         if structural_exclusion(node.payload.chain, node.payload.address, facts["role"],
                                 self._known,
-                                is_implementation=node.payload.source == "implementation") is not None:
+                                is_implementation=node.payload.source == "implementation",
+                                is_vendored=facts["vendored"]) is not None:
             return False
         return bool(facts["funds"] > 0 or facts["open_paths"] or facts["risk_flags"])
 

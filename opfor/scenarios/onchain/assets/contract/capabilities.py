@@ -13,6 +13,7 @@ from __future__ import annotations
 
 from opfor.core import Capability, Done, Fact, Failed, Node, Outcome, Phase, Task, World
 from opfor.scenarios.onchain.assets.contract.identify import Evidence
+from opfor.scenarios.onchain.assets.contract.fingerprint import fingerprint
 from opfor.scenarios.onchain.assets.contract.signals import (
     Detections,
     guarded_functions,
@@ -24,6 +25,7 @@ from opfor.scenarios.onchain.assets.contract.sources.funds import (
     value_token_addresses,
 )
 from opfor.scenarios.onchain.assets.contract.types import (
+    CodebaseFact,
     ContractData,
     FundFact,
     IdentityFact,
@@ -239,6 +241,29 @@ class EnumInterfaces(Capability):
         )
         return Done(facts=(Fact(kind="interfaces", about=task.node,
                                 payload=InterfaceFact(functions=functions)),))
+
+
+class FingerprintSource(Capability):
+    """ENRICH: fingerprint the verified source, so two deployments of one project cluster as one
+    codebase and a pure dependency copy is marked. Mechanical, it reads the source fact and holds
+    no seam. Whether two fingerprints are the same project is the report's grouping, not decided
+    here, this reports the raw own-file hashes."""
+
+    name = "fingerprint_source"
+    phase = Phase.ENRICH
+    osint = True
+
+    def run(self, task: Task, world: World) -> Outcome:
+        sourced = world.latest("sourced", task.node)
+        source_text = sourced.payload.source_text if sourced is not None else ""
+        own_hashes, own_files, vendored_files = fingerprint(source_text)
+        # A contract whose every file is a third-party library is a dependency copy, not a project's
+        # own code, so it is marked vendored to be kept out of the audit targets.
+        vendored = own_files == 0 and vendored_files > 0
+        return Done(facts=(Fact(kind="codebase", about=task.node,
+                                payload=CodebaseFact(own_hashes=own_hashes, own_files=own_files,
+                                                     vendored_files=vendored_files,
+                                                     vendored=vendored)),))
 
 
 class ScanSignals(Capability):

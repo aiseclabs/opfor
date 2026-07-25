@@ -24,18 +24,22 @@ _DEX_LAYER_ROLES = ("pool", "token")
 
 def structural_exclusion(chain: str, address: str, role: str,
                          known_infrastructure: dict[str, frozenset[str]] | None,
-                         is_implementation: bool = False) -> str | None:
+                         is_implementation: bool = False, is_vendored: bool = False) -> str | None:
     """Why a contract is not an audit target on structural grounds, or None when it is a candidate.
 
     The reason is a short slug, so the report can record why a contract was excluded rather than
     dropping it silently. None means the contract passes the structural filter and is a candidate,
     whether it then rises to a finding is triage's model call. A proxy implementation is exempt from
     the DEX-layer rule, it was resolved deliberately as the code behind a funded proxy, so even when
-    the model reads its token-like ABI as `token` it is logic worth auditing, not a raw pair.
+    the model reads its token-like ABI as `token` it is logic worth auditing, not a raw pair. A
+    contract whose every source file is a third-party library is a dependency copy, not a project's
+    own code, so it is excluded as vendored.
     """
     if not is_evm_address(address):
         return "malformed-address"
     addr = address.lower()
+    if is_vendored:
+        return "vendored-library"
     if role in _DEX_LAYER_ROLES and not is_implementation:
         return "dex-layer"
     if addr in NULL_ADDRESSES:

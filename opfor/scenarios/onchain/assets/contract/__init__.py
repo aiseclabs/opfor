@@ -15,6 +15,7 @@ from opfor.scenarios.onchain.assets.contract import planner
 from opfor.scenarios.onchain.assets.contract.capabilities import (
     EnumInterfaces,
     FetchSource,
+    FingerprintSource,
     IdentifyContract,
     PivotRelated,
     ReadFunds,
@@ -55,6 +56,7 @@ def assemble(*, sweep_fn, pivot_fn, source_fn, identify_fn, funds_fn, resolve_fn
         ReadFunds(funds_fn),
         EnumInterfaces(detections),
         ScanSignals(detections),
+        FingerprintSource(),
     )
     return ClassBundle(
         name=planner.CLASS,

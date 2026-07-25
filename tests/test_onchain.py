@@ -423,6 +423,75 @@ def test_triage_drops_a_null_address_even_when_it_reports_funds():
     assert AuditTriage(KNOWLEDGE, provider=MockProvider(), model="m").judge(world) == []
 
 
+def _auditable_world(addr="0xffff000000000000000000000000000000000009"):
+    """A world with one verified, funded, fund-path-exposing contract, so the base triage pass
+    mints a finding the adversarial roles can then weigh."""
+    from opfor.core import Fact, Node, World
+    from opfor.scenarios.onchain.assets.contract.types import (
+        ContractData, FundFact, IdentityFact, InterfaceFact, InterfaceFn, SignalFact, SourceFact,
+    )
+
+    world = World()
+    nid = f"contract:ethereum:{addr}"
+    world.add(Node(id=nid, type="contract",
+                   payload=ContractData(chain="ethereum", address=addr, role="vault")))
+    world.absorb([
+        Fact(kind="sourced", about=nid, payload=SourceFact(verified=True, source_text="x")),
+        Fact(kind="identified", about=nid, payload=IdentityFact(role="vault")),
+        Fact(kind="funded", about=nid, payload=FundFact(funds_at_risk_usd=1_000_000)),
+        Fact(kind="interfaces", about=nid, payload=InterfaceFact(
+            functions=(InterfaceFn(name="withdraw", is_fund_path=True, guarded=False),))),
+        Fact(kind="signals", about=nid, payload=SignalFact(flags=("share_accounting",))),
+    ])
+    return world, addr
+
+
+def _base_reply(addr):
+    return _reply({"address": addr, "category": "external-fund-path", "priority": "A",
+                   "severity": "HIGH", "title": "vault", "evidence": "funds behind an open path"})
+
+
+def test_adversarial_challenger_drops_a_refuted_finding():
+    from opfor.scenarios.onchain.lifecycle.triage import AuditTriage
+
+    world, addr = _auditable_world()
+    base = MockProvider(responses=[_base_reply(addr)])
+    challenger = MockProvider(responses=['{"refuted": true, "reason": "a value-token misread"}'])
+    triage = AuditTriage(KNOWLEDGE, provider=base, model="m", challenger=challenger)
+    assert triage.judge(world) == []  # refuted with no judge, so dropped
+
+
+def test_adversarial_judge_breaks_the_tie_and_keeps_the_finding():
+    from opfor.scenarios.onchain.lifecycle.triage import AuditTriage
+
+    world, addr = _auditable_world()
+    base = MockProvider(responses=[_base_reply(addr)])
+    challenger = MockProvider(responses=['{"refuted": true, "reason": "maybe a wrapper"}'])
+    judge = MockProvider(responses=['{"keep": true, "reason": "the open fund path is real"}'])
+    triage = AuditTriage(KNOWLEDGE, provider=base, model="m", challenger=challenger, judge=judge)
+    out = triage.judge(world)
+    assert len(out) == 1 and out[0].where == addr  # judge overrode the refutation
+
+
+def test_adversarial_is_recall_safe_when_a_role_call_fails():
+    from opfor.scenarios.onchain.lifecycle.triage import AuditTriage
+
+    world, addr = _auditable_world()
+    base = MockProvider(responses=[_base_reply(addr)])
+    # a challenger with no scripted reply raises on a blank completion, so the finding is kept
+    triage = AuditTriage(KNOWLEDGE, provider=base, model="m", challenger=MockProvider())
+    assert len(triage.judge(world)) == 1  # a role error never drops a finding
+
+
+def test_adversarial_mode_wires_the_roles_from_the_env(monkeypatch):
+    monkeypatch.setenv("OPFOR_TRIAGE_MODE", "adversarial")
+    sc = onchain.build(provider=MockProvider(), model="m", identify_fn=_fake_identify)
+    assert sc.triage._challenger is not None and sc.triage._judge is not None
+    monkeypatch.setenv("OPFOR_TRIAGE_MODE", "standard")
+    sc2 = onchain.build(provider=MockProvider(), model="m", identify_fn=_fake_identify)
+    assert sc2.triage._challenger is None and sc2.triage._judge is None
+
+
 def test_etherscan_throttle_serializes_calls_to_stay_under_the_rate_limit(monkeypatch):
     from opfor.scenarios.onchain.assets.contract.sources import etherscan
 

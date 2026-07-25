@@ -17,6 +17,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from opfor.core import Node, Phase, Provider, RuleSet, Scenario, World, default_model, make_provider
+from opfor.core import role_model, triage_mode
 from opfor.scenarios.onchain.assets.contract import assemble
 from opfor.scenarios.onchain.assets.contract import identify as contract_identify
 from opfor.scenarios.onchain.assets.contract import sources as contract_src
@@ -44,6 +45,20 @@ def _payloads() -> dict[str, type]:
     return registry
 
 
+def _adversarial_roles(provider, model, challenger, challenger_model, judge, judge_model):
+    """The challenger and judge roles for triage. In adversarial mode the challenger refutes each
+    finding and the judge breaks the tie, so a false positive must survive a skeptic. Both roles
+    reuse the base provider with a per-role model override by default, a caller may inject its own.
+    Standard mode leaves them off, the recall-safe single-model default."""
+    if triage_mode() != "adversarial":
+        return challenger, challenger_model, judge, judge_model
+    if challenger is None:
+        challenger, challenger_model = provider, role_model("challenger", model)
+    if judge is None:
+        judge, judge_model = provider, role_model("judge", model)
+    return challenger, challenger_model, judge, judge_model
+
+
 def build(
     *,
     sweep_fn=contract_src.sweep,
@@ -53,10 +68,16 @@ def build(
     funds_fn=contract_src.read_funds,
     provider: Provider | None = None,
     model: str | None = None,
+    challenger: Provider | None = None,
+    challenger_model: str | None = None,
+    judge: Provider | None = None,
+    judge_model: str | None = None,
 ) -> Scenario:
     """Assemble the scenario from the contract class. Identify and triage are model-backed, built
     from the provider the environment selects, keyless on the operator's Claude Code subscription
-    by default. The seams are injected so a test swaps its own fake identify and provider."""
+    by default. The seams are injected so a test swaps its own fake identify and provider. Triage
+    runs an adversarial challenger and judge when OPFOR_TRIAGE_MODE is adversarial, standard
+    single-model otherwise."""
     if provider is None:
         provider = make_provider()
     model = model or default_model()
@@ -65,6 +86,8 @@ def build(
     if identify_fn is None:
         def identify_fn(evidence):
             return contract_identify.identify_role(provider, model, evidence)
+    challenger, challenger_model, judge, judge_model = _adversarial_roles(
+        provider, model, challenger, challenger_model, judge, judge_model)
     bundle = assemble(sweep_fn=sweep_fn, pivot_fn=pivot_fn, source_fn=source_fn,
                       identify_fn=identify_fn, funds_fn=funds_fn)
     rules = {Phase.MAP: list(bundle.map_rules), Phase.ENRICH: list(bundle.enrich_rules)}
@@ -75,7 +98,8 @@ def build(
         capabilities=bundle.capabilities,
         planner=RuleSet(rules),
         triage=AuditTriage(bundle.knowledge_dir, provider=provider, model=model,
-                           known_infrastructure=known),
+                           known_infrastructure=known, challenger=challenger,
+                           challenger_model=challenger_model, judge=judge, judge_model=judge_model),
         terminal=Phase.TRIAGE,
         payloads=_payloads(),
     )

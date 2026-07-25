@@ -24,11 +24,8 @@ from opfor.scenarios.onchain.assets.contract.sources.observations import Related
 _TRANSFER_SCAN = 200
 _COUNTERPARTY_CHECK = 12
 _MAX_DEEP = 5
-# Burn and mint sinks that are never audit targets, dropped before ranking.
-_DEAD = frozenset({
-    "0x0000000000000000000000000000000000000000",
-    "0x000000000000000000000000000000000000dead",
-})
+# Burn and mint sinks that are never audit targets, dropped before ranking, shared with the sweep.
+_DEAD = funds.NULL_ADDRESSES
 
 
 def counterparty_pivot(contract, *, fetch_transfers, is_contract, max_deep=_MAX_DEEP):

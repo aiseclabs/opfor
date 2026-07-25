@@ -37,6 +37,15 @@ _VALUE_TOKENS = {
 }
 
 
+# The null and burn sinks. They are not contracts, they are where tokens go to be destroyed, so
+# every chain's burned supply piles up at them and a naive balance read prices that pile as funds.
+# They are never an audit target, so they are skipped at the sweep and dropped by triage.
+NULL_ADDRESSES = frozenset({
+    "0x0000000000000000000000000000000000000000",
+    "0x000000000000000000000000000000000000dead",
+})
+
+
 def value_token_addresses(chain: str) -> frozenset[str]:
     """The value-token addresses for a chain, lowercased. The pivot uses this to skip pivoting a
     money token such as WETH or a stable, which is a quote token in half the pools on the chain and

@@ -384,6 +384,45 @@ def test_pivot_only_pivots_tokens():
     assert related == []
 
 
+def test_sweep_skips_the_null_and_burn_sinks():
+    # a pool that lists the zero address as a side must not become a contract node, else its
+    # burned-supply balance is later priced as millions and surfaces as a false high-value finding
+    from opfor.core import Task, World, Node
+    from opfor.scenarios.onchain.assets.contract.capabilities import SweepPools
+    from opfor.scenarios.onchain.assets.contract.sources.observations import PoolObservation
+    from opfor.scenarios.onchain.seed import Survey
+
+    zero = "0x0000000000000000000000000000000000000000"
+    pool = PoolObservation(address=_POOL, chain="ethereum", dex_id="uniswap", url="u",
+                           base_address=_TOKEN, base_symbol="PRJ",
+                           quote_address=zero, quote_symbol="?", liquidity_usd=90_000.0)
+    world = World()
+    world.add(Node(id="survey:ethereum", type="survey",
+                   payload=Survey(name="t", chain="ethereum")))
+    outcome = SweepPools(lambda s: (pool,)).run(Task(capability="sweep_pools", node="survey:ethereum"),
+                                                world)
+    yielded = {n.payload.address.lower() for f in outcome.facts for n in f.yields}
+    assert _TOKEN.lower() in yielded  # the real project token is kept
+    assert zero not in yielded  # the null sink is skipped, never a node
+
+
+def test_triage_drops_a_null_address_even_when_it_reports_funds():
+    # defense in depth: a null sink arriving by any path than the sweep is dropped before the model
+    from opfor.core import Fact, Node, World
+    from opfor.scenarios.onchain.lifecycle.triage import AuditTriage
+    from opfor.scenarios.onchain.assets.contract.types import ContractData, FundFact, IdentityFact
+
+    zero = "0x0000000000000000000000000000000000000000"
+    world = World()
+    nid = f"contract:ethereum:{zero}"
+    world.add(Node(id=nid, type="contract",
+                   payload=ContractData(chain="ethereum", address=zero, role="unknown")))
+    world.absorb([Fact(kind="identified", about=nid, payload=IdentityFact(role="unknown")),
+                  Fact(kind="funded", about=nid, payload=FundFact(funds_at_risk_usd=2_000_000))])
+    # pruned before any model call, so the mock provider is never consulted
+    assert AuditTriage(KNOWLEDGE, provider=MockProvider(), model="m").judge(world) == []
+
+
 def test_signal_and_guard_scans_are_mechanical():
     detections = load_detections(DETECTIONS)
     risk, central = scan_source(_VAULT_SOURCE, detections.signatures)

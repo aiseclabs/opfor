@@ -18,7 +18,10 @@ from opfor.scenarios.onchain.assets.contract.signals import (
     guarded_functions,
     scan_source,
 )
-from opfor.scenarios.onchain.assets.contract.sources.funds import value_token_addresses
+from opfor.scenarios.onchain.assets.contract.sources.funds import (
+    NULL_ADDRESSES,
+    value_token_addresses,
+)
 from opfor.scenarios.onchain.assets.contract.types import (
     ContractData,
     FundFact,
@@ -58,8 +61,10 @@ class SweepPools(Capability):
             return _net_failed("dex sweep", exc)
         # A value token, WETH or a stable, is money not an audit target, so it is not made a node.
         # This keeps the quote side of every pool out of ENRICH, where it would only be fetched and
-        # then skipped, and leaves the project token as the thing to pivot.
-        skip = value_token_addresses(survey.chain)
+        # then skipped, and leaves the project token as the thing to pivot. The null and burn sinks
+        # are skipped for the same reason, a pool that lists one as a side would otherwise become a
+        # node whose burned-supply balance a naive funds read prices as millions.
+        skip = value_token_addresses(survey.chain) | NULL_ADDRESSES
         nodes: list[Node] = []
         for pool in pools:
             nodes.append(Node(id=_node_id(pool.chain, pool.address), type="contract",

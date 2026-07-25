@@ -26,7 +26,10 @@ from pathlib import Path
 
 from opfor.core import (Finding, Message, Provider, SEVERITIES, Triage, World, iter_md_docs,
                         require_json_object)
-from opfor.scenarios.onchain.assets.contract.sources.funds import value_token_addresses
+from opfor.scenarios.onchain.assets.contract.sources.funds import (
+    NULL_ADDRESSES,
+    value_token_addresses,
+)
 
 SYSTEM = (
     "You are the triage judge of an authorized offensive-security on-chain reconnaissance run. "
@@ -163,6 +166,11 @@ class AuditTriage(Triage):
         if facts["role"] in _NOT_AUDIT_TARGET:
             return False
         address = node.payload.address.lower()
+        # The null and burn sinks are where tokens go to die, so their balance is the chain's burned
+        # supply, not funds at risk. They are dropped here too, so one arriving by any path than the
+        # sweep, a pivot or an anchor, never becomes a false high-value finding.
+        if address in NULL_ADDRESSES:
+            return False
         if address in self._known.get(node.payload.chain, frozenset()):
             return False
         if address in value_token_addresses(node.payload.chain):

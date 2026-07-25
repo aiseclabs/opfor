@@ -4,10 +4,12 @@ Identify reads a contract's evidence, its external function names and its verifi
 names the role it plays, `vault`, `staking`, `farm`, `lending`, `router`, `locker`, `presale`,
 `proxy`, or the DEX-layer `pool` and `token`, and `unknown` when the evidence does not support a
 role. It is model-backed so it recognizes a role from a novel or non-standard naming rather than
-matching a fixed marker table, and it stays a seam, so the capability that calls it holds no model
-and reads no knowledge. Naming nothing is a valid answer, an `unknown` role, not an error. A reply
-that carries no JSON object at all is a model failure, not a clean negative, so it raises,
-invariant 5.
+matching a fixed marker table. A `role_reference`, the role fingerprints loaded from
+`knowledge/technologies/`, rides in the prompt so the model has a structured guide and returns
+`unknown` less often. The fingerprints are data the build layer loads and passes in, so the seam
+holds no path and the capability that calls it holds no model. Naming nothing is a valid answer, an
+`unknown` role, not an error. A reply that carries no JSON object at all is a model failure, not a
+clean negative, so it raises, invariant 5.
 """
 
 from __future__ import annotations
@@ -43,19 +45,23 @@ SYSTEM = (
 )
 
 
-def identify_role(provider: Provider, model: str, evidence: Evidence) -> str:
+def identify_role(provider: Provider, model: str, evidence: Evidence,
+                  role_reference: str = "") -> str:
     """Ask the model to name the contract's role from its evidence.
 
-    Returns one lowercase role word, `unknown` when the evidence supports none. A model call that
-    fails raises, the caller reports that loud. A reply that carries no JSON object raises too,
-    since that is the model failing the contract, not a contract with no role.
+    `role_reference` is the rendered role fingerprints, appended to the system prompt as a guide, so
+    the model recognizes a role from non-standard naming. Returns one lowercase role word, `unknown`
+    when the evidence supports none. A model call that fails raises, the caller reports that loud. A
+    reply that carries no JSON object raises too, since that is the model failing the contract, not
+    a contract with no role.
     """
+    system = f"{SYSTEM}\n\n{role_reference}" if role_reference else SYSTEM
     result = provider.complete(
-        system=SYSTEM,
+        system=system,
         messages=[Message(role="user", content=_render(evidence))],
         model=model,
         max_tokens=256,
-        cache=False,
+        cache=bool(role_reference),
     )
     obj = extract_json_object(result.text)
     if obj is None:

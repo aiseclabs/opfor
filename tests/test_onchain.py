@@ -199,6 +199,38 @@ def test_identify_is_model_backed_and_fails_loud_on_no_json():
         identify_role(MockProvider(responses=["I could not tell"]), "m", Evidence())
 
 
+def test_role_fingerprints_load_and_render_for_the_identify_prompt():
+    from opfor.scenarios.onchain.assets.contract.roles import load_roles, render_roles
+
+    roles = load_roles(KNOWLEDGE / "technologies")
+    by_role = {fp.role: fp for fp in roles}
+    assert "vault" in by_role and "staking" in by_role and "farm" in by_role
+    assert "deposit" in by_role["vault"].markers  # a marker function rode in from the data file
+    rendered = render_roles(roles)
+    assert "Known role fingerprints" in rendered
+    assert "vault:" in rendered and "stake" in rendered  # the guide names roles and their markers
+
+
+def test_missing_technologies_dir_yields_no_fingerprints(tmp_path):
+    from opfor.scenarios.onchain.assets.contract.roles import load_roles, render_roles
+
+    # a thin knowledge tree identifies on the seam's own vocabulary rather than failing
+    assert load_roles(tmp_path / "nope") == ()
+    assert render_roles(()) == ""
+
+
+def test_identify_rides_the_role_fingerprints_into_the_model_prompt():
+    from opfor.scenarios.onchain.assets.contract.roles import load_roles, render_roles
+
+    reference = render_roles(load_roles(KNOWLEDGE / "technologies"))
+    provider = MockProvider(responses=['{"role": "staking"}'])
+    role = identify_role(provider, "m", Evidence(functions=("stake", "getReward")),
+                         role_reference=reference)
+    assert role == "staking"
+    # the fingerprints reached the model as the reference guide, not a fixed table in code
+    assert "Known role fingerprints" in provider.calls[0]["system"]
+
+
 def test_an_anchor_run_audits_the_given_contract_and_skips_the_sweep():
     # a focused run: the operator names a contract to audit, no chain sweep
     provider = MockProvider(responses=[_reply(_VAULT_VERDICT)])

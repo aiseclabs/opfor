@@ -1,13 +1,11 @@
 # Technologies
 
-Known contract fingerprints, so a role is identified from a signature before a model is asked, and a
-standard or bluechip contract is recognized and downgraded. Today the role signatures live in the
-`identify` seam as the class's own data. Moving them here, a data file per known template, is the
-same increment the domain class already made, tracked in the design doc.
+The role fingerprints the identify seam reads, so a role is recognized from a known template's
+marker functions rather than guessed, and a standard or bluechip contract is named for what it is.
+The fingerprints are data, one entry per role, so adding a template is a data change, not a code
+change. They are a guide the model weighs, the classification stays the model's, not a mechanical
+match.
 
-Planned entries.
-
-- Standard AMM pair templates, the PancakeSwap v2 and v3 pair, so a swept pool is recognized as the
-  low-value layer and downgraded rather than reported on its own.
-- OpenZeppelin proxy patterns, so an upgradeable surface is identified by its fingerprint.
-- Common staking and vault templates, so a known-safe fork is not read as a novel target.
+- `roles.yaml` One entry per role, its summary and the marker functions that signal it. It covers
+  the fund-management roles, vault, staking, farm, lending, locker, presale, the router and proxy
+  surfaces, and the DEX-layer pool and token that are downgraded on their own.

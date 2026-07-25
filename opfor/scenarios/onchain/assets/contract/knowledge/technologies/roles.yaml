@@ -1,0 +1,44 @@
+# Role fingerprints the identify seam reads. Each entry names a contract role and the marker
+# functions that signal it, so the model recognizes a role from non-standard naming rather than
+# guessing. Adding a template is an entry here, not a code change. The markers are a guide the
+# model weighs, the classification stays the model's, not a mechanical match.
+roles:
+  - role: vault
+    summary: Custodies a deposited asset and issues shares against it, an ERC4626-style tokenized vault.
+    markers: [deposit, withdraw, redeem, mint, totalAssets, convertToShares, convertToAssets, pricePerShare, getPricePerFullShare]
+
+  - role: staking
+    summary: Stakes a token for a time-based reward, a single-asset staking or reward pool.
+    markers: [stake, unstake, withdraw, getReward, claim, earned, rewardPerToken, rewardRate, notifyRewardAmount]
+
+  - role: farm
+    summary: A MasterChef-style yield farm that allocates rewards across many pools by id.
+    markers: [deposit, withdraw, pendingReward, poolInfo, userInfo, massUpdatePools, updatePool, allocPoint, emergencyWithdraw]
+
+  - role: lending
+    summary: Lends and borrows against collateral, a money market or lending pool.
+    markers: [borrow, repay, supply, redeem, liquidate, liquidationCall, collateral, healthFactor, accrueInterest, exchangeRateStored]
+
+  - role: router
+    summary: Routes swaps and liquidity across pools, a DEX router or aggregator, not a custody target on its own.
+    markers: [swapExactTokensForTokens, swapTokensForExactTokens, addLiquidity, removeLiquidity, getAmountsOut, getAmountsIn, quote]
+
+  - role: locker
+    summary: Locks or vests tokens until a release time, a liquidity or team-token locker.
+    markers: [lock, unlock, release, vest, withdraw, extendLock, lockedAmount, unlockTime, claimable]
+
+  - role: presale
+    summary: Sells a token before launch and lets buyers claim later, a presale or launchpad sale.
+    markers: [buy, contribute, claim, finalize, refund, whitelist, hardCap, softCap, tokensPurchased]
+
+  - role: proxy
+    summary: An upgradeable proxy whose implementation, and so the code behind the funds, can change.
+    markers: [upgradeTo, upgradeToAndCall, initialize, implementation, admin, changeAdmin, _setImplementation]
+
+  - role: pool
+    summary: A plain AMM pair holding a reserve of two tokens, the raw DEX layer, downgraded on its own.
+    markers: [swap, mint, burn, getReserves, skim, sync, token0, token1]
+
+  - role: token
+    summary: A plain ERC20 with no fund-management logic of its own, downgraded on its own.
+    markers: [transfer, transferFrom, approve, allowance, balanceOf, totalSupply]

@@ -18,10 +18,11 @@ from pathlib import Path
 
 from opfor.core import Node, Phase, Provider, RuleSet, Scenario, World, default_model, make_provider
 from opfor.core import role_model, triage_mode
-from opfor.scenarios.onchain.assets.contract import assemble
+from opfor.scenarios.onchain.assets.contract import KNOWLEDGE, assemble
 from opfor.scenarios.onchain.assets.contract import identify as contract_identify
 from opfor.scenarios.onchain.assets.contract import sources as contract_src
 from opfor.scenarios.onchain.assets.contract.known import load_known_infrastructure
+from opfor.scenarios.onchain.assets.contract.roles import load_roles, render_roles
 from opfor.scenarios.onchain.assets.contract.types import ContractData
 from opfor.scenarios.onchain.lifecycle.triage import AuditTriage
 from opfor.scenarios.onchain.report import report_view
@@ -82,10 +83,15 @@ def build(
         provider = make_provider()
     model = model or default_model()
     # The identify seam is model-backed, wired from the same provider by default, so the capability
-    # holds no model, and a test injects its own fake. Identify names the role, triage judges it.
+    # holds no model, and a test injects its own fake. It reads the role fingerprints loaded here
+    # from knowledge/technologies/ as a guide, so the knowledge stays data the build layer passes
+    # in and the seam holds no path. Identify names the role, triage judges it.
     if identify_fn is None:
+        role_reference = render_roles(load_roles(KNOWLEDGE / "technologies"))
+
         def identify_fn(evidence):
-            return contract_identify.identify_role(provider, model, evidence)
+            return contract_identify.identify_role(provider, model, evidence,
+                                                   role_reference=role_reference)
     challenger, challenger_model, judge, judge_model = _adversarial_roles(
         provider, model, challenger, challenger_model, judge, judge_model)
     bundle = assemble(sweep_fn=sweep_fn, pivot_fn=pivot_fn, source_fn=source_fn,

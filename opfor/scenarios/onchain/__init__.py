@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from opfor.core import Node, Phase, RuleSet, Scenario, World
+from opfor.core import Node, Phase, Provider, RuleSet, Scenario, World, default_model, make_provider
 from opfor.scenarios.onchain.assets.contract import assemble
 from opfor.scenarios.onchain.assets.contract import identify as contract_identify
 from opfor.scenarios.onchain.assets.contract import sources as contract_src
@@ -49,12 +49,22 @@ def build(
     sweep_fn=contract_src.sweep,
     pivot_fn=contract_src.pivot,
     source_fn=contract_src.fetch_source,
-    identify_fn=contract_identify.identify_role,
+    identify_fn=None,
     funds_fn=contract_src.read_funds,
+    provider: Provider | None = None,
+    model: str | None = None,
 ) -> Scenario:
-    """Assemble the scenario from the contract class. The seams are injected so a test swaps its
-    own. Triage is rule-based, a deterministic audit-worthiness ladder, a model-backed pass over
-    the knowledge tree is the tracked next increment."""
+    """Assemble the scenario from the contract class. Identify and triage are model-backed, built
+    from the provider the environment selects, keyless on the operator's Claude Code subscription
+    by default. The seams are injected so a test swaps its own fake identify and provider."""
+    if provider is None:
+        provider = make_provider()
+    model = model or default_model()
+    # The identify seam is model-backed, wired from the same provider by default, so the capability
+    # holds no model, and a test injects its own fake. Identify names the role, triage judges it.
+    if identify_fn is None:
+        def identify_fn(evidence):
+            return contract_identify.identify_role(provider, model, evidence)
     bundle = assemble(sweep_fn=sweep_fn, pivot_fn=pivot_fn, source_fn=source_fn,
                       identify_fn=identify_fn, funds_fn=funds_fn)
     rules = {Phase.MAP: list(bundle.map_rules), Phase.ENRICH: list(bundle.enrich_rules)}
@@ -64,7 +74,8 @@ def build(
         content_root=Path(__file__).resolve().parent,
         capabilities=bundle.capabilities,
         planner=RuleSet(rules),
-        triage=AuditTriage(known_infrastructure=known),
+        triage=AuditTriage(bundle.knowledge_dir, provider=provider, model=model,
+                           known_infrastructure=known),
         terminal=Phase.TRIAGE,
         payloads=_payloads(),
     )

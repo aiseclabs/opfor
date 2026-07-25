@@ -1,9 +1,9 @@
 # Findings
 
 The audit-worthiness classes triage reads. Each file states what the class is and how it moves the
-priority, so the judgment is prose a reader, or a later model-backed triage, weighs, not a keyword
-list in code. The rule-based triage today encodes the same ladder, funds are the floor, a
-user-reachable fund path plus a complex or dependency signal is the high bar.
+priority, so the judgment is prose the model-backed triage weighs, not a keyword list in code. The
+ladder these classes describe, funds are the floor, a user-reachable fund path plus a complex or
+dependency signal is the high bar, is guidance the model reads, not a rule the engine encodes.
 
 - `external-fund-path.md` A fund path any caller can reach.
 - `complex-fund-accounting.md` Share, reward, or LP valuation math that a miscalculation would move

@@ -11,10 +11,13 @@ from __future__ import annotations
 
 import json
 
-from opfor.core import Budget, Scope
+import pytest
+
+from opfor.core import Budget, MockProvider, Scope
 from opfor.core.engine import run as engine_run
 from opfor.core.phase import Phase
 from opfor.scenarios import onchain
+from opfor.scenarios.onchain.assets.contract import KNOWLEDGE
 from opfor.scenarios.onchain.assets.contract.identify import Evidence, identify_role
 from opfor.scenarios.onchain.assets.contract.signals import (
     guarded_functions,
@@ -80,9 +83,33 @@ def _fake_funds(contract, hint_usd):
     return FundObservation(funds_at_risk_usd=0.0)
 
 
-def _run():
+def _fake_identify(evidence):
+    """A stand-in for the model-backed identify seam, so the pipeline tests stay deterministic and
+    the only model call in a run is triage's. It names the vault from its markers and otherwise
+    keeps the DEX-layer role hint the sweep or pivot recorded."""
+    fns = {f.lower() for f in evidence.functions}
+    if {"deposit", "withdraw"} <= fns or "redeem" in fns:
+        return "vault"
+    return evidence.role_hint
+
+
+def _reply(*findings):
+    """A triage model reply carrying the given findings, the JSON the mock provider returns."""
+    return json.dumps({"findings": list(findings)})
+
+
+# The one contract the fixture run surfaces to triage, the pivoted vault. Its structured facts come
+# from the world, so the reply only needs to name the address, the category, and the verdict.
+_VAULT_VERDICT = {"address": _VAULT, "category": "external-fund-path", "priority": "A",
+                  "severity": "HIGH", "title": "vault worth a full audit",
+                  "evidence": "holds funds behind an unguarded deposit and withdraw"}
+
+
+def _run(triage_responses=None):
+    provider = MockProvider(responses=triage_responses if triage_responses is not None
+                            else [_reply(_VAULT_VERDICT)])
     scenario = onchain.build(sweep_fn=_fake_sweep, pivot_fn=_fake_pivot, source_fn=_fake_source,
-                             identify_fn=identify_role, funds_fn=_fake_funds)
+                             identify_fn=_fake_identify, funds_fn=_fake_funds, provider=provider)
     world = onchain.seed("bsc-test", chain="bsc")
     report = engine_run(scenario, world, scope=Scope(max_tier="recon"), budget=Budget(500))
     return report, world
@@ -107,14 +134,16 @@ def test_triage_mints_one_audit_candidate_on_the_fund_contract():
     report, _ = _run()
     assert len(report.findings) == 1  # the vault, not the bare pool or token
     finding = report.findings[0]
-    assert finding.severity == "HIGH"
+    assert finding.severity == "HIGH"  # the model's verdict
     assert finding.where == _VAULT
     data = finding.data
-    assert data["kind"] == "audit-candidate" and data["priority"] == "A"
+    # the category and priority are the model's judgment
+    assert data["kind"] == "external-fund-path" and data["priority"] == "A"
+    # the structured facts come from the world, so the record stays faithful to what the run saw
     assert data["role"] == "vault"
     assert "deposit" in data["open_fund_paths"]
     assert {"share_accounting", "dex_spot_price_dependency"} <= set(data["risk_flags"])
-    # centralization is recorded but did not raise the priority
+    # centralization is recorded but is not what raised the finding
     assert "owner_can_pause" in data["centralization_flags"]
 
 
@@ -160,16 +189,21 @@ def test_prepare_run_defaults_to_ethereum_and_recon_only():
     assert survey is not None and survey.payload.chain == "ethereum"
 
 
-def test_identify_needs_two_markers_so_a_shared_name_does_not_misclassify():
-    # a lone deposit is not a vault, two vault markers are
-    assert identify_role(Evidence(functions=("deposit",), role_hint="token")) == "token"
-    assert identify_role(Evidence(functions=("deposit", "withdraw", "redeem"))) == "vault"
+def test_identify_is_model_backed_and_fails_loud_on_no_json():
+    # identify names the role the model returns for the evidence
+    provider = MockProvider(responses=['{"role": "vault"}'])
+    assert identify_role(provider, "m", Evidence(functions=("deposit", "withdraw"),
+                                                 source_text="contract V {}")) == "vault"
+    # a reply carrying no JSON object is a model failure, not a clean unknown, invariant 5
+    with pytest.raises(RuntimeError):
+        identify_role(MockProvider(responses=["I could not tell"]), "m", Evidence())
 
 
 def test_an_anchor_run_audits_the_given_contract_and_skips_the_sweep():
     # a focused run: the operator names a contract to audit, no chain sweep
+    provider = MockProvider(responses=[_reply(_VAULT_VERDICT)])
     scenario = onchain.build(sweep_fn=_fake_sweep, pivot_fn=_fake_pivot, source_fn=_fake_source,
-                             identify_fn=identify_role, funds_fn=_fake_funds)
+                             identify_fn=_fake_identify, funds_fn=_fake_funds, provider=provider)
     world = onchain.seed("focus", chain="bsc", anchors=[_VAULT])
     report = engine_run(scenario, world, scope=Scope(max_tier="recon"), budget=Budget(500))
 
@@ -227,9 +261,17 @@ def test_triage_drops_known_infrastructure_however_much_it_holds():
         return world
 
     known = {"ethereum": frozenset({infra})}
-    assert AuditTriage(known_infrastructure=known).judge(_world(infra)) == []  # dropped as infra
-    # the same shape at a non-denylisted address is a real high finding
-    other = AuditTriage(known_infrastructure=known).judge(_world("0xffff000000000000000000000000000000000001"))
+    # the denylisted contract is pruned before the model, so triage never even calls it
+    dropped = AuditTriage(KNOWLEDGE, provider=MockProvider(), model="m",
+                          known_infrastructure=known).judge(_world(infra))
+    assert dropped == []  # dropped as infra
+    # the same shape at a non-denylisted address reaches the model and it judges it high
+    other_addr = "0xffff000000000000000000000000000000000001"
+    provider = MockProvider(responses=[_reply({"address": other_addr, "category": "external-fund-path",
+                                               "priority": "A", "severity": "HIGH", "title": "t",
+                                               "evidence": "e"})])
+    other = AuditTriage(KNOWLEDGE, provider=provider, model="m",
+                        known_infrastructure=known).judge(_world(other_addr))
     assert len(other) == 1 and other[0].severity == "HIGH"
 
 
@@ -268,11 +310,16 @@ def test_triage_surfaces_an_unverified_high_value_contract():
                       Fact(kind="funded", about=nid, payload=FundFact(funds_at_risk_usd=funds))])
         return world
 
-    findings = AuditTriage().judge(_world(5_000_000))
-    assert len(findings) == 1  # unverified but $5M, so surfaced on its own class
+    # unverified but $5M: the model surfaces it on the unverified-high-value class
+    big = MockProvider(responses=[_reply({"address": "0xopaque", "category": "unverified-high-value",
+                                          "priority": "U", "severity": "MEDIUM",
+                                          "title": "opaque high-value", "evidence": "$5M unverified"})])
+    findings = AuditTriage(KNOWLEDGE, provider=big, model="m").judge(_world(5_000_000))
+    assert len(findings) == 1
     assert findings[0].data["kind"] == "unverified-high-value" and findings[0].severity == "MEDIUM"
-    # a small unverified balance is left alone, one of many throwaway deploys
-    assert AuditTriage().judge(_world(5_000)) == []
+    # a small unverified balance the model judges not worth an engineer's time, an empty result
+    small = MockProvider(responses=[_reply()])
+    assert AuditTriage(KNOWLEDGE, provider=small, model="m").judge(_world(5_000)) == []
 
 
 def test_funds_prices_the_pivoted_project_token_not_just_the_value_set():

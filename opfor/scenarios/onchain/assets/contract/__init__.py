@@ -2,8 +2,8 @@
 
 It owns the sweep-and-pivot discovery, the source, identify, funds, interface, and signal
 enrichment, and the detection data its interface and signal scans apply, all under its
-`knowledge` tree. It declares that knowledge directory for the report and any future model-backed
-triage to read. The seams are injected, so a test drives the class with fixtures.
+`knowledge` tree. It declares that knowledge directory for the report and the model-backed triage
+to read. The seams are injected, so a test drives the class with fixtures.
 """
 
 from __future__ import annotations

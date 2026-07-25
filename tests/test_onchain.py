@@ -451,6 +451,35 @@ def test_a_vendored_contract_is_excluded_from_the_audit_targets():
     assert AuditTriage(KNOWLEDGE, provider=MockProvider(), model="m").judge(world) == []
 
 
+def test_a_hub_is_flagged_prioritized_and_exempt_from_the_funds_floor():
+    from opfor.core import Fact, Node, World
+    from opfor.scenarios.onchain.report import contract_records
+    from opfor.scenarios.onchain.assets.contract.types import ContractData, FundFact, IdentityFact, SourceFact
+
+    hub = "0xaaaa000000000000000000000000000000000060"    # many contracts pivoted from it, near zero
+    plain = "0xbbbb000000000000000000000000000000000061"  # a richer plain target
+    spokes = [f"0xcccc0000000000000000000000000000000000{i:02x}" for i in range(2)]
+    world = World()
+    for addr, funds in ((hub, 100), (plain, 500_000)):
+        nid = f"contract:ethereum:{addr}"
+        world.add(Node(id=nid, type="contract",
+                       payload=ContractData(chain="ethereum", address=addr, role="unknown")))
+        world.absorb([Fact(kind="identified", about=nid, payload=IdentityFact(role="unknown")),
+                      Fact(kind="funded", about=nid, payload=FundFact(funds_at_risk_usd=funds)),
+                      Fact(kind="sourced", about=nid, payload=SourceFact(verified=True, source_text="x"))])
+    # two spoke contracts were pivoted from the hub, making it a shared origin
+    for s in spokes:
+        world.add(Node(id=f"contract:ethereum:{s}", type="contract",
+                       payload=ContractData(chain="ethereum", address=s, role="unknown", related_to=hub)))
+
+    rec = {c["address"]: c for c in contract_records(world, [])}
+    assert rec[hub]["hub"] is True and rec[hub]["hub_refs"] == 2
+    # the $100 hub survives the funds floor and outranks the $500k plain target on its centrality
+    assert rec[hub]["audit_target"] is True and "excluded" not in rec[hub]
+    order = [c["address"] for c in contract_records(world, [])]
+    assert order.index(hub) < order.index(plain)
+
+
 def test_onchain_is_registered_and_runnable():
     from opfor.scenarios.registry import known_scenarios, report_adapter, run_adapter
 

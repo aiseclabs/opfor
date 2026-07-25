@@ -11,6 +11,7 @@ merges this in, so the CLI holds no scenario specifics.
 from __future__ import annotations
 
 import os
+from collections import Counter
 from typing import Any
 
 from opfor.core import World
@@ -58,6 +59,12 @@ def contract_records(world: World, findings, known_infrastructure=None) -> list[
     known = load_known_infrastructure(KNOWLEDGE) if known_infrastructure is None \
         else known_infrastructure
     floor = _funds_floor()
+    # A hub is a contract many others were pivoted from, a shared point of activity worth a closer
+    # look, the analysis's most-suspicious-hub. Count the references once, so a contract that is the
+    # origin of two or more others is flagged and prioritized, and exempt from the funds floor since
+    # its interest is its centrality, not its own balance.
+    hub_refs = Counter(node.payload.related_to.lower()
+                       for node in world.nodes("contract") if node.payload.related_to)
     own_by_address: dict[str, tuple[str, ...]] = {}
     findings_by_address: dict[str, list[str]] = {}
     for finding in findings:
@@ -102,13 +109,15 @@ def contract_records(world: World, findings, known_infrastructure=None) -> list[
         # zero, so the resolution's result is never dropped before it is even recorded.
         if not (funds > 0 or finding_ids or interfaces or risk_flags or is_impl):
             continue
+        refs = hub_refs.get(payload.address.lower(), 0)
+        is_hub = refs >= 2
         excluded = structural_exclusion(payload.chain, payload.address, role, known,
                                         is_implementation=is_impl, is_vendored=is_vendored)
         # Below the funds floor and carrying no finding, a contract is not worth an audit slot, so it
         # is excluded like the structural cases, after them so a structural reason wins the label. A
-        # proxy implementation is exempt, its funds live in the proxy it stands behind, not in itself,
-        # so its own near-zero balance must not drop the very code the proxy resolution brought in.
-        if excluded is None and not finding_ids and funds < floor and not is_impl:
+        # proxy implementation and a hub are exempt, an implementation's funds live in its proxy and a
+        # hub's interest is its centrality, so a near-zero balance must not drop either.
+        if excluded is None and not finding_ids and funds < floor and not is_impl and not is_hub:
             excluded = "below-funds-floor"
         # A contract that carries a finding is a target whatever its structure, triage minted it, so
         # a finding always wins over a structural exclusion rather than being hidden by it.
@@ -124,6 +133,9 @@ def contract_records(world: World, findings, known_infrastructure=None) -> list[
             "audit_target": audit_target,
             "proxy_implementation": is_impl,
         }
+        if is_hub:
+            record["hub"] = True
+            record["hub_refs"] = refs
         if not audit_target and excluded is not None:
             record["excluded"] = excluded
         if payload.related_to:
@@ -145,15 +157,16 @@ def contract_records(world: World, findings, known_infrastructure=None) -> list[
     # The ranking, deliberately not by funds first. Funds correlate with the most-audited public
     # infrastructure, so a pure balance sort promotes the least productive targets, the defect the
     # target-selection analysis found. Instead: audit targets first, then the finding-bearing, then
-    # resolved proxy implementations, the code behind the funds, then the source-auditable, then the
-    # signal-rich, and only then the richest, with funds as the last discriminator. The excluded
-    # inventory sorts last however large its balance.
+    # resolved proxy implementations and hubs, the code behind the funds and the shared points of
+    # activity, then the source-auditable, then the signal-rich, and only then the richest, with
+    # funds as the last discriminator. The excluded inventory sorts last however large its balance.
     def _rank(record: dict) -> tuple:
         signal_richness = len(record.get("risk_flags", [])) + len(record.get("fund_paths", []))
         is_secondary = record.get("project") is not None and not record.get("project_primary", True)
         return (not record["audit_target"], is_secondary, not record.get("findings"),
-                not record.get("proxy_implementation"), not record.get("source_auditable"),
-                -signal_richness, -record["funds_at_risk_usd"], record["address"])
+                not record.get("proxy_implementation"), not record.get("hub"),
+                not record.get("source_auditable"), -signal_richness,
+                -record["funds_at_risk_usd"], record["address"])
 
     return sorted(records, key=_rank)
 

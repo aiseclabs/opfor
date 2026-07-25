@@ -173,6 +173,113 @@ def test_the_cli_report_merges_the_contracts_section():
     assert json.loads(json.dumps(out))["contracts"][0]["role"] == "vault"  # round-trips as json
 
 
+def test_report_tags_and_sorts_known_infrastructure_out_of_the_audit_targets():
+    from opfor.core import Fact, Node, World
+    from opfor.scenarios.onchain.report import contract_records
+    from opfor.scenarios.onchain.assets.contract.types import ContractData, FundFact, IdentityFact
+
+    infra = "0x000000000004444c5dc75cb358380d2e3de08a90"  # Uniswap V4 PoolManager, on the denylist
+    target = "0xabcd000000000000000000000000000000000042"
+    world = World()
+    for addr, role in ((infra, "router"), (target, "vault")):
+        nid = f"contract:ethereum:{addr}"
+        world.add(Node(id=nid, type="contract",
+                       payload=ContractData(chain="ethereum", address=addr, role=role)))
+        world.absorb([Fact(kind="identified", about=nid, payload=IdentityFact(role=role))])
+    # the infrastructure holds far more, but must not float to the top of the target queue
+    world.absorb([Fact(kind="funded", about=f"contract:ethereum:{infra}",
+                       payload=FundFact(funds_at_risk_usd=200_000_000))])
+    world.absorb([Fact(kind="funded", about=f"contract:ethereum:{target}",
+                       payload=FundFact(funds_at_risk_usd=50_000))])
+
+    records = {r["address"]: r for r in contract_records(world, [])}
+    assert records[infra]["audit_target"] is False and records[infra]["excluded"] == "known-infrastructure"
+    assert records[target]["audit_target"] is True and "excluded" not in records[target]
+    # the $50k target sorts above the $200M infrastructure, funds no longer promote the noise
+    order = [r["address"] for r in contract_records(world, [])]
+    assert order.index(target) < order.index(infra)
+
+
+def test_report_source_state_is_three_valued_not_a_misleading_bool():
+    from opfor.core import Fact, Node, World
+    from opfor.scenarios.onchain.report import contract_records
+    from opfor.scenarios.onchain.assets.contract.types import (
+        ContractData, FundFact, IdentityFact, SourceFact,
+    )
+
+    verified = "0xaaaa000000000000000000000000000000000001"
+    unverified = "0xbbbb000000000000000000000000000000000002"
+    pool = "0xcccc000000000000000000000000000000000003"
+    world = World()
+    for addr, role in ((verified, "vault"), (unverified, "vault"), (pool, "pool")):
+        nid = f"contract:ethereum:{addr}"
+        world.add(Node(id=nid, type="contract",
+                       payload=ContractData(chain="ethereum", address=addr, role=role,
+                                            liquidity_usd=100_000.0)))
+        world.absorb([Fact(kind="identified", about=nid, payload=IdentityFact(role=role)),
+                      Fact(kind="funded", about=nid, payload=FundFact(funds_at_risk_usd=100_000))])
+    # the vaults were fetched, the pool was never fetched (it skips ENRICH)
+    world.absorb([Fact(kind="sourced", about=f"contract:ethereum:{verified}",
+                       payload=SourceFact(verified=True, source_text="x")),
+                  Fact(kind="sourced", about=f"contract:ethereum:{unverified}",
+                       payload=SourceFact(verified=False))])
+
+    r = {c["address"]: c for c in contract_records(world, [])}
+    assert r[verified]["source_state"] == "verified" and r[verified]["source_auditable"] is True
+    assert r[unverified]["source_state"] == "unverified" and r[unverified]["source_auditable"] is False
+    # the never-fetched pool is `not_fetched`, not a misleading `unverified`, the old bool's bug
+    assert r[pool]["source_state"] == "not_fetched" and r[pool]["source_auditable"] is False
+    # the unverified contract is still worth a look, just not on the source-audit queue
+    assert r[unverified]["audit_target"] is True
+
+
+def test_funds_floor_drops_the_long_tail_but_keeps_a_finding():
+    from opfor.core import Fact, Node, World
+    from opfor.scenarios.onchain.report import contract_records
+    from opfor.scenarios.onchain.assets.contract.types import ContractData, FundFact, IdentityFact
+    from opfor.core.result import Finding
+
+    dust = "0xaaaa000000000000000000000000000000000010"      # tiny balance, no finding
+    dust_hit = "0xbbbb000000000000000000000000000000000011"  # tiny balance, but a finding
+    world = World()
+    for addr in (dust, dust_hit):
+        nid = f"contract:ethereum:{addr}"
+        world.add(Node(id=nid, type="contract",
+                       payload=ContractData(chain="ethereum", address=addr, role="vault")))
+        world.absorb([Fact(kind="identified", about=nid, payload=IdentityFact(role="vault")),
+                      Fact(kind="funded", about=nid, payload=FundFact(funds_at_risk_usd=500))])
+
+    finding = Finding(id="finding:x", title="t", severity="LOW", where=dust_hit, evidence="e", data={})
+    r = {c["address"]: c for c in contract_records(world, [finding])}
+    assert r[dust]["audit_target"] is False and r[dust]["excluded"] == "below-funds-floor"
+    assert r[dust_hit]["audit_target"] is True  # a finding is kept whatever its balance, recall first
+
+
+def test_ranking_does_not_let_funds_alone_promote_an_opaque_contract():
+    from opfor.core import Fact, Node, World
+    from opfor.scenarios.onchain.report import contract_records
+    from opfor.scenarios.onchain.assets.contract.types import (
+        ContractData, FundFact, IdentityFact, SignalFact, SourceFact,
+    )
+
+    lean = "0xaaaa000000000000000000000000000000000020"   # verified, signal-rich, $20k
+    whale = "0xbbbb000000000000000000000000000000000021"  # unverified, no signals, $5M
+    world = World()
+    for addr, verified, funds in ((lean, True, 20_000), (whale, False, 5_000_000)):
+        nid = f"contract:ethereum:{addr}"
+        world.add(Node(id=nid, type="contract",
+                       payload=ContractData(chain="ethereum", address=addr, role="vault")))
+        world.absorb([Fact(kind="identified", about=nid, payload=IdentityFact(role="vault")),
+                      Fact(kind="funded", about=nid, payload=FundFact(funds_at_risk_usd=funds)),
+                      Fact(kind="sourced", about=nid, payload=SourceFact(verified=verified, source_text="x" if verified else ""))])
+    world.absorb([Fact(kind="signals", about=f"contract:ethereum:{lean}",
+                       payload=SignalFact(flags=("share_accounting", "dex_spot_price_dependency")))])
+
+    order = [c["address"] for c in contract_records(world, [])]
+    # the verified, signal-rich $20k target ranks above the opaque $5M one, funds is not the lead key
+    assert order.index(lean) < order.index(whale)
+
+
 def test_onchain_is_registered_and_runnable():
     from opfor.scenarios.registry import known_scenarios, report_adapter, run_adapter
 

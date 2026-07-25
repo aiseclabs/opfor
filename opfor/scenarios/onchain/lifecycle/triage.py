@@ -26,11 +26,7 @@ from pathlib import Path
 
 from opfor.core import (Finding, Message, Provider, SEVERITIES, Triage, World, iter_md_docs,
                         require_json_object)
-from opfor.scenarios.onchain.assets.contract.sources.funds import (
-    NULL_ADDRESSES,
-    is_evm_address,
-    value_token_addresses,
-)
+from opfor.scenarios.onchain.assets.contract.targeting import structural_exclusion
 
 SYSTEM = (
     "You are the triage judge of an authorized offensive-security on-chain reconnaissance run. "
@@ -95,9 +91,6 @@ _FENCE_END = "END UNTRUSTED CONTRACT REPORT>>>"
 # A chunk of the contract report is judged in one call, bounded so a large sweep is split across
 # calls rather than overflowing the model context.
 _MAX_CHUNK_CHARS = 20_000
-# The raw DEX layer, a pool or a token, is Pancake's own factory bytecode, identical across the
-# chain, not an audit target on its own. It is left in the inventory but never judged.
-_NOT_AUDIT_TARGET = ("pool", "token")
 # The priority-to-severity floor used only to backstop a malformed model severity, so an odd grade
 # neither drops a finding nor lands an unknown label in the report.
 _PRIORITY_SEVERITY = {"A": "HIGH", "B": "MEDIUM", "C": "LOW", "U": "LOW"}
@@ -196,24 +189,12 @@ class AuditTriage(Triage):
                 "risk_flags": risk_flags, "central": central, "verified": verified}
 
     def _is_target(self, node, facts: dict) -> bool:
-        """Whether a contract belongs in the surface the model judges. The pruned ones are facts
-        about the surface, not verdicts, a raw DEX pair, a value token, known infrastructure, or a
-        contract with nothing to weigh."""
-        if facts["role"] in _NOT_AUDIT_TARGET:
-            return False
-        address = node.payload.address.lower()
-        # A malformed address, a 32-byte pool id or a mistyped anchor, is not a contract to audit,
-        # so it is dropped here too, defense in depth over the sweep's own format check.
-        if not is_evm_address(node.payload.address):
-            return False
-        # The null and burn sinks are where tokens go to die, so their balance is the chain's burned
-        # supply, not funds at risk. They are dropped here too, so one arriving by any path than the
-        # sweep, a pivot or an anchor, never becomes a false high-value finding.
-        if address in NULL_ADDRESSES:
-            return False
-        if address in self._known.get(node.payload.chain, frozenset()):
-            return False
-        if address in value_token_addresses(node.payload.chain):
+        """Whether a contract belongs in the surface the model judges. The structural exclusions, a
+        raw DEX pair, a value token, a null or burn sink, a malformed address, or known
+        infrastructure, are facts about the surface shared with the report so the two never drift.
+        A contract with nothing to weigh, no funds and no signals, carries no evidence to judge."""
+        if structural_exclusion(node.payload.chain, node.payload.address, facts["role"],
+                                self._known) is not None:
             return False
         return bool(facts["funds"] > 0 or facts["open_paths"] or facts["risk_flags"])
 

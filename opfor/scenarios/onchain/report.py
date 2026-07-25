@@ -10,9 +10,28 @@ merges this in, so the CLI holds no scenario specifics.
 
 from __future__ import annotations
 
+import os
 from typing import Any
 
 from opfor.core import World
+from opfor.scenarios.onchain.assets.contract import KNOWLEDGE
+from opfor.scenarios.onchain.assets.contract.known import load_known_infrastructure
+from opfor.scenarios.onchain.assets.contract.targeting import structural_exclusion
+
+# The funds below which a contract that carries no finding is not an audit target, so the long tail
+# of near-zero-balance deploys does not take an audit slot from a real one, the plan's floor. A
+# finding is kept whatever its balance, recall stays first. `OPFOR_ONCHAIN_FUNDS_FLOOR` tunes it.
+_FUNDS_FLOOR_DEFAULT = "10000"
+
+
+def _funds_floor() -> float:
+    """The audit-target funds floor, read at the call so a changed environment is seen. A
+    non-numeric value falls back to the default rather than failing the report."""
+    raw = os.environ.get("OPFOR_ONCHAIN_FUNDS_FLOOR", _FUNDS_FLOOR_DEFAULT)
+    try:
+        return max(0.0, float(raw))
+    except ValueError:
+        return float(_FUNDS_FLOOR_DEFAULT)
 
 
 def _interfaces(interfaces_fact) -> list[dict]:
@@ -26,9 +45,19 @@ def _interfaces(interfaces_fact) -> list[dict]:
     return sorted(out, key=lambda record: record["name"])
 
 
-def contract_records(world: World, findings) -> list[dict]:
+def contract_records(world: World, findings, known_infrastructure=None) -> list[dict]:
     """One record per discovered contract that reached a state worth reporting, carrying what it
-    is and the state of its funds and interfaces, with its findings folded in by address."""
+    is and the state of its funds and interfaces, with its findings folded in by address.
+
+    Each record is tagged `audit_target`, whether it is a candidate an operator should look at, and
+    when it is not, `excluded` names the structural reason. The tag uses the same filter triage
+    judges by, so the audit targets a reader selects match the queue triage produced rather than
+    diverging from it. Known infrastructure and the raw DEX layer stay in the inventory as a
+    faithful record of what the run saw, but are marked and sorted below the targets, not silently
+    dropped and not surfaced at the top by their large balance."""
+    known = load_known_infrastructure(KNOWLEDGE) if known_infrastructure is None \
+        else known_infrastructure
+    floor = _funds_floor()
     findings_by_address: dict[str, list[str]] = {}
     for finding in findings:
         findings_by_address.setdefault(finding.where.lower(), []).append(finding.id)
@@ -47,20 +76,41 @@ def contract_records(world: World, findings) -> list[dict]:
         central = list(signals.payload.centralization) if signals is not None else []
         interfaces = _interfaces(world.latest("interfaces", node.id))
         finding_ids = findings_by_address.get(payload.address.lower(), [])
+        # The source state is three-valued, not a bool, so a contract that was never fetched is not
+        # reported as unverified. A pool skips ENRICH, so its source is `not_fetched`, which is why
+        # the old bool read a canonical, verified pair as unverified. A source audit needs
+        # `verified`, `unverified` is the opaque high-value queue, and `not_fetched` is neither.
         sourced = world.latest("sourced", node.id)
-        verified = bool(sourced is not None and sourced.payload.verified)
+        if sourced is None:
+            source_state = "not_fetched"
+        elif sourced.payload.verified:
+            source_state = "verified"
+        else:
+            source_state = "unverified"
         # A contract earns a record when it holds funds, carries a finding, exposes a fund path, or
         # matched a signal, so the report lists the surface that matters, not every swept token.
         if not (funds > 0 or finding_ids or interfaces or risk_flags):
             continue
+        excluded = structural_exclusion(payload.chain, payload.address, role, known)
+        # Below the funds floor and carrying no finding, a contract is not worth an audit slot, so it
+        # is excluded like the structural cases, after them so a structural reason wins the label.
+        if excluded is None and not finding_ids and funds < floor:
+            excluded = "below-funds-floor"
+        # A contract that carries a finding is a target whatever its structure, triage minted it, so
+        # a finding always wins over a structural exclusion rather than being hidden by it.
+        audit_target = bool(finding_ids) or excluded is None
         record: dict[str, Any] = {
             "chain": payload.chain,
             "address": payload.address,
             "role": role,
             "source": payload.source,
-            "source_verified": verified,
+            "source_state": source_state,
+            "source_auditable": source_state == "verified",
             "funds_at_risk_usd": round(funds, 2),
+            "audit_target": audit_target,
         }
+        if not audit_target and excluded is not None:
+            record["excluded"] = excluded
         if payload.related_to:
             record["related_to"] = payload.related_to
         if interfaces:
@@ -72,10 +122,18 @@ def contract_records(world: World, findings) -> list[dict]:
         if finding_ids:
             record["findings"] = finding_ids
         records.append(record)
-    # The contracts that carry a finding come first, then the richest by funds, then the rest by
-    # address, so a reader meets the audit queue before the quiet inventory.
-    return sorted(records, key=lambda record: (not record.get("findings"),
-                                               -record["funds_at_risk_usd"], record["address"]))
+    # The ranking, deliberately not by funds first. Funds correlate with the most-audited public
+    # infrastructure, so a pure balance sort promotes the least productive targets, the defect the
+    # target-selection analysis found. Instead: audit targets first, then the finding-bearing, then
+    # the source-auditable, then the signal-rich, and only then the richest, with funds as the last
+    # discriminator. The excluded inventory sorts last however large its balance.
+    def _rank(record: dict) -> tuple:
+        signal_richness = len(record.get("risk_flags", [])) + len(record.get("fund_paths", []))
+        return (not record["audit_target"], not record.get("findings"),
+                not record.get("source_auditable"), -signal_richness,
+                -record["funds_at_risk_usd"], record["address"])
+
+    return sorted(records, key=_rank)
 
 
 def report_view(world: World, findings) -> dict:

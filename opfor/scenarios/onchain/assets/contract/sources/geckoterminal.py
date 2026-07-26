@@ -11,6 +11,10 @@ the pool age so a downstream step can weigh novelty. A test injects its own seam
 from __future__ import annotations
 
 import json
+import os
+import threading
+import time
+import urllib.error
 import urllib.request
 from datetime import datetime, timezone
 
@@ -18,18 +22,77 @@ from opfor.scenarios.onchain.assets.contract.sources.observations import PoolObs
 
 _BASE = "https://api.geckoterminal.com/api/v2"
 _TIMEOUT = 15.0
+# The keyless GeckoTerminal free tier caps calls at about thirty a minute and answers an over-cap
+# request with a hard 429, which without pacing fails the whole sweep and yields no pools. So the
+# same two defenses as the explorer: a process-wide throttle keeps the discovery under the cap, and
+# a 429 that slips through is backed off and retried before it fails loud. The interval is generous
+# by default since a broad sweep reads several pages. `OPFOR_GECKOTERMINAL_MIN_INTERVAL` tunes it.
+_MIN_INTERVAL_DEFAULT = 2.1
+_RETRIES = 4
+_BACKOFF = 5.0
+_THROTTLE_LOCK = threading.Lock()
+_next_call = [0.0]
+
+
+def _min_interval() -> float:
+    raw = os.environ.get("OPFOR_GECKOTERMINAL_MIN_INTERVAL", str(_MIN_INTERVAL_DEFAULT))
+    try:
+        return max(0.0, float(raw))
+    except ValueError:
+        return _MIN_INTERVAL_DEFAULT
+
+
+def _throttle(interval: float) -> None:
+    """Block until at least `interval` seconds have passed since the last call, across threads."""
+    if interval <= 0:
+        return
+    with _THROTTLE_LOCK:
+        now = time.monotonic()
+        wait = _next_call[0] - now
+        if wait > 0:
+            time.sleep(wait)
+        _next_call[0] = time.monotonic() + interval
 # The GeckoTerminal network id per chain, distinct from the DexScreener and Etherscan chain names.
 _NETWORK = {"ethereum": "eth", "bsc": "bsc"}
 # How many recent pools to read across pages, and the cap on what a sweep hands to ENRICH so a
-# broad discovery does not fan out past the budget.
-_PAGES = 2
-_MAX_POOLS = 5
+# broad discovery does not fan out past the budget. Both default small, precision over breadth, and
+# both are env-tunable so an operator can widen the sweep to accumulate more of the long tail when
+# breadth is what they want, at the cost of pulling in weaker, lower-liquidity candidates.
+_PAGES_DEFAULT = 2
+_MAX_POOLS_DEFAULT = 5
+
+
+def _pages() -> int:
+    """The pages of each discovery feed to read, `OPFOR_ONCHAIN_DISCOVERY_PAGES` or the default."""
+    raw = os.environ.get("OPFOR_ONCHAIN_DISCOVERY_PAGES", str(_PAGES_DEFAULT))
+    try:
+        return max(1, int(raw))
+    except ValueError:
+        return _PAGES_DEFAULT
+
+
+def _max_pools() -> int:
+    """The cap on pools a sweep hands to ENRICH, `OPFOR_ONCHAIN_MAX_POOLS` or the default."""
+    raw = os.environ.get("OPFOR_ONCHAIN_MAX_POOLS", str(_MAX_POOLS_DEFAULT))
+    try:
+        return max(1, int(raw))
+    except ValueError:
+        return _MAX_POOLS_DEFAULT
 
 
 def _get(url: str):
     request = urllib.request.Request(url, headers={"User-Agent": "opfor-onchain/0.1"})
-    with urllib.request.urlopen(request, timeout=_TIMEOUT) as response:
-        return json.loads(response.read().decode("utf-8"))
+    interval = _min_interval()
+    for attempt in range(_RETRIES):
+        _throttle(interval)
+        try:
+            with urllib.request.urlopen(request, timeout=_TIMEOUT) as response:
+                return json.loads(response.read().decode("utf-8"))
+        except urllib.error.HTTPError as exc:
+            if exc.code == 429 and attempt < _RETRIES - 1:
+                time.sleep(_BACKOFF * (attempt + 1))
+                continue
+            raise
 
 
 def _relationship_address(relationships: dict, key: str) -> str:
@@ -74,10 +137,12 @@ def _parse(item: dict, chain: str) -> PoolObservation | None:
         age_days=_age_days(attributes.get("pool_created_at")))
 
 
-def select(pools, survey) -> tuple[PoolObservation, ...]:
+def select(pools, survey, cap=None) -> tuple[PoolObservation, ...]:
     """Keep the pools inside the survey's age band and above its liquidity floor, deduped and
     capped, richest first. Pure, so the band logic is tested without the network. A pool with an
-    unknown age is dropped, since the band is the point of this discovery."""
+    unknown age is dropped, since the band is the point of this discovery. The cap defaults to the
+    env-tuned pool ceiling, a caller passes its own to test the capping deterministically."""
+    ceiling = _max_pools() if cap is None else cap
     seen: dict[str, PoolObservation] = {}
     for pool in pools:
         if pool is None or pool.liquidity_usd < survey.min_liquidity:
@@ -86,7 +151,7 @@ def select(pools, survey) -> tuple[PoolObservation, ...]:
             continue
         seen.setdefault(pool.address.lower(), pool)
     ranked = sorted(seen.values(), key=lambda p: p.liquidity_usd, reverse=True)
-    return tuple(ranked[:_MAX_POOLS])
+    return tuple(ranked[:ceiling])
 
 
 def discover(survey) -> tuple[PoolObservation, ...]:
@@ -98,7 +163,7 @@ def discover(survey) -> tuple[PoolObservation, ...]:
         return ()
     raw: list = []
     for feed in ("pools", "new_pools"):
-        for page in range(1, _PAGES + 1):
+        for page in range(1, _pages() + 1):
             data = _get(f"{_BASE}/networks/{network}/{feed}?page={page}")
             raw.extend(_parse(item, survey.chain) for item in data.get("data") or [])
     return select(raw, survey)

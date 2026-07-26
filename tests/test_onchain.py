@@ -865,6 +865,27 @@ def test_adversarial_mode_wires_the_roles_from_the_env(monkeypatch):
     assert sc2.triage._challenger is None and sc2.triage._judge is None
 
 
+def test_geckoterminal_throttle_and_discovery_breadth_are_tunable(monkeypatch):
+    from opfor.scenarios.onchain.assets.contract.sources import geckoterminal as g
+
+    clock = {"t": 100.0}
+    slept = []
+    monkeypatch.setattr(g.time, "monotonic", lambda: clock["t"])
+    monkeypatch.setattr(g.time, "sleep", lambda s: slept.append(s))
+    g._next_call[0] = 0.0
+    g._throttle(2.1)
+    assert slept == []  # the first call schedules the next slot, does not wait
+    g._throttle(2.1)
+    assert slept and abs(slept[-1] - 2.1) < 0.01  # the second waits out the interval
+
+    # discovery breadth is env-tunable so an operator can widen the sweep for the long tail
+    monkeypatch.setenv("OPFOR_ONCHAIN_MAX_POOLS", "40")
+    monkeypatch.setenv("OPFOR_ONCHAIN_DISCOVERY_PAGES", "2")
+    assert g._max_pools() == 40 and g._pages() == 2
+    monkeypatch.delenv("OPFOR_ONCHAIN_MAX_POOLS")
+    assert g._max_pools() == g._MAX_POOLS_DEFAULT  # defaults to the small precision-first cap
+
+
 def test_etherscan_throttle_serializes_calls_to_stay_under_the_rate_limit(monkeypatch):
     from opfor.scenarios.onchain.assets.contract.sources import etherscan
 

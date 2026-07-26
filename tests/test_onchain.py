@@ -957,6 +957,53 @@ def test_polygon_and_arbitrum_are_wired_across_the_three_config_points():
     assert geckoterminal._NETWORK["polygon"] == "polygon_pos"  # GeckoTerminal's slug, not "polygon"
 
 
+def test_rpc_routes_gated_chains_to_a_public_node_and_others_to_the_explorer(monkeypatch):
+    from opfor.scenarios.onchain.assets.contract.sources import rpc
+
+    seen = {}
+    def _pub(endpoints, method, params):
+        seen["public"] = endpoints
+        return "0x"
+    def _proxy(chain, method, params):
+        seen["proxy"] = chain
+        return "0x"
+    monkeypatch.setattr(rpc, "_public_call", _pub)
+    monkeypatch.setattr(rpc.etherscan, "proxy", _proxy)
+
+    rpc._call("bsc", "eth_getCode", {"address": "0xabc", "tag": "latest"})
+    rpc._call("ethereum", "eth_getCode", {"address": "0xabc", "tag": "latest"})
+    assert seen["public"][0].startswith("https://bsc")  # a gated chain reads from a public node
+    assert seen["proxy"] == "ethereum"                  # a covered chain still uses the explorer proxy
+    # OPFOR_<CHAIN>_RPC prepends a custom node
+    monkeypatch.setenv("OPFOR_BSC_RPC", "https://my-node")
+    assert rpc._public_endpoints("bsc")[0] == "https://my-node"
+    assert rpc._public_endpoints("ethereum") == ()      # covered chain has no public node, uses proxy
+
+
+def test_rpc_params_translate_to_json_rpc_positional_form():
+    from opfor.scenarios.onchain.assets.contract.sources import rpc
+
+    assert rpc._params_for("eth_getCode", {"address": "0xa", "tag": "latest"}) == ["0xa", "latest"]
+    assert rpc._params_for("eth_getStorageAt", {"address": "0xa", "position": "0xs", "tag": "latest"}) \
+        == ["0xa", "0xs", "latest"]
+    assert rpc._params_for("eth_call", {"to": "0xa", "data": "0xd", "tag": "latest"}) \
+        == [{"to": "0xa", "data": "0xd"}, "latest"]
+
+
+def test_deep_pivot_degrades_to_shallow_when_the_transfer_module_is_gated(monkeypatch):
+    import importlib
+    pivot = importlib.import_module("opfor.scenarios.onchain.assets.contract.sources.pivot")
+    from opfor.scenarios.onchain.assets.contract.sources import etherscan
+
+    monkeypatch.setattr(pivot.etherscan, "configured", lambda chain: True)
+    def _denied(chain, params):
+        raise etherscan.AccessDenied("gated on this chain")
+    monkeypatch.setattr(pivot.etherscan, "get", _denied)
+    # a gated transfer module yields no transfers rather than raising, so the pivot keeps its shallow
+    # pools instead of failing the whole step; a non-denial error still propagates (not caught here)
+    assert pivot._etherscan_transfers("0xtoken", "bsc") == []
+
+
 def test_signal_and_guard_scans_are_mechanical():
     detections = load_detections(DETECTIONS)
     risk, central = scan_source(_VAULT_SOURCE, detections.signatures)

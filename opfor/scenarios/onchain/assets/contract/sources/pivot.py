@@ -52,12 +52,17 @@ def counterparty_pivot(contract, *, fetch_transfers, is_contract, max_deep=_MAX_
 
 def _etherscan_transfers(address: str, chain: str) -> list[dict]:
     """Read the token's recent transfers from the explorer. Needs a key, so without one it returns
-    no transfers and the deep pivot degrades to the shallow pools."""
+    no transfers and the deep pivot degrades to the shallow pools. The free key also gates the
+    transfer module on some chains, BSC among them, and that denial is caught here so the deep pivot
+    degrades to shallow rather than failing the whole pivot, while a real error still propagates."""
     if not etherscan.configured(chain):
         return []
-    data = etherscan.get(chain, {"module": "account", "action": "tokentx",
-                                 "contractaddress": address, "page": "1",
-                                 "offset": str(_TRANSFER_SCAN), "sort": "desc"})
+    try:
+        data = etherscan.get(chain, {"module": "account", "action": "tokentx",
+                                     "contractaddress": address, "page": "1",
+                                     "offset": str(_TRANSFER_SCAN), "sort": "desc"})
+    except etherscan.AccessDenied:
+        return []
     result = data.get("result")
     return result if isinstance(result, list) else []
 

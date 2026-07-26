@@ -89,6 +89,12 @@ def _rate_limited(data) -> bool:
     return isinstance(error, dict) and "rate limit" in str(error.get("message", "")).lower()
 
 
+class AccessDenied(RuntimeError):
+    """The explorer denies free-tier access to a module on this chain. A distinct type so a caller
+    that can degrade, the deep pivot dropping to shallow, catches exactly this and not a transient
+    error, while a caller that must not guess, the funds read, lets it propagate and fail loud."""
+
+
 def _access_denied(data) -> bool:
     """Whether a 200-body is a plan or access denial for the chain rather than an answer. The free
     tier answers a gated chain's account or proxy module with status 0 and this wording. A caller
@@ -115,7 +121,7 @@ def get(chain: str, params: dict):
         # rather than reading the error string as a codeless address or a zero balance.
         if _access_denied(data):
             module = params.get("module") or params.get("action") or "this module"
-            raise RuntimeError(
+            raise AccessDenied(
                 f"etherscan denies free-tier access to {module} on {chain}, upgrade the plan or use "
                 f"a chain the key covers: {data.get('result') or data.get('message')}")
         if not _rate_limited(data):

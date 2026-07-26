@@ -112,16 +112,35 @@ def build(
     )
 
 
+def _age_band() -> tuple[float, float]:
+    """The discovery age band in days, env-tunable so an operator can widen the window. The floor
+    skips just-launched churn, the ceiling skips the established bluechips. The defaults keep the
+    young long-tail focus, `OPFOR_ONCHAIN_MIN_AGE_DAYS` and `OPFOR_ONCHAIN_MAX_AGE_DAYS` widen it,
+    for example to a year, at the cost of drifting toward older, more-audited contracts."""
+    import os
+
+    def _f(var: str, default: float) -> float:
+        try:
+            return max(0.0, float(os.environ.get(var, default)))
+        except ValueError:
+            return default
+
+    return _f("OPFOR_ONCHAIN_MIN_AGE_DAYS", 2.0), _f("OPFOR_ONCHAIN_MAX_AGE_DAYS", 45.0)
+
+
 def seed(name: str, *, chain="ethereum", min_liquidity=10_000.0, min_volume=5_000.0,
          age_days=90.0, anchors=()) -> World:
     """Build the seed world for a run, a `Survey` node carrying the chain and the sweep floor. When
     anchors are given they enter the world as contract nodes directly, so the enrich pipeline audits
-    exactly those contracts, and the planner skips the sweep."""
+    exactly those contracts, and the planner skips the sweep. The discovery age band is env-tunable,
+    see `_age_band`, so the window can be widened to a longer span than the young-tail default."""
     anchors = tuple(dict.fromkeys(a.strip().lower() for a in anchors if a.strip()))
+    min_age, max_age = _age_band()
     world = World()
     world.add(Node(id=f"survey:{chain}", type="survey",
                    payload=Survey(name=name, chain=chain, min_liquidity=min_liquidity,
-                                  min_volume=min_volume, age_days=age_days, anchors=anchors)))
+                                  min_volume=min_volume, age_days=age_days,
+                                  min_age_days=min_age, max_age_days=max_age, anchors=anchors)))
     for address in anchors:
         world.add(Node(id=f"contract:{chain}:{address}", type="contract",
                        payload=ContractData(chain=chain, address=address, role="unknown",

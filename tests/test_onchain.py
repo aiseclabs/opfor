@@ -943,6 +943,17 @@ def test_etherscan_min_interval_reads_the_env_and_falls_back_on_a_bad_value(monk
     assert etherscan._min_interval() == float(etherscan._MIN_INTERVAL_DEFAULT)  # bad value falls back
 
 
+def test_discovery_age_band_is_env_tunable(monkeypatch):
+    # the age band widens via env so an operator can look back a year, defaults keep the young tail
+    monkeypatch.delenv("OPFOR_ONCHAIN_MIN_AGE_DAYS", raising=False)
+    monkeypatch.delenv("OPFOR_ONCHAIN_MAX_AGE_DAYS", raising=False)
+    survey = onchain.seed("t", chain="ethereum").node("survey:ethereum").payload
+    assert survey.min_age_days == 2.0 and survey.max_age_days == 45.0  # young-tail default
+    monkeypatch.setenv("OPFOR_ONCHAIN_MAX_AGE_DAYS", "365")
+    survey = onchain.seed("t", chain="ethereum").node("survey:ethereum").payload
+    assert survey.max_age_days == 365.0  # widened to a year
+
+
 def test_polygon_and_arbitrum_are_wired_across_the_three_config_points():
     # the free Etherscan V2 key covers ethereum, polygon, and arbitrum, so all three must resolve a
     # chainid, a GeckoTerminal network, and a value-token set, or a chain is only half-supported

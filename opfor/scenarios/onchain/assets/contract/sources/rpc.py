@@ -3,10 +3,11 @@
 It reads a native balance, an ERC20 token balance, a token's decimals, whether an address holds
 code, and a proxy's implementation slot. A read is routed per chain. By default it goes through the
 explorer's `proxy` module, the explorer's JSON-RPC pass-through, so it reaches the chain over the
-one host and key the scenario already uses. But the free explorer key gates the proxy module on some
-chains, BSC among them, so a chain with a configured public node is read from that node directly
-instead, which is how BSC funds, code, and proxy reads work without a paid plan. `OPFOR_<CHAIN>_RPC`
-sets or overrides a chain's node. A test injects its own callables, so no read touches the network.
+one host and key the scenario already uses. The supported chains, Ethereum, Polygon, and Arbitrum,
+are all fully covered by the free explorer key, so they take that path. `OPFOR_<CHAIN>_RPC` opts a
+chain into a public node instead, the escape hatch for a chain the key rate-limits or does not
+cover, so a gated chain can be read from a public node without a paid plan and without a code
+change. A test injects its own callables, so no read touches the network.
 """
 
 from __future__ import annotations
@@ -29,13 +30,10 @@ _DECIMALS = "0x313ce567"
 # implementation the proxy forwards to, the contract that actually holds the auditable logic.
 _EIP1967_IMPL_SLOT = "0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc"
 
-# Chains whose proxy module the free explorer key gates, read from a public node instead. Several
-# endpoints per chain so one being down or rate-limiting is not the whole chain. `OPFOR_<CHAIN>_RPC`
-# prepends a custom node.
-_PUBLIC_RPC = {
-    "bsc": ("https://bsc-rpc.publicnode.com", "https://bsc-dataseed.binance.org",
-            "https://bsc.drpc.org"),
-}
+# Default public nodes per chain, empty because every supported chain is covered by the explorer
+# key. `OPFOR_<CHAIN>_RPC` opts a chain in when needed, so the routing stays a ready escape hatch
+# for a gated or rate-limited chain without wiring a default here.
+_PUBLIC_RPC: dict[str, tuple[str, ...]] = {}
 _RPC_TIMEOUT = 12.0
 _RPC_MIN_INTERVAL = 0.12
 _RPC_LOCK = threading.Lock()

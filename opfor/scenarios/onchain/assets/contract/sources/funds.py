@@ -38,14 +38,6 @@ _VALUE_TOKENS = {
         ("0x6B175474E89094C44Da98b954EedeAC495271d0F", "DAI", "stable", 18),
         ("0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599", "WBTC", "priced", 8),
     ),
-    "bsc": (
-        ("0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c", "WBNB", "native", 18),
-        ("0x55d398326f99059fF775485246999027B3197955", "USDT", "stable", 18),
-        ("0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d", "USDC", "stable", 18),
-        ("0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56", "BUSD", "stable", 18),
-        ("0x7130d2A12B9BCbFAe4f2634d864A1Ee1Ce3Ead9c", "BTCB", "priced", 18),
-        ("0x0E09FaBB73Bd3Ade0a17ECC321fD13a19e81cE82", "CAKE", "priced", 18),
-    ),
     "polygon": (
         ("0x0d500B1d8E8eF31E21C99d1Db9A6444d3ADf1270", "WMATIC", "native", 18),
         ("0xc2132D05D31c914a87C6611C10748AEb04B58e8F", "USDT", "stable", 6),

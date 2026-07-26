@@ -81,11 +81,14 @@ exactly those addresses and what they pivot to:
 opfor run onchain --root ethereum --host 0xCONTRACT --host 0xANOTHER
 ```
 
+It runs on Ethereum, Polygon, and Arbitrum, the chains a free Etherscan V2 key covers in full,
+named with `--root ethereum`, `--root polygon`, or `--root arbitrum`.
+
 The explorer reads, verified source and transfer history, use the Etherscan V2 multichain API and
-need a key in `OPFOR_ETHERSCAN_API_KEY`, see `.env.example`. A free key is full-access on Ethereum
-mainnet. Other chains such as bsc read verified source on the free tier but need a paid plan for the
-transfer analysis the autonomous discovery relies on. The tool does not auto-load `.env`, so
-`source .env` first.
+need a key in `OPFOR_ETHERSCAN_API_KEY`, see `.env.example`. The free key covers Ethereum, Polygon,
+and Arbitrum in full. Other chains read verified source on the free tier but gate the transfer and
+RPC modules the autonomous discovery relies on, so they need a paid plan, or a public node set with
+`OPFOR_<CHAIN>_RPC`. The tool does not auto-load `.env`, so `source .env` first.
 
 ## Develop
 

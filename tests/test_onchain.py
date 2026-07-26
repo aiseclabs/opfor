@@ -924,9 +924,9 @@ def test_etherscan_fails_loud_on_a_chain_access_denial(monkeypatch):
     monkeypatch.setattr(etherscan.urllib.request, "urlopen", lambda req, timeout=0: _Resp())
 
     with pytest.raises(RuntimeError):
-        etherscan.get("bsc", {"module": "account", "action": "tokentx"})
+        etherscan.get("arbitrum", {"module": "account", "action": "tokentx"})
     with pytest.raises(RuntimeError):  # proxy raises too, never returns the error string as a result
-        etherscan.proxy("bsc", "eth_getCode", {"address": "0x0"})
+        etherscan.proxy("arbitrum", "eth_getCode", {"address": "0x0"})
     # the detector is precise: a legitimate unverified-source status-0 body is NOT a denial
     assert etherscan._access_denied(denial) is True
     assert etherscan._access_denied({"status": "0", "result": "Contract source code not verified"}) is False
@@ -957,27 +957,22 @@ def test_polygon_and_arbitrum_are_wired_across_the_three_config_points():
     assert geckoterminal._NETWORK["polygon"] == "polygon_pos"  # GeckoTerminal's slug, not "polygon"
 
 
-def test_rpc_routes_gated_chains_to_a_public_node_and_others_to_the_explorer(monkeypatch):
+def test_rpc_uses_the_explorer_proxy_by_default_and_a_public_node_only_when_configured(monkeypatch):
     from opfor.scenarios.onchain.assets.contract.sources import rpc
 
     seen = {}
-    def _pub(endpoints, method, params):
-        seen["public"] = endpoints
-        return "0x"
-    def _proxy(chain, method, params):
-        seen["proxy"] = chain
-        return "0x"
-    monkeypatch.setattr(rpc, "_public_call", _pub)
-    monkeypatch.setattr(rpc.etherscan, "proxy", _proxy)
+    monkeypatch.setattr(rpc, "_public_call", lambda eps, m, p: seen.__setitem__("public", eps) or "0x")
+    monkeypatch.setattr(rpc.etherscan, "proxy", lambda c, m, p: seen.__setitem__("proxy", c) or "0x")
 
-    rpc._call("bsc", "eth_getCode", {"address": "0xabc", "tag": "latest"})
+    # the supported chains are fully covered by the explorer key, so they take the proxy path
+    assert rpc._public_endpoints("ethereum") == ()
     rpc._call("ethereum", "eth_getCode", {"address": "0xabc", "tag": "latest"})
-    assert seen["public"][0].startswith("https://bsc")  # a gated chain reads from a public node
-    assert seen["proxy"] == "ethereum"                  # a covered chain still uses the explorer proxy
-    # OPFOR_<CHAIN>_RPC prepends a custom node
-    monkeypatch.setenv("OPFOR_BSC_RPC", "https://my-node")
-    assert rpc._public_endpoints("bsc")[0] == "https://my-node"
-    assert rpc._public_endpoints("ethereum") == ()      # covered chain has no public node, uses proxy
+    assert seen.get("proxy") == "ethereum" and "public" not in seen
+    # OPFOR_<CHAIN>_RPC opts a chain into a public node, the escape hatch for a gated chain
+    monkeypatch.setenv("OPFOR_ARBITRUM_RPC", "https://my-node")
+    assert rpc._public_endpoints("arbitrum")[0] == "https://my-node"
+    rpc._call("arbitrum", "eth_getCode", {"address": "0xabc", "tag": "latest"})
+    assert seen.get("public")[0] == "https://my-node"
 
 
 def test_rpc_params_translate_to_json_rpc_positional_form():
@@ -1001,7 +996,7 @@ def test_deep_pivot_degrades_to_shallow_when_the_transfer_module_is_gated(monkey
     monkeypatch.setattr(pivot.etherscan, "get", _denied)
     # a gated transfer module yields no transfers rather than raising, so the pivot keeps its shallow
     # pools instead of failing the whole step; a non-denial error still propagates (not caught here)
-    assert pivot._etherscan_transfers("0xtoken", "bsc") == []
+    assert pivot._etherscan_transfers("0xtoken", "arbitrum") == []
 
 
 def test_signal_and_guard_scans_are_mechanical():

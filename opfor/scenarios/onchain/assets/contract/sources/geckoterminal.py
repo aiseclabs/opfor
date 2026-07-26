@@ -53,7 +53,7 @@ def _throttle(interval: float) -> None:
             time.sleep(wait)
         _next_call[0] = time.monotonic() + interval
 # The GeckoTerminal network id per chain, distinct from the DexScreener and Etherscan chain names.
-_NETWORK = {"ethereum": "eth", "bsc": "bsc", "polygon": "polygon_pos", "arbitrum": "arbitrum"}
+_NETWORK = {"ethereum": "eth", "polygon": "polygon_pos", "arbitrum": "arbitrum"}
 # How many recent pools to read across pages, and the cap on what a sweep hands to ENRICH so a
 # broad discovery does not fan out past the budget. Both default small, precision over breadth, and
 # both are env-tunable so an operator can widen the sweep to accumulate more of the long tail when

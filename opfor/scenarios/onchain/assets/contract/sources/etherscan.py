@@ -60,7 +60,7 @@ def _etherscan_wait(interval: float) -> None:
 # full module access, source, transfers, and the proxy RPC. A non-Ethereum chain such as bsc reads
 # verified source on the free tier but not the account and logs modules the deep pivot needs, so it
 # needs a paid plan. A new chain is one entry here, not a code change.
-_CHAIN_ID = {"ethereum": 1, "bsc": 56}
+_CHAIN_ID = {"ethereum": 1, "bsc": 56, "polygon": 137, "arbitrum": 42161}
 
 
 def api_key() -> str | None:

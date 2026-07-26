@@ -943,6 +943,20 @@ def test_etherscan_min_interval_reads_the_env_and_falls_back_on_a_bad_value(monk
     assert etherscan._min_interval() == float(etherscan._MIN_INTERVAL_DEFAULT)  # bad value falls back
 
 
+def test_polygon_and_arbitrum_are_wired_across_the_three_config_points():
+    # the free Etherscan V2 key covers ethereum, polygon, and arbitrum, so all three must resolve a
+    # chainid, a GeckoTerminal network, and a value-token set, or a chain is only half-supported
+    from opfor.scenarios.onchain.assets.contract.sources import etherscan, geckoterminal
+    from opfor.scenarios.onchain.assets.contract.sources.funds import value_token_addresses
+
+    for chain in ("ethereum", "polygon", "arbitrum"):
+        assert etherscan.chain_id(chain) is not None, chain  # explorer knows the chainid
+        assert geckoterminal._NETWORK.get(chain), chain      # discovery knows the network slug
+        assert value_token_addresses(chain), chain           # funds knows the value tokens
+    # the native/wrapped token decimals are sane, so a native balance is not mispriced
+    assert geckoterminal._NETWORK["polygon"] == "polygon_pos"  # GeckoTerminal's slug, not "polygon"
+
+
 def test_signal_and_guard_scans_are_mechanical():
     detections = load_detections(DETECTIONS)
     risk, central = scan_source(_VAULT_SOURCE, detections.signatures)

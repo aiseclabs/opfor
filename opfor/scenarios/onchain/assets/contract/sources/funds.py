@@ -46,6 +46,24 @@ _VALUE_TOKENS = {
         ("0x7130d2A12B9BCbFAe4f2634d864A1Ee1Ce3Ead9c", "BTCB", "priced", 18),
         ("0x0E09FaBB73Bd3Ade0a17ECC321fD13a19e81cE82", "CAKE", "priced", 18),
     ),
+    "polygon": (
+        ("0x0d500B1d8E8eF31E21C99d1Db9A6444d3ADf1270", "WMATIC", "native", 18),
+        ("0xc2132D05D31c914a87C6611C10748AEb04B58e8F", "USDT", "stable", 6),
+        ("0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174", "USDC.e", "stable", 6),
+        ("0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359", "USDC", "stable", 6),
+        ("0x8f3Cf7ad23Cd3CaDbD9735AFf958023239c6A063", "DAI", "stable", 18),
+        ("0x7ceB23fD6bC0adD59E62ac25578270cFf1b9f619", "WETH", "priced", 18),
+        ("0x1BFD67037B42Cf73acF2047067bd4F2C47D9BfD6", "WBTC", "priced", 8),
+    ),
+    "arbitrum": (
+        ("0x82aF49447D8a07e3bd95BD0d56f35241523fBab1", "WETH", "native", 18),
+        ("0xaf88d065e77c8cC2239327C5EDb3A432268e5831", "USDC", "stable", 6),
+        ("0xFF970A61A04b1cA14834A43f5dE4533eBDDB5CC8", "USDC.e", "stable", 6),
+        ("0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9", "USDT", "stable", 6),
+        ("0xDA10009cBd5D07dd0CeCc66161FC93D7c9000da1", "DAI", "stable", 18),
+        ("0x2f2a2543B76A4166549F7aaB2e75Bef0aefC5B0f", "WBTC", "priced", 8),
+        ("0x912CE59144191C1204E64559FE8253a0e49E6548", "ARB", "priced", 18),
+    ),
 }
 
 

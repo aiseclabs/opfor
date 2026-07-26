@@ -906,6 +906,32 @@ def test_etherscan_throttle_serializes_calls_to_stay_under_the_rate_limit(monkey
     assert slept == []
 
 
+def test_etherscan_fails_loud_on_a_chain_access_denial(monkeypatch):
+    # the free tier answers a gated chain's account/proxy module with a status-0 error STRING; read
+    # as data it is silently wrong (a codeless address, a zero balance), so it must fail loud
+    from opfor.scenarios.onchain.assets.contract.sources import etherscan
+
+    denial = {"status": "0", "message": "NOTOK",
+              "result": "Free API access is not supported for this chain. Please upgrade your api plan"}
+
+    class _Resp:
+        def read(self): return json.dumps(denial).encode("utf-8")
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+
+    monkeypatch.setattr(etherscan, "api_key", lambda: "k")
+    monkeypatch.setattr(etherscan, "_etherscan_wait", lambda interval: None)
+    monkeypatch.setattr(etherscan.urllib.request, "urlopen", lambda req, timeout=0: _Resp())
+
+    with pytest.raises(RuntimeError):
+        etherscan.get("bsc", {"module": "account", "action": "tokentx"})
+    with pytest.raises(RuntimeError):  # proxy raises too, never returns the error string as a result
+        etherscan.proxy("bsc", "eth_getCode", {"address": "0x0"})
+    # the detector is precise: a legitimate unverified-source status-0 body is NOT a denial
+    assert etherscan._access_denied(denial) is True
+    assert etherscan._access_denied({"status": "0", "result": "Contract source code not verified"}) is False
+
+
 def test_etherscan_min_interval_reads_the_env_and_falls_back_on_a_bad_value(monkeypatch):
     from opfor.scenarios.onchain.assets.contract.sources import etherscan
 

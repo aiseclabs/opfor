@@ -89,6 +89,16 @@ def _rate_limited(data) -> bool:
     return isinstance(error, dict) and "rate limit" in str(error.get("message", "")).lower()
 
 
+def _access_denied(data) -> bool:
+    """Whether a 200-body is a plan or access denial for the chain rather than an answer. The free
+    tier answers a gated chain's account or proxy module with status 0 and this wording. A caller
+    would read that error string as a codeless address or a zero balance, silently wrong, so it must
+    be caught and failed loud, invariant 5. The phrasing never appears in a legitimate result, so
+    matching it does not swallow a real answer such as an unverified-source reply."""
+    text = f"{data.get('message', '')} {data.get('result', '')}".lower()
+    return "not supported for this chain" in text or "upgrade your api plan" in text
+
+
 def get(chain: str, params: dict):
     """Make one V2 call for a chain and return the parsed json. Assumes `configured`, so a caller
     checks first. Backs off and retries a throttled reply, then raises so a persistent throttle
@@ -101,6 +111,13 @@ def get(chain: str, params: dict):
         _etherscan_wait(interval)
         with urllib.request.urlopen(request, timeout=_TIMEOUT) as response:
             data = json.loads(response.read().decode("utf-8"))
+        # A plan denial for the chain is terminal, retrying does not lift it, so fail loud at once
+        # rather than reading the error string as a codeless address or a zero balance.
+        if _access_denied(data):
+            module = params.get("module") or params.get("action") or "this module"
+            raise RuntimeError(
+                f"etherscan denies free-tier access to {module} on {chain}, upgrade the plan or use "
+                f"a chain the key covers: {data.get('result') or data.get('message')}")
         if not _rate_limited(data):
             return data
         time.sleep(_BACKOFF * (attempt + 1))

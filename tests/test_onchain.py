@@ -745,6 +745,11 @@ def test_sweep_skips_the_null_and_burn_sinks():
     yielded = {n.payload.address.lower() for f in outcome.facts for n in f.yields}
     assert _TOKEN.lower() in yielded  # the real project token is kept
     assert zero not in yielded  # the null sink is skipped, never a node
+    # but it is not dropped silently, it is recorded as a discovery exclusion with its reason,
+    # so the run's surface shows what the sweep set aside, invariant 5
+    excluded = {i.address.lower(): i.reason for f in outcome.facts if f.kind == "discovery_excluded"
+                for i in f.payload.items}
+    assert excluded.get(zero) == "null-address"
 
 
 def test_sweep_skips_a_malformed_pool_address_but_keeps_its_valid_token():
@@ -769,6 +774,11 @@ def test_sweep_skips_a_malformed_pool_address_but_keeps_its_valid_token():
     assert bad_pool_id.lower() not in yielded  # the 32-byte id is not a node
     assert "0xnothex" not in yielded  # a non-hex token side is dropped too
     assert _TOKEN.lower() in yielded  # the well-formed project token survives
+    # the two malformed addresses are recorded excluded, not silently dropped, invariant 5
+    excluded = {i.address.lower(): i.reason for f in outcome.facts if f.kind == "discovery_excluded"
+                for i in f.payload.items}
+    assert excluded.get(bad_pool_id.lower()) == "malformed-address"
+    assert excluded.get("0xnothex") == "malformed-address"
 
 
 def test_is_evm_address_accepts_only_a_20_byte_hex_address():

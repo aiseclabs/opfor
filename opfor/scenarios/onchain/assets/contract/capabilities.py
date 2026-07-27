@@ -24,6 +24,8 @@ from opfor.scenarios.onchain.assets.contract.sources.funds import is_evm_address
 from opfor.scenarios.onchain.assets.contract.types import (
     CodebaseFact,
     ContractData,
+    DiscoveryExclusionsFact,
+    ExcludedObservation,
     FundFact,
     IdentityFact,
     InterfaceFact,
@@ -60,18 +62,22 @@ class SweepPools(Capability):
             pools = self._sweep(survey)
         except Exception as exc:
             return _net_failed("dex sweep", exc)
-        # A value token, WETH or a stable, is money not an audit target, so it is not made a node.
-        # This keeps the quote side of every pool out of ENRICH, where it would only be fetched and
-        # then skipped, and leaves the project token as the thing to pivot. The null and burn sinks
-        # are skipped for the same reason, a pool that lists one as a side would otherwise become a
-        # node whose burned-supply balance a naive funds read prices as millions. The policy carries
-        # both sets, injected, so this capability shapes the surface from data, not a hardcoded table.
-        skip = self._policy.value_token_addresses(survey.chain) | self._policy.null_addresses
+        # A value token, WETH or a stable, is money not an audit target, and the null and burn sinks
+        # are not contracts, so neither is made a node, that keeps the quote side of every pool and
+        # the burn sink out of ENRICH, where a value token would only be fetched and skipped and a
+        # burn sink's balance a naive funds read would price as millions. But neither is dropped
+        # silently, each is recorded as a discovery exclusion with its reason, so the run's surface
+        # shows what the sweep saw and set aside rather than a gap, invariant 5. The policy carries
+        # both sets, injected, so this shapes the surface from data, not a hardcoded table, and it
+        # names an exclusion with the same labels the target filter uses.
+        value_tokens = self._policy.value_token_addresses(survey.chain)
         nodes: list[Node] = []
+        excluded: list[ExcludedObservation] = []
         for pool in pools:
             # A discovery source can hand back a 32-byte pool id rather than the pool's address, so a
             # malformed pool address is not made a node, it would only be a phantom contract whose
-            # funds are pool metadata, not a real balance. Its tokens are still checked on their own.
+            # funds are pool metadata, not a real balance. It is recorded excluded, not dropped, and
+            # its tokens are still checked on their own.
             if is_evm_address(pool.address):
                 nodes.append(Node(id=_node_id(pool.chain, pool.address), type="contract",
                                   payload=ContractData(chain=pool.chain, address=pool.address,
@@ -80,15 +86,38 @@ class SweepPools(Capability):
                                                        quote_symbol=pool.quote_symbol,
                                                        liquidity_usd=pool.liquidity_usd,
                                                        age_days=pool.age_days)))
+            elif pool.address:
+                excluded.append(ExcludedObservation(chain=pool.chain, address=pool.address,
+                                                    symbol=pool.base_symbol, reason="malformed-address"))
             for address, symbol in ((pool.base_address, pool.base_symbol),
                                     (pool.quote_address, pool.quote_symbol)):
-                if address and is_evm_address(address) and address.lower() not in skip:
+                if not address:
+                    continue
+                if not is_evm_address(address):
+                    excluded.append(ExcludedObservation(chain=pool.chain, address=address,
+                                                        symbol=symbol, reason="malformed-address"))
+                elif address.lower() in value_tokens:
+                    excluded.append(ExcludedObservation(chain=pool.chain, address=address,
+                                                        symbol=symbol, reason="value-token"))
+                elif self._policy.is_null(address):
+                    excluded.append(ExcludedObservation(chain=pool.chain, address=address,
+                                                        symbol=symbol, reason="null-address"))
+                else:
                     nodes.append(Node(id=_node_id(pool.chain, address), type="contract",
                                       payload=ContractData(chain=pool.chain, address=address,
                                                            role="token", source="swept",
                                                            base_symbol=symbol,
                                                            age_days=pool.age_days)))
-        return Done(facts=(Fact(kind="swept", about=task.node, yields=tuple(nodes)),))
+        facts = [Fact(kind="swept", about=task.node, yields=tuple(nodes))]
+        if excluded:
+            # Dedupe by address, one pool's quote side repeats across every pool it quotes, so the
+            # record names each set-aside address once rather than once per pool.
+            seen: dict[str, ExcludedObservation] = {}
+            for item in excluded:
+                seen.setdefault(item.address.lower(), item)
+            facts.append(Fact(kind="discovery_excluded", about=task.node,
+                              payload=DiscoveryExclusionsFact(items=tuple(seen.values()))))
+        return Done(facts=tuple(facts))
 
 
 class PivotRelated(Capability):

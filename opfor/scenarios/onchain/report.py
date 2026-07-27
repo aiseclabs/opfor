@@ -214,8 +214,29 @@ def _cluster_projects(records: list[dict], own_by_address: dict[str, tuple[str, 
             r["project_primary"] = r["address"] == primary["address"]
 
 
+def _discovery_excluded(world: World) -> list[dict]:
+    """The observations the sweep saw and set aside, one record per address with its reason, so the
+    report shows what discovery dropped rather than a silent gap, invariant 5. Deduped across
+    surveys by address, since a value token is set aside on every chain it quotes."""
+    seen: dict[str, dict] = {}
+    for node in world.nodes("survey"):
+        fact = world.latest("discovery_excluded", node.id)
+        if fact is None:
+            continue
+        for item in fact.payload.items:
+            seen.setdefault(item.address.lower(), {
+                "chain": item.chain, "address": item.address,
+                "symbol": item.symbol, "reason": item.reason})
+    return sorted(seen.values(), key=lambda r: (r["reason"], r["address"]))
+
+
 def report_view(world: World, findings) -> dict:
     """The scenario's structured report contribution, the `contracts` section the CLI merges into
     the run's findings.json. Keyed so a reader, or a later scenario, adds sections without
-    collision."""
-    return {"contracts": contract_records(world, findings)}
+    collision. The `discovery_excluded` section names what the sweep set aside and why, so a
+    money token or a burn sink is a visible exclusion, not a silent drop."""
+    view = {"contracts": contract_records(world, findings)}
+    excluded = _discovery_excluded(world)
+    if excluded:
+        view["discovery_excluded"] = excluded
+    return view

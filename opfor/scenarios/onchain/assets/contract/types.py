@@ -109,3 +109,25 @@ class SignalFact:
 
     flags: tuple[str, ...] = ()
     centralization: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True, kw_only=True)
+class ExcludedObservation:
+    """A discovery observation the sweep saw and set aside before it could become an enrichable
+    node. `reason` mirrors the target filter's structural-exclusion labels, `value-token`,
+    `null-address`, or `malformed-address`, so the sweep and triage name an exclusion the same way."""
+
+    chain: str
+    address: str
+    symbol: str = ""
+    reason: str = ""
+
+
+@dataclass(frozen=True, kw_only=True)
+class DiscoveryExclusionsFact:
+    """The observations one sweep set aside, carried on a single `discovery_excluded` fact so the
+    run records what it saw and dropped, not a silent gap in the surface, invariant 5. It is a
+    record, not a node, so a money token or a burn sink is visible without being fetched and priced
+    into a false high-value finding, which is why the sweep sets them aside in the first place."""
+
+    items: tuple[ExcludedObservation, ...] = ()

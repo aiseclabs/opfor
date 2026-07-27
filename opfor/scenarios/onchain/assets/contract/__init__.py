@@ -30,9 +30,11 @@ DETECTIONS = KNOWLEDGE / "detections" / "contract-signals"
 
 
 @dataclass(frozen=True, kw_only=True)
-class ClassBundle:
-    """One asset class's contribution to the scenario, its capabilities, its per-phase rules, and
-    the knowledge directory its triage reads. The scenario concatenates one bundle per class, so a
+class ContractClassBundle:
+    """The contract class's contribution to the scenario, its capabilities, its per-phase rules,
+    and the knowledge directory its triage reads. This is the contract-specific bundle, distinct
+    from attacksurface's `ClassBundle`, which additionally carries CVE reproduction recipes the
+    contract scenario has no analogue for. The scenario concatenates one bundle per class, so a
     class is added or swapped without touching the scenario loop."""
 
     name: str
@@ -42,7 +44,7 @@ class ClassBundle:
     knowledge_dir: Path
 
 
-def assemble(*, sweep_fn, pivot_fn, source_fn, identify_fn, funds_fn, resolve_fn) -> ClassBundle:
+def assemble(*, sweep_fn, pivot_fn, source_fn, identify_fn, funds_fn, resolve_fn) -> ContractClassBundle:
     """The contract class's contribution. The seams are the public sources, injected so a test
     drives the class with fixtures. The detection data is loaded once here at assemble time, not
     at import, so the content root stays swappable and importing the class triggers no file IO."""
@@ -58,7 +60,7 @@ def assemble(*, sweep_fn, pivot_fn, source_fn, identify_fn, funds_fn, resolve_fn
         ScanSignals(detections),
         FingerprintSource(),
     )
-    return ClassBundle(
+    return ContractClassBundle(
         name=planner.CLASS,
         capabilities=capabilities,
         map_rules=tuple(planner.map_rules()),

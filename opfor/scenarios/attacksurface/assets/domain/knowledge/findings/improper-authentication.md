@@ -1,13 +1,6 @@
 ---
 title: Improper authentication
 impact: INFO
-triggers:
-  - redirect to
-  - iap
-  - cloudflareaccess
-  - accounts.google
-  - login.microsoftonline
-  - okta
 ---
 
 # Improper Authentication

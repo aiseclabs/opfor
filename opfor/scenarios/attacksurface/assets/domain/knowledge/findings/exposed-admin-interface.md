@@ -1,11 +1,6 @@
 ---
 title: Exposed non-production or admin interface
 impact: MEDIUM
-always: true
-triggers:
-- admin
-- staging
-- internal
 clues:
 - id: directory-listing
   note: an autoindex directory listing is exposed, the files under this path are enumerable

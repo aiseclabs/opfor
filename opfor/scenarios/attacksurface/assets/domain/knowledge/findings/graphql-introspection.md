@@ -1,8 +1,6 @@
 ---
 title: GraphQL introspection enabled
 impact: MEDIUM
-triggers:
-  - graphql
 ---
 
 # GraphQL Introspection Enabled

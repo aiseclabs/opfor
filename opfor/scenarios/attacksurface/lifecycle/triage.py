@@ -123,8 +123,6 @@ def _load_classes(directory: Path) -> list[dict]:
             "id": path.stem,
             "title": str(meta.get("title", path.stem)),
             "impact": str(meta.get("impact", "MEDIUM")).upper(),
-            "always": bool(meta.get("always", False)),
-            "triggers": [str(t).lower() for t in (meta.get("triggers") or [])],
             "body": body,
         })
     return out
@@ -224,7 +222,7 @@ class SurfaceTriage(Triage):
         """Judge the host units in char-bounded chunks. The knowledge is selected once over
         the whole surface, so it is identical across chunks and rides the cached system
         prompt. A chunk whose call fails becomes a degraded finding, loud but contained."""
-        system = self._system(units)
+        system = self._system()
         out: list[Finding] = []
         for index, chunk in enumerate(_pack(units, self._max_chunk)):
             try:
@@ -241,13 +239,12 @@ class SurfaceTriage(Triage):
                 ))
         return out
 
-    def _system(self, units: list[str]) -> str:
-        """The system prompt, the static instruction plus the knowledge classes relevant to
-        the whole surface. Each class is labelled with its id so the model can name it as a
-        finding's category. Selected once so it is constant across chunks and cacheable."""
-        low = "\n".join(units).lower()
-        chosen = [c for c in self._classes if c["always"] or any(t in low for t in c["triggers"])]
-        blocks = [f"## Class id: {c['id']}\n\n{c['body']}" for c in chosen]
+    def _system(self) -> str:
+        """The system prompt, the static instruction plus every finding class, each labelled with
+        its id so the model can name it as a finding's category. Every class is offered on every
+        run, never gated out by a keyword pre-filter, so the judge decides on the evidence and a
+        class is never silently withheld. Constant across chunks, so it rides the cached prompt."""
+        blocks = [f"## Class id: {c['id']}\n\n{c['body']}" for c in self._classes]
         knowledge = "\n\n---\n\n".join(blocks)
         return f"{SYSTEM}\n\n# Knowledge, the classes of finding to judge against\n\n{knowledge}\n"
 

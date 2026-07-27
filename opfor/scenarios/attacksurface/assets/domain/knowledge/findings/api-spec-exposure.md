@@ -1,11 +1,6 @@
 ---
 title: Exposed API specification
 impact: MEDIUM
-triggers:
-- openapi
-- swagger
-- api-docs
-- api_spec
 clues:
 - id: swagger-openapi
   note: a Swagger specification is present, it maps the API surface

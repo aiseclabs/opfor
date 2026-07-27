@@ -1,17 +1,6 @@
 ---
 title: Open-source service exposure
 impact: MEDIUM
-triggers:
-- gitlab
-- jenkins
-- grafana
-- kibana
-- nacos
-- consul
-- harbor
-- rabbitmq
-- phpmyadmin
-- x-powered-by
 clues:
 - id: spring-actuator
   note: a Spring Boot Actuator index is present, env and heapdump may follow

@@ -1,9 +1,6 @@
 ---
 title: Unauthenticated interface
 impact: INFO
-always: true
-triggers:
-  - endpoint
 ---
 
 # Unauthenticated Interface

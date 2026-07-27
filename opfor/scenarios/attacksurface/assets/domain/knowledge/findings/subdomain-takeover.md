@@ -1,36 +1,6 @@
 ---
 title: Subdomain takeover
 impact: HIGH
-triggers:
-- takeover
-- unclaimed
-- nosuchbucket
-- no such app
-- there isn't a github pages site here
-- fastly error
-- repository not found
-- project not found
-- the specified bucket does not exist
-- github.io
-- s3.amazonaws.com
-- herokuapp.com
-- herokudns.com
-- herokussl.com
-- fastly.net
-- surge.sh
-- bitbucket.io
-- netlify.app
-- ghost.io
-- pantheonsite.io
-- wpengine.com
-- azurewebsites.net
-- cloudapp.net
-- trafficmanager.net
-- readthedocs.io
-- cargocollective.com
-- helpscoutdocs.com
-- statuspage.io
-- zendesk.com
 signatures:
 - service: GitHub Pages
   signature: there isn't a github pages site here

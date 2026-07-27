@@ -123,7 +123,7 @@ class SurfaceRenderer:
         if profile_data is not None and profile_data.product:
             version = f" {profile_data.version}" if profile_data.version else ""
             line += f"\n  product: {profile_data.product}{version}"
-        scan = world.latest("cve_scanned", node.id)
+        scan = world.latest("cve_scan", node.id)
         if scan is not None and scan.payload.cves:
             basis = _CVE_MATCH.get(scan.payload.match)
             if basis:

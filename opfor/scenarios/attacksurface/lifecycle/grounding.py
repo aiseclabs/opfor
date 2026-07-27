@@ -191,7 +191,7 @@ class FindingGrounder(Grounding):
         node = next((n for n in world.nodes("domain") if n.payload.name == host), None)
         if node is None:
             return None
-        scan = world.latest("cve_scanned", node.id)
+        scan = world.latest("cve_scan", node.id)
         if scan is None or scan.payload.match != _VERSION_MATCH:
             return None
         primary = _primary_cve(finding)
@@ -220,7 +220,7 @@ class FindingGrounder(Grounding):
         node = next((n for n in world.nodes("domain") if n.payload.name == host), None)
         if node is None:
             return None, None
-        scan = world.latest("cve_scanned", node.id)
+        scan = world.latest("cve_scan", node.id)
         if scan is None or scan.payload.match != _VERSION_MATCH:
             return None, None
         primary = _primary_cve(finding)

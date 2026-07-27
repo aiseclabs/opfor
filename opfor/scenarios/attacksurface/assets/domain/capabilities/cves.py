@@ -48,4 +48,4 @@ class CVELookup(Capability):
                     references=tuple(str(u) for u in c.get("references", ())))
                 for c in raw if c.get("id"))
         payload = CVEScan(product=product, version=version, cpe=cpe, match=match, cves=cves)
-        return Done(facts=(Fact(kind="cve_scanned", about=task.node, payload=payload),))
+        return Done(facts=(Fact(kind="cve_scan", about=task.node, payload=payload),))

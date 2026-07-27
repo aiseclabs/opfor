@@ -117,8 +117,8 @@ def test_cve_scan_records_the_identified_product_and_its_cves():
         return [{"id": "CVE-2021-39226", "cvss": 9.8, "severity": "CRITICAL", "summary": "auth bypass"}]
 
     report, _scenario, world = _run_capturing(identify_fn=identify, cve_fn=cves)
-    scans = [f.payload for f in world.facts("cve_scanned") if f.payload.product]
-    assert scans, "expected a cve_scanned fact carrying a product"
+    scans = [f.payload for f in world.facts("cve_scan") if f.payload.product]
+    assert scans, "expected a cve_scan fact carrying a product"
     assert scans[0].product == "grafana" and scans[0].version == "8.0.0"
     assert any(c.id == "CVE-2021-39226" and c.severity == "CRITICAL" for c in scans[0].cves)
 
@@ -132,7 +132,7 @@ def test_cve_scan_records_the_match_basis_from_the_lookup():
         return [{"id": "CVE-2021-39226", "match": "product"}]
 
     _report, _scenario, world = _run_capturing(identify_fn=identify, cve_fn=cves)
-    scans = [f.payload for f in world.facts("cve_scanned") if f.payload.product]
+    scans = [f.payload for f in world.facts("cve_scan") if f.payload.product]
     assert scans and scans[0].match == "product"
 
 def test_profile_fails_loud_when_identification_errors():
@@ -186,7 +186,7 @@ def test_cve_render_ranks_by_cvss_and_notes_truncation():
     # eleven CVEs, the critical one last in database order so a blind head slice would drop it
     cves = tuple(CVE(id=f"CVE-{i}", cvss=1.0, severity="LOW", summary="low") for i in range(10))
     cves += (CVE(id="CVE-CRIT", cvss=9.8, severity="CRITICAL", summary="rce"),)
-    world.absorb([Fact(kind="cve_scanned", about="domain:h",
+    world.absorb([Fact(kind="cve_scan", about="domain:h",
                        payload=CVEScan(product="acme", version="1.0", cves=cves))])
     report = "\n".join(SurfaceRenderer(clues=[], takeover=[]).units(world))
     # the highest-scored CVE reaches the report despite being last in database order
@@ -206,7 +206,7 @@ def test_cve_render_states_a_weak_match_basis_so_the_judge_weighs_it():
         Fact(kind="http", about="domain:h", payload=HTTP(alive=True, status=200, url="https://h/")),
     ])
     cves = (CVE(id="CVE-1", cvss=7.0, severity="HIGH", summary="x"),)
-    world.absorb([Fact(kind="cve_scanned", about="domain:h",
+    world.absorb([Fact(kind="cve_scan", about="domain:h",
                        payload=CVEScan(product="acme", version="", match="keyword", cves=cves))])
     report = "\n".join(SurfaceRenderer(clues=[], takeover=[]).units(world))
     assert "cve match: matched by product name only" in report

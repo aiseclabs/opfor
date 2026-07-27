@@ -30,7 +30,7 @@ def test_checkpoint_round_trips_a_world_with_nested_dataclass_payloads():
                        payload=SpecAudit(base="https://h/openapi.json", operations=(
                            SpecOperation(path="/a", methods="GET", verified=True, status=200),
                            SpecOperation(path="/b", methods="POST"))))])
-    world.absorb([Fact(kind="cve_scanned", about="endpoint:h/openapi.json",
+    world.absorb([Fact(kind="cve_scan", about="endpoint:h/openapi.json",
                        payload=CVEScan(product="grafana", version="8.3.0", cves=(
                            CVE(id="CVE-2021-43798", cvss=7.5, severity="HIGH",
                                summary="path traversal", references=("https://x",)),)))])
@@ -44,7 +44,7 @@ def test_checkpoint_round_trips_a_world_with_nested_dataclass_payloads():
     audit = revived.world.latest("spec_audit", "endpoint:h/openapi.json").payload
     assert audit == world.latest("spec_audit", "endpoint:h/openapi.json").payload
     assert isinstance(audit.operations, tuple) and audit.operations[0].verified is True
-    scan = revived.world.latest("cve_scanned", "endpoint:h/openapi.json").payload
+    scan = revived.world.latest("cve_scan", "endpoint:h/openapi.json").payload
     assert scan.cves[0].id == "CVE-2021-43798" and scan.cves[0].cvss == 7.5
     assert revived.world.node("endpoint:h/openapi.json").payload == \
         world.node("endpoint:h/openapi.json").payload

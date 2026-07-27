@@ -220,7 +220,7 @@ def _cve_rule(world: World) -> list[Task]:
     for node in _live_domains(world):
         if not world.has_fact(node.id, "host_profile"):
             continue
-        if world.has_fact(node.id, "cve_scanned"):
+        if world.has_fact(node.id, "cve_scan"):
             continue
         tasks.append(Task(capability="cve_scan", node=node.id))
     return tasks

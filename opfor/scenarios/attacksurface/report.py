@@ -56,7 +56,7 @@ def host_records(world: World, findings) -> list[dict]:
         resolved = world.latest("resolved", node.id)
         http = world.latest("http", node.id)
         profile = world.latest("host_profile", node.id)
-        scan = world.latest("cve_scanned", node.id)
+        scan = world.latest("cve_scan", node.id)
         resolvable = resolved.payload.resolvable if resolved is not None else None
         live = bool(http is not None and http.payload.alive)
         finding_ids = findings_by_host.get(name, [])

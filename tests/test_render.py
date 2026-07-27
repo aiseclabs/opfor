@@ -76,7 +76,7 @@ def test_render_flags_a_cve_the_scenario_carries_a_reproduction_recipe_for():
     world.absorb((
         Fact(kind="http", about="domain:h.example.com",
              payload=HTTPData(alive=True, status=200, url="https://h.example.com/")),
-        Fact(kind="cve_scanned", about="domain:h.example.com",
+        Fact(kind="cve_scan", about="domain:h.example.com",
              payload=CVEScan(product="Metabase", version="0.40.4", match="version", cves=(
                  CVE(id="CVE-2099-0001", cvss=9.8, severity="CRITICAL", summary="unauth RCE"),
                  CVE(id="CVE-2021-41277", cvss=7.5, severity="HIGH", summary="geojson file read"),

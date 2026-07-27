@@ -26,28 +26,32 @@ def _severity_order(finding) -> int:
     return _SEVERITY_ORDER.index(finding.severity) if finding.severity in _SEVERITY_ORDER else 9
 
 
-def print_report(report) -> None:
-    print(f"scenario: {report.scenario}")
-    print(f"status: {report.status}  reached: {report.reached.name}  "
-          f"terminal: {report.terminal.name}")
-    for note in report.notes:
-        print(f"note: {note}")
-    print(f"findings: {len(report.findings)}")
+def report_text(report) -> str:
+    """The printed run summary as a string, the operator's at-a-glance twin of the json and md.
+    Pure, so the CLI owns the write and a test reads the text without capturing stdout."""
+    lines = [
+        f"scenario: {report.scenario}",
+        f"status: {report.status}  reached: {report.reached.name}  "
+        f"terminal: {report.terminal.name}",
+    ]
+    lines += [f"note: {note}" for note in report.notes]
+    lines.append(f"findings: {len(report.findings)}")
     for finding in sorted(report.findings, key=_severity_order):
-        print(f"  [{finding.severity}] {finding.title} -> {finding.where}")
+        lines.append(f"  [{finding.severity}] {finding.title} -> {finding.where}")
         if finding.evidence:
-            print(f"      evidence: {finding.evidence}")
+            lines.append(f"      evidence: {finding.evidence}")
         if finding.poc:
-            print(f"      poc: {finding.poc}")
+            lines.append(f"      poc: {finding.poc}")
         request = finding.data.get("poc_request")
         if request:
-            print(f"      grounded poc: {request['method']} {request['url']} "
-                  f"(expect {request['expect']}, source {request['source']})")
+            lines.append(f"      grounded poc: {request['method']} {request['url']} "
+                         f"(expect {request['expect']}, source {request['source']})")
             if request.get("script"):
-                print(f"      poc script: {request['script']}")
+                lines.append(f"      poc script: {request['script']}")
+    return "\n".join(lines)
 
 
-def _report_json(report, world=None) -> dict:
+def report_json(report, world=None) -> dict:
     """The run as a structured object, the machine-readable twin of the printed report. It
     carries the closure contract, status, reached, and terminal, so a reader knows whether the
     run finished, not only what it found. Each finding carries its grounded PoC request in its
@@ -75,7 +79,7 @@ def _report_json(report, world=None) -> dict:
     return out
 
 
-def _report_md(report, world=None) -> str:
+def report_md(report, world=None) -> str:
     """The printed report rendered as markdown, the durable human twin of the json."""
     lines = [f"# opfor {report.scenario} run", ""]
     lines.append(f"- status: {report.status}")
@@ -126,9 +130,9 @@ def persist(report, world, name: str, explicit: str | None) -> Path | None:
     outdir = Path(explicit) if explicit else default_output(name)
     try:
         outdir.mkdir(parents=True, exist_ok=True, mode=0o700)
-        payload = json.dumps(_report_json(report, world), indent=2, ensure_ascii=False)
+        payload = json.dumps(report_json(report, world), indent=2, ensure_ascii=False)
         (outdir / "findings.json").write_text(payload + "\n", encoding="utf-8")
-        (outdir / "report.md").write_text(_report_md(report, world), encoding="utf-8")
+        (outdir / "report.md").write_text(report_md(report, world), encoding="utf-8")
         _write_pocs(report, outdir)
     except OSError as exc:
         print(f"warning: could not write run output to {outdir}: {exc}", file=sys.stderr)

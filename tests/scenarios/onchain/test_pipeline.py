@@ -67,10 +67,10 @@ def test_a_dead_token_with_no_funds_or_signals_is_not_listed():
 
 
 def test_the_cli_report_merges_the_contracts_section():
-    from opfor.report import _report_json
+    from opfor.report import report_json
 
     report, world = _run()
-    out = _report_json(report, world)
+    out = report_json(report, world)
     assert list(out).index("contracts") < list(out).index("findings")
     assert out["contracts"][0]["address"] == _VAULT  # the finding-bearing contract sorts first
     assert json.loads(json.dumps(out))["contracts"][0]["role"] == "vault"  # round-trips as json

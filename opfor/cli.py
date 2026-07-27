@@ -17,7 +17,7 @@ from pathlib import Path
 
 from opfor import __version__
 from opfor.envfile import load_env_file
-from opfor.report import default_output, persist, print_report
+from opfor.report import default_output, persist, report_text
 from opfor.scenarios.registry import known_scenarios
 
 # Load a working-directory .env before the run reads its OPFOR_* config, so a fixed target and
@@ -96,7 +96,7 @@ def _run(args) -> int:
             ckpt = None
         report = engine_run(scenario, world, scope=scope, budget=Budget(args.budget),
                             max_retries=retries, task_timeout=timeout, checkpoint_path=ckpt)
-    print_report(report)
+    print(report_text(report))
     written = persist(report, world, name, getattr(args, "output", None))
     if written is not None:
         print(f"written: {written}/findings.json, {written}/report.md")

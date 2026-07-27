@@ -87,13 +87,13 @@ def test_a_dead_passive_only_subdomain_is_not_listed():
 
 
 def test_the_cli_report_merges_the_hosts_section_between_summary_and_findings():
-    from opfor.report import _report_json
+    from opfor.report import report_json
 
     report = Report(scenario="attacksurface", status=CLOSED, reached=Phase.CONFIRM,
                     terminal=Phase.CONFIRM,
                     findings=(Finding(id="finding:kv:api", title="t", severity="HIGH",
                                       where="https://api.example.com/"),))
-    out = _report_json(report, _world())
+    out = report_json(report, _world())
     assert list(out).index("hosts") < list(out).index("findings")  # hosts before findings
     assert out["hosts"][0]["subdomain"] == "api.example.com"
     # round-trips as json, the machine-readable contract
@@ -101,10 +101,10 @@ def test_the_cli_report_merges_the_hosts_section_between_summary_and_findings():
 
 
 def test_a_scenario_without_an_adapter_reports_findings_only():
-    from opfor.report import _report_json
+    from opfor.report import report_json
 
     report = Report(scenario="mock", status=CLOSED, reached=Phase.TRIAGE, terminal=Phase.TRIAGE)
-    out = _report_json(report, _world())
+    out = report_json(report, _world())
     assert "hosts" not in out  # the generic report adds no section a scenario did not contribute
 
 

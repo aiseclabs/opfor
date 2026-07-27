@@ -12,7 +12,7 @@ import json
 import pytest
 
 from opfor.cli import main
-from opfor.report import _report_json, _slug_target, default_output, persist
+from opfor.report import _slug_target, default_output, persist, report_json
 from opfor.scenarios.attacksurface import prepare_run
 
 
@@ -116,7 +116,7 @@ def _report_with_findings():
 
 
 def test_report_json_carries_the_closure_contract_and_a_summary():
-    obj = _report_json(_report_with_findings())
+    obj = report_json(_report_with_findings())
     assert obj["status"] == "closed"
     assert obj["reached"] == "TRIAGE" and obj["terminal"] == "TRIAGE"
     assert obj["summary"]["MEDIUM"] == 1 and obj["summary"]["LOW"] == 1

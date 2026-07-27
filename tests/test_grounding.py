@@ -64,6 +64,15 @@ def test_grounding_attaches_a_poc_request_only_for_an_observed_safe_read():
     assert "poc_request" not in by_id["f3"].data
     # an exploit proof of concept is never grounded as a safe read
     assert "poc_request" not in by_id["f4"].data
+    # the grounder is the sole authority for the final poc field. A grounded finding carries a
+    # hand-runnable curl labeled unverified, since this run never sends it to the target.
+    assert by_id["f1"].poc.startswith("UNVERIFIED")
+    assert "curl" in by_id["f1"].poc and "https://api.example.com/config/all" in by_id["f1"].poc
+    # an ungroundable safe read gets an honest message, never a fabricated command
+    assert "no reproducible" in by_id["f3"].poc.lower() and "curl" not in by_id["f3"].poc
+    # an ungroundable exploit says the demonstration would need authorized exploitation this run
+    # does not perform, again with no fabricated command
+    assert "authorized exploitation" in by_id["f4"].poc.lower() and "curl" not in by_id["f4"].poc
     # grounding never mutates the input finding in place, it returns a new object, so the
     # original stays clean and Finding.data is effectively immutable
     assert "poc_request" not in grounded.data
@@ -71,10 +80,10 @@ def test_grounding_attaches_a_poc_request_only_for_an_observed_safe_read():
 
 
 def test_triage_judge_mints_findings_and_mutates_no_world_node():
-    """Triage judges, and only judges. Materializing a finding as a world node is the
-    post-triage grounder's job now, so judge adds no node, keeping world mutation out of
-    triage, invariant 2. The grounder materializes it, and the scenario wires it as the
-    post-triage step."""
+    """Triage judges, and only judges. Neither the judge nor the post-triage grounder adds a
+    finding node to the world, keeping world mutation out of triage, invariant 2. The grounder
+    only writes the poc field and a poc_request in the finding's data, it materializes nothing,
+    and the scenario wires it as the post-triage step."""
     from opfor.core import Fact
     from opfor.scenarios.attacksurface.assets.domain.types import DomainData, Endpoint, Resolved
     from opfor.scenarios.attacksurface.lifecycle.grounding import FindingGrounder
@@ -96,11 +105,11 @@ def test_triage_judge_mints_findings_and_mutates_no_world_node():
     triage = SurfaceTriage([], provider=MockProvider(responses=[finder]), model="m")
 
     findings = tuple(triage.judge(world))
-    # judge mints the finding but adds no finding node, world mutation is the grounder's job
+    # judge mints the finding but adds no finding node, and neither does the grounder
     assert any(f.where == "https://api.example.com/.env" for f in findings)
     assert not world.nodes("finding")
     grounded = FindingGrounder().run(world, findings)
     assert len(grounded) == len(findings)  # one finding per input, none minted, none dropped
-    assert world.nodes("finding")  # the grounded finding is now materialized for reproduce
+    assert not world.nodes("finding")  # the grounder writes the poc field, it materializes nothing
     # the scenario wires the grounder as its post-triage step
     assert isinstance(_make().grounding, FindingGrounder)

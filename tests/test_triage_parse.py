@@ -21,7 +21,9 @@ def test_model_findings_are_mapped_to_typed_findings():
     found = [f for f in report.findings if f.data.get("kind") == "unauthenticated-interface"]
     assert found and found[0].severity == "HIGH"
     assert found[0].where.endswith("/admin")
-    assert found[0].poc.startswith("curl")
+    # the poc field is the grounder's, an observed safe read grounds to a hand-runnable curl
+    # labeled unverified, so the mapped finding still carries the model's request, now grounded
+    assert "curl -s https://admin.example.com/admin" in found[0].poc
     assert found[0].data["confidence"] == 0.9
 
 

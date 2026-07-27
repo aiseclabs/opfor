@@ -191,14 +191,12 @@ def test_path_permutation_runs_between_harvest_and_endpoints_without_deadlock():
 
 
 def test_system_prompts_frame_target_text_as_untrusted():
-    from opfor.scenarios.attacksurface.lifecycle import confirm as confirm_mod
     from opfor.scenarios.attacksurface.lifecycle import triage as triage_mod
     # target-controlled surface text is embedded in every model prompt, so each prompt must
     # frame it as untrusted data whose embedded instructions are the attack, not guidance
     assert "untrusted" in triage_mod.SYSTEM.lower()
     assert "untrusted" in triage_mod.CHALLENGER_SYSTEM.lower()
     assert "untrusted" in triage_mod.JUDGE_SYSTEM.lower()
-    assert "untrusted" in confirm_mod.SYSTEM.lower()
 
 
 def test_a_forged_untrusted_marker_in_the_surface_is_defanged():

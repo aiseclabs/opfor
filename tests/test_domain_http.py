@@ -125,8 +125,6 @@ def test_fetch_seams_are_loud_on_the_unexpected_and_name_why_no_address_answered
         domains.fetch_url("h.example.com", ("2.2.2.2",), "/x")
     with pytest.raises(ValueError):
         domains.fetch_document("h.example.com", "/x")
-    with pytest.raises(ValueError):
-        domains.fetch_readonly("https://h.example.com/x")
 
     # a transport error on every address is not a real absent path, it is a coverage gap, so
     # the null status names the reason rather than leaving the caller to guess at a bare null
@@ -136,36 +134,11 @@ def test_fetch_seams_are_loud_on_the_unexpected_and_name_why_no_address_answered
     monkeypatch.setattr(domains, "_connect", timeout_all)
     assert domains.fetch_url("h.example.com", ("2.2.2.2",), "/x").reason == "unreachable"
     assert domains.fetch_document("h.example.com", "/x").reason == "unreachable"
-    assert domains.fetch_readonly("https://h.example.com/x").reason == "unreachable"
 
     # a host with no public address is told apart from a host that had one but did not answer
     monkeypatch.setattr(domains, "resolve_host", lambda n: Resolution(resolvable=True, addresses=("10.0.0.1",)))
     assert domains.fetch_url("h.example.com", ("10.0.0.1",), "/x").reason == "no-public-address"
     assert domains.fetch_document("h.example.com", "/x").reason == "no-public-address"
-    assert domains.fetch_readonly("https://h.example.com/x").reason == "no-public-address"
-
-def test_readonly_fetch_refuses_a_host_that_resolves_only_to_a_private_address(monkeypatch):
-    from opfor.scenarios.attacksurface.assets.domain.sources import http as domains
-    monkeypatch.setattr(domains, "resolve_host",
-                        lambda h: Resolution(resolvable=True, addresses=("127.0.0.1",), cnames=()))
-    # a name repointed at loopback between observation and replay must not be fetched
-    assert domains.fetch_readonly("http://internal.example.com/x").status is None
-
-def test_readonly_fetch_pins_a_public_address_and_verifies_the_certificate(monkeypatch):
-    from opfor.scenarios.attacksurface.assets.domain.sources import http as domains
-    monkeypatch.setattr(domains, "resolve_host",
-                        lambda h: Resolution(resolvable=True, addresses=("93.184.216.34",), cnames=()))
-    seen = {}
-
-    def fake_connect(name, ip, scheme, path, **kw):
-        seen["ip"] = ip
-        seen["verify"] = kw.get("verify")
-        return (200, "s", "text/html", "body", "", ())
-
-    monkeypatch.setattr(domains, "_connect", fake_connect)
-    result = domains.fetch_readonly("https://example.com/panel")
-    # the replay is pinned to the vetted public address and verifies the certificate
-    assert result.status == 200 and seen["ip"] == "93.184.216.34" and seen["verify"] is True
 
 def test_connect_closes_the_raw_socket_when_the_tls_handshake_fails(monkeypatch):
     import socket

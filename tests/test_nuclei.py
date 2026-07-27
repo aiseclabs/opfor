@@ -40,8 +40,8 @@ def test_the_vendored_grafana_template_parses_into_opfor_shapes():
     assert req.matchers_condition == "and"
     kinds = {m.type for m in req.matchers}
     assert kinds == {"status", "word", "regex"}
-    # a GET-only template needs the read-only intrusive tier, not the exploit tier
-    assert not t.writes and t.tier == "intrusive"
+    # a GET-only template is a read, so the grounder writes a bare-read PoC for it
+    assert not t.writes
 
 
 _RAW_TMPL = """
@@ -74,8 +74,8 @@ def test_a_single_raw_request_parses_and_rejects_an_unknown_placeholder():
     # the Host header is dropped, opfor's seam sets it, other headers survive
     assert dict(req.headers).get("Content-Type") == "application/json"
     assert "host" not in {k.lower() for k, _ in req.headers}
-    # a state-changing method, so it needs the exploit tier rather than the read-only intrusive one
-    assert t.writes and t.tier == "exploit"
+    # a state-changing method, so the grounder writes a PoC carrying that method and body
+    assert t.writes
     # a raw request naming a placeholder the single consumer does not fill is a loud coverage gap
     bad = _RAW_TMPL.replace('{"a":1}', '{"a":"{{interactsh-url}}"}')
     result = parse_template(bad)
@@ -114,16 +114,11 @@ def test_the_matcher_summary_is_faithful_not_a_lossy_substring():
 
 
 def test_load_templates_splits_supported_from_unsupported():
-    from opfor.scenarios.attacksurface.assets.domain.nuclei_chain import parse_chain, ChainTemplate
     supported, unsupported = load_templates(PATHS.nuclei)
     assert any(t.cve == "CVE-2021-43798" for t in supported)
-    # every vendored template is consumed by one of the two consumers, so nothing is silently
-    # half-loaded, invariant 5. A template the single-request parser cannot express, a raw chain, is
-    # consumed by the chain parser instead, never left as a dangling unsupported gap.
-    for gap in unsupported:
-        path = PATHS.nuclei / f"{gap.id}.yaml"
-        assert isinstance(parse_chain(path.read_text(encoding="utf-8")), ChainTemplate), \
-            f"{gap.id} is unsupported by both the single-request and the chain consumer"
+    # every vendored template is a single-request check the consumer can express, so nothing is
+    # silently half-loaded and no template is left as a dangling unsupported gap, invariant 5.
+    assert unsupported == []
 
 
 def test_a_code_protocol_template_is_refused_outright():

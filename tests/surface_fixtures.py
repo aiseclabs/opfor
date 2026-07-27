@@ -227,21 +227,6 @@ def _knowledge(scenario) -> str:
     return calls[0]["system"]
 
 
-def _claim(fid, *, severity="MEDIUM", where="https://h/x", title="t"):
-    from opfor.core import Finding
-    # A grounded finding carries the request grounding matched, so confirm binds its receipt by
-    # url rather than by id alone. The url is the one the receipt fixtures replay.
-    return Finding(id=fid, title=title, severity=severity, where=where,
-                   evidence="judged from the report", poc=f"safe read: curl -s {where}",
-                   data={"poc_request": {"method": "GET", "url": where}})
-
-def _receipt(**over):
-    from opfor.scenarios.attacksurface.lifecycle.reproduce import Reproduction
-    fields = dict(method="GET", url="https://h/x", status=200,
-                  content_type="application/json", size=12, excerpt='{"ok": true}', error="")
-    fields.update(over)
-    return Reproduction(**fields)
-
 def _two_findings():
     return json.dumps({"findings": [
         {"category": "exposed-admin-interface", "title": "Exposed admin", "severity": "HIGH",
@@ -249,9 +234,6 @@ def _two_findings():
         {"category": "unauthenticated-interface", "title": "Login redirect", "severity": "INFO",
          "where": "https://a/portal", "evidence": "302 to /login"},
     ]})
-
-def _read_only(url):
-    return Response(status=200, url=url, content_type="text/html", body="<html></html>")
 
 
 __all__ = [
@@ -277,8 +259,5 @@ __all__ = [
     '_run_capturing',
     '_prompt',
     '_knowledge',
-    '_claim',
-    '_receipt',
     '_two_findings',
-    '_read_only',
 ]

@@ -92,26 +92,25 @@ def _report_with_findings():
     from opfor.core.result import CLOSED, Finding, Report
     findings = (
         Finding(id="f1", title="Open spec", severity="MEDIUM", where="https://h/openapi.json",
-                evidence="a spec answered 200", poc="safe read: curl -s https://h/openapi.json",
+                evidence="a spec answered 200",
+                poc="UNVERIFIED, not executed against the target. Reproduce by hand: curl -s https://h/openapi.json",
                 data={"poc_request": {"method": "GET", "url": "https://h/openapi.json",
-                                      "expect": "HTTP 200", "source": "endpoint:h"},
-                      "reproduction_verdict": "weakened", "reproduction_reason": "just a spec",
-                      "receipt": {"status": 200, "content_type": "application/json"}}),
+                                      "expect": "HTTP 200", "source": "endpoint:h"}}),
         Finding(id="f2", title="Dangling host", severity="LOW", where="old.h", evidence="e"),
     )
-    return Report(scenario="attacksurface", status=CLOSED, reached=Phase.CONFIRM,
-                  terminal=Phase.CONFIRM, findings=findings, notes=("a caveat",))
+    return Report(scenario="attacksurface", status=CLOSED, reached=Phase.TRIAGE,
+                  terminal=Phase.TRIAGE, findings=findings, notes=("a caveat",))
 
 
 def test_report_json_carries_the_closure_contract_and_a_summary():
     obj = _report_json(_report_with_findings())
     assert obj["status"] == "closed"
-    assert obj["reached"] == "CONFIRM" and obj["terminal"] == "CONFIRM"
+    assert obj["reached"] == "TRIAGE" and obj["terminal"] == "TRIAGE"
     assert obj["summary"]["MEDIUM"] == 1 and obj["summary"]["LOW"] == 1
     assert obj["notes"] == ["a caveat"]
-    # findings are ranked most severe first, and the confirm verdict rides the finding
+    # findings are ranked most severe first, and the grounded poc request rides the finding
     assert [f["id"] for f in obj["findings"]] == ["f1", "f2"]
-    assert obj["findings"][0]["data"]["reproduction_verdict"] == "weakened"
+    assert obj["findings"][0]["data"]["poc_request"]["url"] == "https://h/openapi.json"
 
 
 def test_persist_writes_findings_json_and_report_md(tmp_path):
@@ -121,7 +120,7 @@ def test_persist_writes_findings_json_and_report_md(tmp_path):
     assert loaded["status"] == "closed" and len(loaded["findings"]) == 2
     md = (outdir / "report.md").read_text(encoding="utf-8")
     assert "# opfor attacksurface run" in md
-    assert "[MEDIUM] Open spec" in md and "confirmed: weakened" in md
+    assert "[MEDIUM] Open spec" in md and "grounded poc: GET https://h/openapi.json" in md
 
 
 def test_default_output_is_user_private_under_xdg_state(monkeypatch, tmp_path):

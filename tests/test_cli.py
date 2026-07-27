@@ -93,9 +93,11 @@ def _report_with_findings():
     findings = (
         Finding(id="f1", title="Open spec", severity="MEDIUM", where="https://h/openapi.json",
                 evidence="a spec answered 200",
-                poc="UNVERIFIED, not executed against the target. Reproduce by hand: curl -s https://h/openapi.json",
+                poc="UNVERIFIED, not executed against the target. Run the generated PoC script `poc/open-spec-h.py`",
                 data={"poc_request": {"method": "GET", "url": "https://h/openapi.json",
-                                      "expect": "HTTP 200", "source": "endpoint:h"}}),
+                                      "expect": "HTTP 200", "source": "endpoint:h",
+                                      "script": "poc/open-spec-h.py"},
+                      "poc_script": "#!/usr/bin/env python3\nimport sys\nsys.exit(1)\n"}),
         Finding(id="f2", title="Dangling host", severity="LOW", where="old.h", evidence="e"),
     )
     return Report(scenario="attacksurface", status=CLOSED, reached=Phase.TRIAGE,
@@ -121,6 +123,10 @@ def test_persist_writes_findings_json_and_report_md(tmp_path):
     md = (outdir / "report.md").read_text(encoding="utf-8")
     assert "# opfor attacksurface run" in md
     assert "[MEDIUM] Open spec" in md and "grounded poc: GET https://h/openapi.json" in md
+    assert "poc script: poc/open-spec-h.py" in md
+    # a grounded finding's PoC script is written as its own runnable file under the run directory
+    script = (outdir / "poc" / "open-spec-h.py").read_text(encoding="utf-8")
+    assert script.startswith("#!/usr/bin/env python3")
 
 
 def test_default_output_is_user_private_under_xdg_state(monkeypatch, tmp_path):

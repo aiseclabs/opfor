@@ -86,9 +86,11 @@ sequenced along a fixed lifecycle spine so a run either closes or says why it di
   subdomains, ENRICH identifies each host and analyzes its service state, the interfaces it
   exposes, the product it runs and that product's CVEs. TRIAGE judges the findings, the exposed
   interfaces, the known vulnerabilities, and the unauthorized-access holes, and writes an accurate
-  PoC for each. The PoC is written, never sent, so a grounded finding carries a hand-runnable curl
-  labeled unverified rather than a live receipt. Its terminal is TRIAGE, there is no intrusive tier,
-  the engine never sends a request to a target beyond recon.
+  PoC for each. The PoC is written, never sent, so a grounded finding carries a self-contained
+  stdlib Python script, one per finding, that an operator runs by hand. The script encodes the
+  method, every candidate url, the headers, and a PASS or FAIL success check mirroring triage's
+  matcher evaluator, labeled unverified rather than a live receipt. Its terminal is TRIAGE, there is
+  no intrusive tier, the engine never sends a request to a target beyond recon.
 - `onchain` is a second CLI-runnable scenario, recon-only. From a chain it sweeps the active DEX
   pools, pivots from each token or pool to the fund-management contracts behind it, identifies the
   role, reads the funds, enumerates the exposed interfaces, and matches risk signals, then TRIAGE

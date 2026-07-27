@@ -76,19 +76,22 @@ PATHS = KnowledgePaths.under(KNOWLEDGE)
 def _template_recipes(nuclei_dir) -> tuple[ReproductionRecipe, ...]:
     """Reproduction recipes derived from the vendored Nuclei templates, so the recipe data is a real
     published template opfor consumes, not a hand-typed one. A read-only template grounds a GET
-    recipe, a state-changing template grounds a recipe carrying its write method and body. The
-    grounder writes an accurate PoC from the recipe, labeled unverified, it is never sent to the
-    target. A template's matcher summary rides as the recipe's expectation, so the PoC states the
-    template's full fire condition. Only the first candidate request is grounded for now, iterating a
-    template's request list is a later increment."""
+    recipe, a state-changing template grounds a recipe carrying its write method and body. Every
+    candidate path, the request headers, and the matcher set ride into the recipe, so the generated
+    PoC checks all of a CVE's endpoints and decides PASS or FAIL by the template's own fire
+    condition rather than a paraphrase. A template's matcher summary rides as the recipe's prose
+    expectation. Only the first request block is grounded for now, a template with more than one
+    request block is a later increment."""
     supported, _unsupported = nuclei.load_templates(nuclei_dir)
     recipes: list[ReproductionRecipe] = []
     for template in supported:
         request = template.requests[0]
-        path = request.paths[0].replace("{{BaseURL}}", "").replace("{{RootURL}}", "")
+        paths = tuple(p.replace("{{BaseURL}}", "").replace("{{RootURL}}", "") for p in request.paths)
         recipes.append(ReproductionRecipe(
-            cve=template.cve, method=request.method, path=path,
-            expect=nuclei.matcher_summary(request), body=request.body))
+            cve=template.cve, method=request.method, paths=paths,
+            expect=nuclei.matcher_summary(request), headers=request.headers,
+            body=request.body, matchers=request.matchers,
+            matchers_condition=request.matchers_condition))
     return tuple(recipes)
 
 

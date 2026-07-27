@@ -20,14 +20,19 @@ never mutates a finding in place, a grounded finding is a new object.
 
 from __future__ import annotations
 
+import json
 import re
-import shlex
 from dataclasses import dataclass, replace
 from pathlib import Path
 from urllib.parse import parse_qsl, urlencode, urljoin, urlsplit
 
 from opfor.core import Finding, World, iter_md_docs
 from opfor.core import Grounding
+from opfor.scenarios.attacksurface.assets.domain.nuclei import Matcher
+
+# The read-only methods, so the generated script warns loudly when a recipe carries a
+# state-changing verb the operator would send by hand.
+_READ_METHODS = ("GET", "HEAD", "OPTIONS")
 
 _URL_RE = re.compile(r"https?://[^\s;'\"`)>]+")
 # The CVE ids a finding names, so a recipe is grounded only on the finding that actually claims its
@@ -66,18 +71,27 @@ _VERSION_MATCH = "version"
 
 @dataclass(frozen=True, kw_only=True)
 class ReproductionRecipe:
-    """One CVE's recorded reproduction, the exact request that demonstrates it and the marker its
-    response bears when the instance is affected. A read-only recipe is a GET, a state-changing one
-    carries a write method and a body. It is data read from a vendored template or a product's
-    frontmatter, so adding one is a knowledge change and no attack decision lives in code,
-    invariant 1."""
+    """One CVE's recorded reproduction, the request that demonstrates it and the markers its response
+    bears when the instance is affected. A read-only recipe is a GET, a state-changing one carries a
+    write method and a body. It may name more than one candidate path, since a CVE can live at any of
+    several endpoints, and a header set the request must send. It is data read from a vendored
+    template or a product's frontmatter, so adding one is a knowledge change and no attack decision
+    lives in code, invariant 1."""
 
     cve: str
     method: str
-    path: str
+    # The candidate paths the CVE may live at, tried in order, at least one.
+    paths: tuple[str, ...]
     expect: str
+    # The headers the request must send, empty for a header-less GET recipe.
+    headers: tuple[tuple[str, str], ...] = ()
     # The request body a state-changing recipe carries, empty for a read-only GET recipe.
     body: str = ""
+    # The response markers that confirm the instance is affected, so the generated script decides
+    # PASS or FAIL rather than leaving the reader to eyeball the response. Empty means no executable
+    # criterion, the script then reports MANUAL and prints the response for a hand check.
+    matchers: tuple[Matcher, ...] = ()
+    matchers_condition: str = "and"
 
 
 def load_reproductions(directory) -> tuple[ReproductionRecipe, ...]:
@@ -93,7 +107,7 @@ def load_reproductions(directory) -> tuple[ReproductionRecipe, ...]:
                 continue
             out.append(ReproductionRecipe(
                 cve=cve, method=str(entry.get("method", "GET")).strip() or "GET",
-                path=str(entry.get("path", "")).strip(),
+                paths=(str(entry.get("path", "")).strip(),),
                 expect=str(entry.get("expect", "")).strip(),
                 body=str(entry.get("body", "")).strip()))
     return tuple(out)
@@ -119,26 +133,156 @@ def _norm_url(url: str) -> str:
     return f"{parts.scheme.lower()}://{host.lower()}{path}{query}"
 
 
-def _curl(request: dict) -> str:
-    """A hand-runnable curl for a grounded request. A GET is a bare read, a state-changing method
-    carries its verb and body, so the written command reproduces exactly the request the finding
-    grounds on rather than a paraphrase. The url and body are shell-quoted, so a query or a payload
-    reaches curl intact rather than being split by the shell."""
+# The evaluator and driver of a generated PoC, a fixed block appended below the per-finding data
+# literals. It mirrors nuclei.matches: a status matcher compares the response code, a word or regex
+# matcher searches the chosen response part, and the matcher set combines by an `and` or `or`
+# condition. It reads only the data literals above it, so the generator injects values and never
+# code, and it sends nothing until an operator runs the file by hand.
+_SCRIPT_DRIVER = '''
+def _part_text(part, status, header_text, body):
+    if part == "header":
+        return header_text
+    if part == "all":
+        return header_text + "\\n" + body
+    return body
+
+
+def _matcher_hits(matcher, status, header_text, body):
+    values = matcher.get("values") or []
+    if not values:
+        return False
+    kind = matcher.get("type")
+    if kind == "status":
+        return any(str(status) == str(v) for v in values)
+    hay = _part_text(matcher.get("part") or "body", status, header_text, body)
+    if kind == "regex":
+        hits = [re.search(v, hay) is not None for v in values]
+    else:
+        hits = [v in hay for v in values]
+    return all(hits) if matcher.get("condition") == "and" else any(hits)
+
+
+def confirmed(status, header_text, body):
+    """PASS, FAIL, or None when there is no executable criterion, so a MANUAL case is honest."""
+    if not MATCHERS:
+        return None
+    results = [_matcher_hits(m, status, header_text, body) for m in MATCHERS]
+    return all(results) if MATCHERS_CONDITION == "and" else any(results)
+
+
+def send(url):
+    data = BODY.encode("utf-8") if BODY else None
+    request = urllib.request.Request(url, method=METHOD, data=data)
+    for name, value in HEADERS:
+        request.add_header(name, value)
+    try:
+        response = urllib.request.urlopen(request, timeout=20)
+        return response.status, dict(response.headers), response.read().decode("utf-8", "replace")
+    except urllib.error.HTTPError as exc:
+        return exc.code, dict(exc.headers), exc.read().decode("utf-8", "replace")
+
+
+def main():
+    hit = 1
+    for url in CANDIDATE_URLS:
+        try:
+            status, headers, body = send(url)
+        except Exception as exc:
+            print("[ERROR] %s -> %s" % (url, exc))
+            continue
+        header_text = "\\n".join("%s: %s" % (name, value) for name, value in headers.items())
+        verdict = confirmed(status, header_text, body)
+        label = {True: "PASS", False: "FAIL", None: "MANUAL"}[verdict]
+        print("[%s] %s -> HTTP %s" % (label, url, status))
+        if verdict is None:
+            print("no executable success criterion, check by hand against: " + EXPECT)
+            print(body[:4000])
+        elif verdict:
+            print(body[:4000])
+            hit = 0
+    return hit
+
+
+if __name__ == "__main__":
+    sys.exit(main())
+'''
+
+
+def _poc_script(request: dict, finding: Finding) -> str:
+    """A self-contained stdlib PoC script for a grounded finding. It encodes the method, every
+    candidate url, the headers, the body, and the response matchers as data, then runs the fixed
+    driver that decides PASS or FAIL exactly as triage's nuclei evaluator would. It uses only
+    `urllib`, so it runs anywhere Python does with no dependency, and it is labelled unverified and
+    never sent by this run, an operator runs it by hand against a system they are authorized to test.
+    A state-changing method is called out at the top, since running it may alter the target."""
     method = (request.get("method") or "GET").upper()
-    parts = ["curl", "-s"]
-    if method != "GET":
-        parts += ["-X", method]
+    urls = request.get("urls") or [request.get("url", "")]
+    headers = [list(pair) for pair in request.get("headers") or []]
     body = request.get("body") or ""
-    if body:
-        parts += ["--data", shlex.quote(body)]
-    parts.append(shlex.quote(request["url"]))
-    return " ".join(parts)
+    matchers = request.get("matchers") or []
+    condition = request.get("matchers_condition") or "or"
+    expect = request.get("expect") or ""
+    warn = ""
+    if method not in _READ_METHODS:
+        warn = ("\nWARNING, this PoC uses the state-changing method " + method + ", so running it may "
+                "alter the\ntarget. Read the request below and run it only against a system you are "
+                "authorized to test.\n")
+    head = (
+        '#!/usr/bin/env python3\n'
+        '"""' + _UNVERIFIED + '.\n\n'
+        'PoC for: ' + finding.title + '\n'
+        'Where: ' + finding.where + '\n'
+        'Expected: ' + expect + '\n'
+        + warn +
+        '\nThis script was written by an opfor reconnaissance run and was NOT sent to the target.\n'
+        'It tries each candidate url in turn and prints PASS when the response satisfies the success\n'
+        'criterion, FAIL when it does not, and MANUAL when the finding carries no executable check.\n'
+        '"""\n'
+        'import re\n'
+        'import sys\n'
+        'import urllib.error\n'
+        'import urllib.request\n\n'
+        'METHOD = ' + json.dumps(method) + '\n'
+        'CANDIDATE_URLS = ' + json.dumps(urls, indent=4) + '\n'
+        'HEADERS = ' + json.dumps(headers, indent=4) + '\n'
+        'BODY = ' + json.dumps(body) + '\n'
+        'MATCHERS = ' + json.dumps(matchers, indent=4) + '\n'
+        'MATCHERS_CONDITION = ' + json.dumps(condition) + '\n'
+        'EXPECT = ' + json.dumps(expect) + '\n')
+    return head + _SCRIPT_DRIVER
 
 
 def _grounded_poc(request: dict) -> str:
-    """The proof-of-concept string for a grounded finding, the labelled command and its expected
-    marker, so an operator sees both how to reproduce it and what confirms the instance is affected."""
-    return f"{_UNVERIFIED}. Reproduce by hand: {_curl(request)} . Expected: {request['expect']}"
+    """The proof-of-concept string for a grounded finding. It names the generated script an operator
+    runs by hand and the marker that confirms the instance is affected, so the finding points at the
+    runnable artifact rather than carrying a paraphrased command inline."""
+    return (f"{_UNVERIFIED}. Run the generated PoC script `{request['script']}` by hand against a "
+            f"target you are authorized to test. Expected: {request['expect']}")
+
+
+def _script_name(finding: Finding, taken: set[str]) -> str:
+    """A stable, unique file name for a finding's PoC script, `<cve-or-kind>-<host>.py`, so two
+    findings on one host or one CVE across hosts never collide onto the same file."""
+    cve = _primary_cve(finding)
+    base = cve or str(finding.data.get("kind") or "poc")
+    host = urlsplit(finding.where).hostname or finding.where
+    slug = _URL_SLUG.sub("-", f"{base}-{host}".lower()).strip("-") or "poc"
+    name = slug
+    n = 2
+    while name in taken:
+        name = f"{slug}-{n}"
+        n += 1
+    taken.add(name)
+    return f"{name}.py"
+
+
+_URL_SLUG = re.compile(r"[^a-z0-9]+")
+
+
+def _matcher_dict(matcher: Matcher) -> dict:
+    """A nuclei Matcher as a plain JSON-safe dict, the shape the generated script's driver reads."""
+    return {"type": matcher.type, "part": matcher.part,
+            "values": list(matcher.values), "condition": matcher.condition}
 
 
 def _ungrounded_poc(finding: Finding) -> str:
@@ -172,6 +316,7 @@ class FindingGrounder(Grounding):
     def run(self, world: World, findings: tuple[Finding, ...]) -> list[Finding]:
         observed = self._observed_gets(world)
         out: list[Finding] = []
+        taken: set[str] = set()
         for finding in findings:
             # Prefer an observed safe read, the recon-tier ground. Fall to a recipe only when the
             # finding names a known vulnerability whose CVE the lookup tied to the running version.
@@ -181,8 +326,10 @@ class FindingGrounder(Grounding):
             if request is None:
                 out.append(replace(finding, poc=_ungrounded_poc(finding)))
                 continue
+            request = {**request, "script": f"poc/{_script_name(finding, taken)}"}
+            script = _poc_script(request, finding)
             out.append(replace(finding, poc=_grounded_poc(request),
-                               data={**finding.data, "poc_request": request}))
+                               data={**finding.data, "poc_request": request, "poc_script": script}))
         return out
 
     def _poc_request(self, finding: Finding, observed: dict) -> dict | None:
@@ -201,7 +348,14 @@ class FindingGrounder(Grounding):
                 expect = f"HTTP {receipt['status']}"
                 if receipt.get("content_type"):
                     expect += f" {receipt['content_type']}"
-                return {"method": "GET", "url": url.strip(), "expect": expect,
+                # A safe read grounds on a single observed url. Its success criterion is that the
+                # response status matches what was seen, so the generated script confirms rather than
+                # leaving the reader to eyeball the reply.
+                return {"method": "GET", "url": url.strip(), "urls": [url.strip()],
+                        "headers": [], "body": "",
+                        "matchers": [{"type": "status", "part": "body",
+                                      "values": [str(receipt["status"])], "condition": "or"}],
+                        "matchers_condition": "and", "expect": expect,
                         "source": receipt["source"]}
         return None
 
@@ -231,10 +385,17 @@ class FindingGrounder(Grounding):
         base = getattr(http.payload, "url", "") if http is not None else ""
         parts = urlsplit(base or f"https://{host}/")
         authority = parts.netloc or host
-        url = f"{parts.scheme or 'https'}://{authority}{recipe.path}"
+        scheme = parts.scheme or "https"
+        # Every candidate path the recipe names becomes a url against this host, tried in order, so a
+        # CVE that lives at any of several endpoints is checked at all of them rather than only the
+        # first. The path is not normalized, so the traversal the recipe encodes reads as written.
+        urls = [f"{scheme}://{authority}{path}" for path in recipe.paths]
         expect = (f"the {recipe.cve} reproduction is confirmed when the live response "
                   f"satisfies: {recipe.expect}")
-        return {"method": recipe.method, "url": url, "body": recipe.body, "expect": expect,
+        return {"method": recipe.method, "url": urls[0], "urls": urls,
+                "headers": [list(pair) for pair in recipe.headers], "body": recipe.body,
+                "matchers": [_matcher_dict(m) for m in recipe.matchers],
+                "matchers_condition": recipe.matchers_condition, "expect": expect,
                 "source": f"reproduction:{recipe.cve}"}
 
     def _observed_gets(self, world: World) -> dict:

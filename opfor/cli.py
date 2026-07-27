@@ -120,6 +120,8 @@ def _print_report(report, world=None) -> None:
         if request:
             print(f"      grounded poc: {request['method']} {request['url']} "
                   f"(expect {request['expect']}, source {request['source']})")
+            if request.get("script"):
+                print(f"      poc script: {request['script']}")
 
 
 def _severity_order(finding) -> int:
@@ -180,6 +182,8 @@ def _report_md(report, world=None) -> str:
         if request:
             lines.append(f"- grounded poc: {request['method']} {request['url']} "
                          f"(expect {request['expect']}, source {request['source']})")
+            if request.get("script"):
+                lines.append(f"- poc script: {request['script']}")
     return "\n".join(lines) + "\n"
 
 
@@ -197,19 +201,34 @@ def _default_output(name: str) -> Path:
 
 
 def _persist(report, world, name: str, explicit: str | None) -> Path | None:
-    """Write the run's findings.json and report.md into the output directory, defaulting to a
-    user-private location the operator can override. A write failure is a loud warning, not a
-    crash, since the run itself already produced its result."""
+    """Write the run's findings.json, report.md, and one PoC script per grounded finding into the
+    output directory, defaulting to a user-private location the operator can override. A write
+    failure is a loud warning, not a crash, since the run itself already produced its result."""
     outdir = Path(explicit) if explicit else _default_output(name)
     try:
         outdir.mkdir(parents=True, exist_ok=True, mode=0o700)
         payload = json.dumps(_report_json(report, world), indent=2, ensure_ascii=False)
         (outdir / "findings.json").write_text(payload + "\n", encoding="utf-8")
         (outdir / "report.md").write_text(_report_md(report, world), encoding="utf-8")
+        _write_pocs(report, outdir)
     except OSError as exc:
         print(f"warning: could not write run output to {outdir}: {exc}", file=sys.stderr)
         return None
     return outdir
+
+
+def _write_pocs(report, outdir: Path) -> None:
+    """Write each grounded finding's PoC script to its own file under the run directory. The script
+    path is the one the grounder recorded, so the report's `poc script` line points at a real file.
+    A finding with no grounded script is skipped, so only a runnable PoC lands on disk."""
+    for finding in report.findings:
+        script = finding.data.get("poc_script")
+        rel = (finding.data.get("poc_request") or {}).get("script")
+        if not script or not rel:
+            continue
+        target = outdir / rel
+        target.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+        target.write_text(script, encoding="utf-8")
 
 
 def main(argv: list[str] | None = None) -> int:

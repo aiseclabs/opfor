@@ -26,8 +26,7 @@ class DiscoverDomains(Capability):
         # keeping node ids canonical and same-host attribution from missing a mixed-case name.
         roots = tuple(
             Node(id=f"domain:{d.lower()}", type="domain",
-                 payload=DomainData(name=d.lower(), root=d.lower(), source="hint",
-                                    confidence="confirmed", evidence="operator hint"))
+                 payload=DomainData(name=d.lower(), root=d.lower(), source="hint"))
             for d in org.domains
         )
         # Inventory hosts enter as leaves under their registrable root, not as roots, so the
@@ -35,8 +34,7 @@ class DiscoverDomains(Capability):
         # and probing enrich them. This is how a DNS export closes the wildcard blind spot.
         hosts = tuple(
             Node(id=f"domain:{h.lower()}", type="domain",
-                 payload=DomainData(name=h.lower(), root=registrable_root(h), source="inventory",
-                                    confidence="confirmed", evidence="operator inventory"))
+                 payload=DomainData(name=h.lower(), root=registrable_root(h), source="inventory"))
             for h in org.hosts
         )
         return Done(facts=(Fact(kind="domains_discovered", about=task.node, yields=roots + hosts),))
@@ -174,10 +172,7 @@ class PermuteSubdomains(Capability):
             if result.resolvable:
                 found.append(Node(
                     id=f"domain:{candidate}", type="domain",
-                    payload=DomainData(name=candidate, root=root, source="permuted",
-                                       confidence="confirmed",
-                                       evidence="permuted from an observed label, resolves under "
-                                                "an owned zone with no wildcard")))
+                    payload=DomainData(name=candidate, root=root, source="permuted")))
         if wildcard_zones:
             skipped.append(f"{len(wildcard_zones)} zone(s) answer every name as a wildcard, so "
                            f"their candidates were not confirmed: {', '.join(sorted(wildcard_zones))}")

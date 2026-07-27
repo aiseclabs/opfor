@@ -50,17 +50,6 @@ def nvd_api_key() -> str:
     return os.environ.get("OPFOR_NVD_API_KEY", "")
 
 
-def dnsdumpster_key() -> str:
-    """A DNSDumpster API key, empty when unset.
-
-    It reads aggregated DNS records, so it joins the subdomain union when a key is set.
-    A free account provides one, and its free tier returns a bounded first page with no
-    pagination, so a reply that reports more records than it returned is flagged truncated.
-    Without a key the source is simply left out of the union.
-    """
-    return os.environ.get("OPFOR_DNSDUMPSTER_API_KEY", "")
-
-
 def roots_file() -> str:
     """Path to a newline-delimited root-domain seed file, empty when unset."""
     return os.environ.get("OPFOR_ROOTS_FILE", "")

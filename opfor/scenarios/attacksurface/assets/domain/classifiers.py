@@ -15,7 +15,7 @@ from urllib.parse import urlparse
 
 from opfor.core import iter_md_docs
 from opfor.scenarios.attacksurface.assets.domain.sources.parsers import info_from_openapi
-from opfor.scenarios.attacksurface.assets.domain.sources.http import _BODY_VERSION
+from opfor.scenarios.attacksurface.assets.domain.sources.http import _BODY_HEAD, _BODY_VERSION
 
 
 _TITLE = re.compile(r"^#\s+(.+)$", re.MULTILINE)
@@ -69,7 +69,13 @@ def host_evidence(world, host, version_paths=()) -> str:
         for header_name, header_value in data.headers:
             lines.append(f"header {header_name}: {header_value}")
         if data.body:
-            lines.append(f"body head: {data.body[:600]}")
+            # The home page is the primary identification surface, and its product markers, a title,
+            # a meta generator, a framework bundle or theme path, sit in a head that easily runs past
+            # a couple of kilobytes on a real app. The deterministic framework classifier already
+            # reads the whole captured body, so the identify seam must see the same head, not a
+            # tighter slice, else it identifies less than the classifier from the same evidence. The
+            # capture already bounds this at `_BODY_HEAD`, so this reads the full captured head.
+            lines.append(f"body head: {data.body[:_BODY_HEAD]}")
     for node in world.nodes("endpoint"):
         endpoint = node.payload
         if urlparse(endpoint.url).hostname != host.payload.name:

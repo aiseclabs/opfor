@@ -13,17 +13,15 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True, kw_only=True)
 class DomainData:
-    """A domain or subdomain node. `root` is the registrable root it belongs to,
-    `source` is how it was found, an operator hint, a certificate-transparency
-    subdomain, or a certificate-SAN sibling root. `confidence` records how sure
-    ownership is, `evidence` is the one-line reason, so an attributed root carries its
-    proof rather than a guess."""
+    """A domain or subdomain node. `root` is the registrable root it belongs to, `source`
+    is how it was found, an operator hint, an operator inventory leaf, a passive
+    certificate-transparency or passive-DNS subdomain, or a permuted label. `wildcard`
+    marks a name that resolves only because its zone answers every label, so the report
+    can flag the discovery blind spot such a wildcard hides."""
 
     name: str
     root: str
     source: str
-    confidence: str = "confirmed"
-    evidence: str = ""
     wildcard: bool = False
 
 

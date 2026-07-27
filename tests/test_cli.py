@@ -37,6 +37,17 @@ def test_prepare_run_seed_from_inline_flags(monkeypatch):
     assert set(scope.matcher.hosts) == {"example.com"}
 
 
+def test_prepare_run_root_flag_folds_to_registrable_root(monkeypatch):
+    _clear(monkeypatch)
+    # a subdomain passed as a root flag folds to its registrable root, so it enumerates
+    # example.com rather than www.example.com, which the certificate logs do not index as a root
+    name, world, scope, _ = prepare_run(roots=("www.example.com", "API.example.com"))
+    org = world.node(f"org:{name}").payload
+    assert org.domains == ("example.com",)
+    assert name == "example.com"
+    assert set(scope.matcher.hosts) == {"example.com"}
+
+
 def test_prepare_run_seed_from_files_normalizes(tmp_path, monkeypatch):
     _clear(monkeypatch)
     (tmp_path / "r.txt").write_text("example.com\nwww.example.net\n", encoding="utf-8")

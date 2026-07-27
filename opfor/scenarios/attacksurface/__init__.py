@@ -207,13 +207,16 @@ def prepare_run(*, name="", roots=(), roots_file="", hosts=(), hosts_file="",
     from opfor.core import Scope
     from opfor.scenarios.attacksurface import config
     from opfor.scenarios.attacksurface.hostnames import HostScope, registrable_root
-    from opfor.scenarios.attacksurface.assets.domain.sources import hosts_from_file, roots_from_file
+    from opfor.scenarios.attacksurface.assets.domain.sources import (
+        hosts_from_file, hosts_from_values, roots_from_file, roots_from_values)
 
-    rts = list(roots)
+    # A flag value folds the same way a seed-file line does, so `--root www.example.com` enumerates
+    # the registrable root example.com rather than a name the certificate logs do not index.
+    rts = list(roots_from_values(roots))
     roots_path = roots_file or config.roots_file()
     if roots_path:
         rts += roots_from_file(roots_path)
-    hst = list(hosts)
+    hst = list(hosts_from_values(hosts))
     hosts_path = hosts_file or config.hosts_file()
     if hosts_path:
         hst += hosts_from_file(hosts_path)

@@ -28,10 +28,8 @@ from opfor.scenarios.attacksurface.assets.domain.sources.http import (
 from opfor.scenarios.attacksurface.assets.domain.sources.enumeration import (
     Enumeration,
     certspotter_subdomains,
-    dnsdumpster_subdomains,
     otx_subdomains,
     subdomains,
-    subdomains_from_dnsdumpster,
     subdomains_from_otx,
     subdomains_from_vt,
     virustotal_subdomains,
@@ -43,7 +41,9 @@ from opfor.scenarios.attacksurface.assets.domain.sources.nvd import (
 )
 from opfor.scenarios.attacksurface.assets.domain.sources.seeds import (
     hosts_from_file,
+    hosts_from_values,
     roots_from_file,
+    roots_from_values,
 )
 from opfor.scenarios.attacksurface.assets.domain.sources.parsers import (
     info_from_openapi,
@@ -75,7 +75,6 @@ __all__ = [
     "Response",
     "certspotter_subdomains",
     "cves_from_nvd",
-    "dnsdumpster_subdomains",
     "chain_fetch",
     "fetch_document",
     "fetch_exploit",
@@ -83,6 +82,7 @@ __all__ = [
     "fetch_url",
     "graphql_introspect",
     "hosts_from_file",
+    "hosts_from_values",
     "http_probe",
     "info_from_openapi",
     "nvd_cves",
@@ -93,12 +93,12 @@ __all__ = [
     "resolve_host",
     "robots_entries",
     "roots_from_file",
+    "roots_from_values",
     "same_host_path",
     "script_sources",
     "sitemap_paths",
     "split_operation",
     "subdomains",
-    "subdomains_from_dnsdumpster",
     "subdomains_from_otx",
     "subdomains_from_vt",
     "urls_in_javascript",

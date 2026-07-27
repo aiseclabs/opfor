@@ -105,51 +105,6 @@ def test_otx_passive_dns_parses_and_flags_the_cap(monkeypatch):
     assert result.truncated is True
     assert len(result) == 500
 
-def test_dnsdumpster_parses_and_flags_the_free_tier_cap(monkeypatch):
-    import urllib.request
-
-    from opfor.scenarios.attacksurface import config
-    from opfor.scenarios.attacksurface.assets.domain import sources as domains
-
-    # the parse keeps hosts under the domain from the a and cname records, and the domain
-    # suffix drops the mail and nameserver records that point off the domain
-    reply = {
-        "a": [{"host": "api.example.com"}, {"host": "www.example.com"}],
-        "cname": [{"host": "cdn.example.com"}],
-        "mx": [{"host": "10 aspmx.l.google.com"}],
-        "ns": [{"host": "ns-1.awsdns-31.co.uk"}],
-        "total_a_recs": "2",
-    }
-    assert domains.subdomains_from_dnsdumpster(reply, "example.com") == {
-        "api.example.com", "www.example.com", "cdn.example.com"}
-
-    # no key leaves the source out of the union, an empty enumeration rather than a call
-    monkeypatch.setattr(config, "dnsdumpster_key", lambda: "")
-    assert domains.dnsdumpster_subdomains("example.com") == set()
-
-    monkeypatch.setattr(config, "dnsdumpster_key", lambda: "dd")
-
-    class _Resp:
-        def __init__(self, payload):
-            self._payload = payload
-
-        def read(self, *_a):
-            return json.dumps(self._payload).encode("utf-8")
-
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *exc):
-            return False
-
-    # the free tier returns fewer a records than the total it reports, so more remain and
-    # the reply is flagged truncated rather than passed off as complete
-    capped = {"a": [{"host": f"h{i}.example.com"} for i in range(50)], "total_a_recs": "205"}
-    monkeypatch.setattr(urllib.request, "urlopen", lambda request, timeout=0: _Resp(capped))
-    result = domains.dnsdumpster_subdomains("example.com")
-    assert result.truncated is True
-    assert len(result) == 50
-
 def test_certspotter_token_429_falls_back_to_an_anonymous_walk(monkeypatch):
     import urllib.error
     import urllib.request

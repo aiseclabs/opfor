@@ -9,4 +9,5 @@ signal raises the target to high priority, since an attacker who can move the de
 price through a flash loan for one, can move the contract's own accounting.
 
 Signals that mark it. `oracle_dependency`, `dex_spot_price_dependency`, `arbitrary_call`,
-`delegatecall`, and `callback_validation_required` from the detection data.
+`delegatecall`, `callback_validation_required`, and `unchecked_low_level_transfer`, an external
+value send whose outcome the contract may not control or check, from the detection data.

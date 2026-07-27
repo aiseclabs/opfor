@@ -22,7 +22,23 @@ ethereum:
   - "0x87870bca3f3fd6335c3f4ce8392d69350b4fa4e2"  # Aave V3 Pool
   - "0x7d2768de32b0b80b7a3454c06bdac94a69ddc7a9"  # Aave V2 LendingPool
 
-bsc:
-  - "0x10ed43c718714eb63d5aa57b78b54704e256024e"  # PancakeSwap V2 Router
-  - "0x13f4ea83d0bd40e75c8222255bc855a974568dd4"  # PancakeSwap Smart Router
-  - "0x1b81d678ffb9c0263b24a97847620c99d213eb14"  # PancakeSwap V3 SmartRouter
+polygon:
+  - "0x000000000022d473030f116ddee9f6b43ac78ba3"  # Uniswap Permit2
+  - "0xe592427a0aece92de3edee1f18e0157c05861564"  # Uniswap V3 SwapRouter
+  - "0x68b3465833fb72a70ecdf485e0e4c7bd8665fc45"  # Uniswap V3 SwapRouter02
+  - "0xa5e0829caced8ffdd4de3c43696c57f7d7a678ff"  # QuickSwap V2 Router
+  - "0xf5b509bb0909a69b1c207e495f687a596c168e12"  # QuickSwap V3 (Algebra) Router
+  - "0x1b02da8cb0d097eb8d57a175b88c7d8b47997506"  # SushiSwap Router
+  - "0x1111111254eeb25477b68fb85ed929f73a960582"  # 1inch V5 Aggregation Router
+  - "0x111111125421ca6dc452d289314280a0f8842a65"  # 1inch V6 Aggregation Router
+  - "0xdef1c0ded9bec7f1a1670819833240f027b25eff"  # 0x Exchange Proxy
+
+arbitrum:
+  - "0x000000000022d473030f116ddee9f6b43ac78ba3"  # Uniswap Permit2
+  - "0xe592427a0aece92de3edee1f18e0157c05861564"  # Uniswap V3 SwapRouter
+  - "0x68b3465833fb72a70ecdf485e0e4c7bd8665fc45"  # Uniswap V3 SwapRouter02
+  - "0xc873fecbd354f5a56e00e710b90ef4201db2448d"  # Camelot V2 Router
+  - "0x1b02da8cb0d097eb8d57a175b88c7d8b47997506"  # SushiSwap Router
+  - "0x1111111254eeb25477b68fb85ed929f73a960582"  # 1inch V5 Aggregation Router
+  - "0x111111125421ca6dc452d289314280a0f8842a65"  # 1inch V6 Aggregation Router
+  - "0xdef1c0ded9bec7f1a1670819833240f027b25eff"  # 0x Exchange Proxy

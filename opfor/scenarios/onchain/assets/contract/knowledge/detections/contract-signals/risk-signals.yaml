@@ -31,6 +31,9 @@ signatures:
   - flag: unchecked_low_level_transfer
     category: risk
     pattern: "\\.transfer\\(|\\.send\\("
+  # Broad on purpose. It overlaps `delegatecall` and matches a plain OpenZeppelin `Initializable`,
+  # so it flags any upgradeable-pattern contract, not only one with a live upgrade path. Triage
+  # weighs it against the funds, a raised flag is not a finding.
   - flag: upgradeable_proxy
     category: risk
     pattern: "upgradeTo|_authorizeUpgrade|Initializable|initializer|delegatecall"

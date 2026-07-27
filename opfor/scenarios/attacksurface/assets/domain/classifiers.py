@@ -117,10 +117,14 @@ def classify_frameworks(http, table) -> list[str]:
     if http is None:
         return []
     body = http.body or ""
+    # Markers are lowercased at load, so a body marker is matched against a lowercased body, else a
+    # marker such as the Next.js `__next_data__` never matches the real uppercase `__NEXT_DATA__`.
+    # The version pattern keeps the original-case body, it compiles with re.IGNORECASE itself.
+    body_markers = body.lower()
     header_text = "\n".join(f"{name.lower()}: {value.lower()}" for name, value in http.headers)
     found: list[str] = []
     for name, sig in table.items():
-        if not (any(m in body for m in sig["body"]) or any(m in header_text for m in sig["headers"])):
+        if not (any(m in body_markers for m in sig["body"]) or any(m in header_text for m in sig["headers"])):
             continue
         version = ""
         pattern = sig.get("version")

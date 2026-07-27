@@ -29,6 +29,16 @@ def test_nvd_cves_parses_id_score_severity_and_summary():
         "id": "CVE-2021-39226", "cvss": 9.8, "severity": "CRITICAL", "summary": "auth bypass",
         "references": ["https://advisory.example/GHSA-1", "https://nvd.example/CVE-2021-39226"]}
 
+def test_nvd_stamps_the_total_match_count_so_a_truncated_page_is_visible():
+    from opfor.scenarios.attacksurface.assets.domain.sources import nvd as domains
+
+    # the query matched more than the page held, so each record carries the true total, and a
+    # reply that fit in one page carries no misleading total to trip a spurious gap
+    stamped = domains._with_total([{"id": "CVE-1"}, {"id": "CVE-2"}], 137)
+    assert all(record["available"] == 137 for record in stamped)
+    assert "available" not in domains._with_total([{"id": "CVE-1"}], None)[0]
+
+
 def test_nvd_cves_returns_nothing_for_an_unidentified_product():
     from opfor.scenarios.attacksurface.assets.domain import sources as domains
 
@@ -134,6 +144,46 @@ def test_cve_scan_records_the_match_basis_from_the_lookup():
     _report, _scenario, world = _run_capturing(identify_fn=identify, cve_fn=cves)
     scans = [f.payload for f in world.facts("cve_scan") if f.payload.product]
     assert scans and scans[0].match == "product"
+
+def test_cve_scan_records_a_coverage_gap_when_the_lookup_was_truncated():
+    # the database matched more CVEs than the bounded page returned, so the kept list is a slice,
+    # not the whole set, and the drop stays loud rather than reading as the complete picture
+    from opfor.core import Fact, Node, Task, World
+    from opfor.scenarios.attacksurface.assets.domain.capabilities import CVELookup
+    from opfor.scenarios.attacksurface.assets.domain.types import DomainData, HostProfile
+
+    world = World()
+    world.add(Node(id="domain:h", type="domain", payload=DomainData(name="h", root="h", source="s")))
+    world.absorb([Fact(kind="host_profile", about="domain:h",
+                       payload=HostProfile(product="acme", version="1.0"))])
+
+    def cves(product, version, cpe=""):
+        return [{"id": "CVE-1", "match": "keyword", "available": 42}]
+
+    out = CVELookup(cves).run(Task(capability="cve_scan", node="domain:h"), world)
+    kinds = [f.kind for f in out.facts]
+    assert "cve_scan" in kinds and "coverage_gap" in kinds
+    gap = next(f.payload for f in out.facts if f.kind == "coverage_gap")
+    assert gap.scan == "cve_scan" and gap.host == "h" and "42" in gap.reasons[0]
+
+
+def test_cve_scan_records_no_gap_when_the_page_held_the_whole_set():
+    # the database returned every CVE it matched, so there is no drop to record, only the scan
+    from opfor.core import Fact, Node, Task, World
+    from opfor.scenarios.attacksurface.assets.domain.capabilities import CVELookup
+    from opfor.scenarios.attacksurface.assets.domain.types import DomainData, HostProfile
+
+    world = World()
+    world.add(Node(id="domain:h", type="domain", payload=DomainData(name="h", root="h", source="s")))
+    world.absorb([Fact(kind="host_profile", about="domain:h",
+                       payload=HostProfile(product="acme", version="1.0"))])
+
+    def cves(product, version, cpe=""):
+        return [{"id": "CVE-1", "match": "version", "available": 1}]
+
+    out = CVELookup(cves).run(Task(capability="cve_scan", node="domain:h"), world)
+    assert [f.kind for f in out.facts] == ["cve_scan"]
+
 
 def test_profile_fails_loud_when_identification_errors():
     # a model error while profiling is a loud Failed, never a silent empty result, invariant 5

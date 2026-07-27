@@ -81,6 +81,16 @@ def _tag_match(results: list[dict], basis: str) -> list[dict]:
     return results
 
 
+def _with_total(results: list[dict], total) -> list[dict]:
+    """Stamp each record with the query's total match count, so the caller sees when the bounded
+    page left CVEs unretrieved rather than reading the page as the whole set. Rides on each record
+    like `match`, since the count is one fact about the whole query."""
+    if isinstance(total, int):
+        for record in results:
+            record["available"] = total
+    return results
+
+
 def _nvd_fetch(query: str) -> list[dict]:
     """One NVD 2.0 query, throttled and retried, returning the parsed CVE records. The
     process-wide throttle serializes concurrent scans under the rate limit, and a 429 is
@@ -97,7 +107,7 @@ def _nvd_fetch(query: str) -> list[dict]:
         try:
             with urllib.request.urlopen(request, timeout=_NVD_TIMEOUT) as resp:
                 data = json.loads(resp.read(_JSON_LIMIT).decode("utf-8", "replace"))
-            return cves_from_nvd(data)
+            return _with_total(cves_from_nvd(data), data.get("totalResults"))
         except urllib.error.HTTPError as exc:
             if exc.code != 429 or attempt == _NVD_RETRIES - 1:
                 raise

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from opfor.core import Capability, Done, Fact, Outcome, Phase, Task, World
 from opfor.scenarios.attacksurface.assets.domain.types import CVE, CVEScan
-from opfor.scenarios.attacksurface.assets.domain.failures import net_failed
+from opfor.scenarios.attacksurface.assets.domain.failures import _coverage_gap, net_failed
 
 
 class CVELookup(Capability):
@@ -35,17 +35,31 @@ class CVELookup(Capability):
             cpe = profile.payload.cpe
         cves: tuple[CVE, ...] = ()
         match = ""
+        available = 0
         if product:
             try:
                 raw = self._cve(product, version, cpe)
             except Exception as exc:
                 return net_failed("cve lookup", exc)
-            # The whole list is found on one basis per lookup, so the scan records it once.
+            # The match basis and the total count are one fact about the whole lookup, so the
+            # scan reads them once off any record.
             match = str(raw[0].get("match", "")) if raw else ""
+            available = int(raw[0].get("available", len(raw))) if raw else 0
             cves = tuple(
                 CVE(id=str(c.get("id", "")), cvss=c.get("cvss"),
                     severity=str(c.get("severity", "")), summary=str(c.get("summary", "")),
                     references=tuple(str(u) for u in c.get("references", ())))
                 for c in raw if c.get("id"))
         payload = CVEScan(product=product, version=version, cpe=cpe, match=match, cves=cves)
-        return Done(facts=(Fact(kind="cve_scan", about=task.node, payload=payload),))
+        facts = [Fact(kind="cve_scan", about=task.node, payload=payload)]
+        if available > len(cves):
+            # The database matched more CVEs than the bounded page returned, so the kept list is a
+            # slice, not the whole set. Record the drop as a coverage gap so a partial lookup does
+            # not read as the host's complete vulnerability picture, invariant 5.
+            name = world.node(task.node).payload.name
+            gap = _coverage_gap("cve_scan", name, len(cves), [
+                f"NVD matched {available} CVEs for {product}, only {len(cves)} were retrieved, "
+                f"the remaining {available - len(cves)} were not evaluated"])
+            if gap is not None:
+                facts.append(Fact(kind="coverage_gap", about=task.node, payload=gap))
+        return Done(facts=tuple(facts))

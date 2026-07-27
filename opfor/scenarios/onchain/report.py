@@ -10,11 +10,11 @@ merges this in, so the CLI holds no scenario specifics.
 
 from __future__ import annotations
 
-import os
 from collections import Counter
 from typing import Any
 
 from opfor.core import World
+from opfor.scenarios.onchain.env import env_float
 from opfor.scenarios.onchain.assets.contract import KNOWLEDGE
 from opfor.scenarios.onchain.assets.contract.known import load_known_infrastructure
 from opfor.scenarios.onchain.assets.contract.targeting import structural_exclusion
@@ -22,17 +22,14 @@ from opfor.scenarios.onchain.assets.contract.targeting import structural_exclusi
 # The funds below which a contract that carries no finding is not an audit target, so the long tail
 # of near-zero-balance deploys does not take an audit slot from a real one, the plan's floor. A
 # finding is kept whatever its balance, recall stays first. `OPFOR_ONCHAIN_FUNDS_FLOOR` tunes it.
-_FUNDS_FLOOR_DEFAULT = "10000"
+_FUNDS_FLOOR_DEFAULT = 10000.0
 
 
 def _funds_floor() -> float:
     """The audit-target funds floor, read at the call so a changed environment is seen. A
-    non-numeric value falls back to the default rather than failing the report."""
-    raw = os.environ.get("OPFOR_ONCHAIN_FUNDS_FLOOR", _FUNDS_FLOOR_DEFAULT)
-    try:
-        return max(0.0, float(raw))
-    except ValueError:
-        return float(_FUNDS_FLOOR_DEFAULT)
+    set-but-unparsable value fails loud rather than silently using the default, so an operator
+    never believes a different floor is in force than the run applied, invariant 5."""
+    return env_float("OPFOR_ONCHAIN_FUNDS_FLOOR", _FUNDS_FLOOR_DEFAULT, minimum=0.0)
 
 
 def _interfaces(interfaces_fact) -> list[dict]:

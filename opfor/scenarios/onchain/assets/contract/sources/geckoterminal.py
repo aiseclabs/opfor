@@ -11,7 +11,6 @@ the pool age so a downstream step can weigh novelty. A test injects its own seam
 from __future__ import annotations
 
 import json
-import os
 import threading
 import time
 import urllib.error
@@ -20,6 +19,7 @@ from datetime import datetime, timezone
 
 from opfor.scenarios.onchain.assets.contract.chains import default_chain_policy
 from opfor.scenarios.onchain.assets.contract.sources.observations import PoolObservation
+from opfor.scenarios.onchain.env import env_float, env_int
 
 _BASE = "https://api.geckoterminal.com/api/v2"
 _TIMEOUT = 15.0
@@ -36,11 +36,8 @@ _next_call = [0.0]
 
 
 def _min_interval() -> float:
-    raw = os.environ.get("OPFOR_GECKOTERMINAL_MIN_INTERVAL", str(_MIN_INTERVAL_DEFAULT))
-    try:
-        return max(0.0, float(raw))
-    except ValueError:
-        return _MIN_INTERVAL_DEFAULT
+    """The minimum seconds between calls. A set-but-unparsable value fails loud, invariant 5."""
+    return env_float("OPFOR_GECKOTERMINAL_MIN_INTERVAL", _MIN_INTERVAL_DEFAULT, minimum=0.0)
 
 
 def _throttle(interval: float) -> None:
@@ -68,21 +65,15 @@ _MAX_POOLS_DEFAULT = 5
 
 
 def _pages() -> int:
-    """The pages of each discovery feed to read, `OPFOR_ONCHAIN_DISCOVERY_PAGES` or the default."""
-    raw = os.environ.get("OPFOR_ONCHAIN_DISCOVERY_PAGES", str(_PAGES_DEFAULT))
-    try:
-        return max(1, int(raw))
-    except ValueError:
-        return _PAGES_DEFAULT
+    """The pages of each discovery feed to read, `OPFOR_ONCHAIN_DISCOVERY_PAGES` or the default. A
+    set-but-unparsable value fails loud rather than silently using the default, invariant 5."""
+    return env_int("OPFOR_ONCHAIN_DISCOVERY_PAGES", _PAGES_DEFAULT, minimum=1)
 
 
 def _max_pools() -> int:
-    """The cap on pools a sweep hands to ENRICH, `OPFOR_ONCHAIN_MAX_POOLS` or the default."""
-    raw = os.environ.get("OPFOR_ONCHAIN_MAX_POOLS", str(_MAX_POOLS_DEFAULT))
-    try:
-        return max(1, int(raw))
-    except ValueError:
-        return _MAX_POOLS_DEFAULT
+    """The cap on pools a sweep hands to ENRICH, `OPFOR_ONCHAIN_MAX_POOLS` or the default. A
+    set-but-unparsable value fails loud rather than silently using the default, invariant 5."""
+    return env_int("OPFOR_ONCHAIN_MAX_POOLS", _MAX_POOLS_DEFAULT, minimum=1)
 
 
 def _get(url: str):

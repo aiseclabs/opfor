@@ -27,5 +27,14 @@ def test_iter_md_docs_reads_a_tree(tmp_path):
     assert docs[0][1] == {"title": "A"}
 
 
+def test_iter_md_docs_skips_navigation_and_developer_docs(tmp_path):
+    # index.md and README.md are navigation and developer docs, not model-facing knowledge, so a
+    # directory index or a vendoring note is never fed to the model as if it were a technique
+    (tmp_path / "a.md").write_text("body a", encoding="utf-8")
+    (tmp_path / "index.md").write_text("nav", encoding="utf-8")
+    (tmp_path / "README.md").write_text("dev note", encoding="utf-8")
+    assert [p.name for p, _, _ in iter_md_docs(tmp_path)] == ["a.md"]
+
+
 def test_iter_md_docs_on_missing_directory_yields_nothing(tmp_path):
     assert list(iter_md_docs(tmp_path / "nope")) == []

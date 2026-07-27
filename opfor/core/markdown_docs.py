@@ -28,14 +28,20 @@ def parse_frontmatter(text: str) -> tuple[dict, str]:
     return {}, text
 
 
+# The markdown files that are navigation or developer docs, not model-facing knowledge, so the
+# loader skips them rather than feeding a directory index or a vendoring note to the model as if
+# it were a finding class or a technique.
+_NON_KNOWLEDGE = frozenset({"index.md", "readme.md"})
+
+
 def iter_md_docs(directory: str | Path) -> Iterator[tuple[Path, dict, str]]:
-    """Yield the path, meta, and body of each `*.md` under `directory`, recursively,
-    skipping `index.md`. An absent directory yields nothing."""
+    """Yield the path, meta, and body of each `*.md` under `directory`, recursively, skipping the
+    navigation and developer docs, `index.md` and `README.md`. An absent directory yields nothing."""
     root = Path(directory)
     if not root.is_dir():
         return
     for path in sorted(root.rglob("*.md")):
-        if path.name == "index.md":
+        if path.name.lower() in _NON_KNOWLEDGE:
             continue
         meta, body = parse_frontmatter(path.read_text(encoding="utf-8"))
         yield path, meta, body

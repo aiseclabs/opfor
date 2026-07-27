@@ -69,18 +69,20 @@ behind it by transfer-counterparty analysis, prices what each holds, matches ris
 judges which are worth an audit, dropping known infrastructure so the queue stays on the unknowns:
 
 ```bash
-opfor run onchain --root ethereum
+opfor run onchain --chain ethereum
 ```
 
-To audit specific contracts directly, name them with `--host`, which skips the sweep and judges
-exactly those addresses and what they pivot to:
+`--chain` is an alias for the generic `--root` seed slot, and `--contract` an alias for `--host`,
+so the flags read naturally per scenario while the CLI stays scenario-agnostic. To audit specific
+contracts directly, name them, which skips the sweep and judges exactly those addresses and what
+they pivot to:
 
 ```bash
-opfor run onchain --root ethereum --host 0xCONTRACT --host 0xANOTHER
+opfor run onchain --chain ethereum --contract 0xCONTRACT --contract 0xANOTHER
 ```
 
 It runs on Ethereum, Polygon, and Arbitrum, the chains a free Etherscan V2 key covers in full,
-named with `--root ethereum`, `--root polygon`, or `--root arbitrum`.
+named with `--chain ethereum`, `--chain polygon`, or `--chain arbitrum`.
 
 The explorer reads, verified source and transfer history, use the Etherscan V2 multichain API and
 need a key in `OPFOR_ETHERSCAN_API_KEY`, see `.env.example`. The free key covers Ethereum, Polygon,
@@ -95,5 +97,8 @@ python -m venv .venv && . .venv/bin/activate
 pip install -e ".[dev]"
 pytest
 ```
+
+The `evals/` directory is repository-local development tooling, a knowledge-coverage report and
+regression harness, not part of the published `opfor` package. It runs from a source checkout only.
 
 See `AGENTS.md` for the architecture and the non-negotiable invariants.

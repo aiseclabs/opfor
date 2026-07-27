@@ -116,16 +116,12 @@ def _age_band() -> tuple[float, float]:
     """The discovery age band in days, env-tunable so an operator can widen the window. The floor
     skips just-launched churn, the ceiling skips the established bluechips. The defaults keep the
     young long-tail focus, `OPFOR_ONCHAIN_MIN_AGE_DAYS` and `OPFOR_ONCHAIN_MAX_AGE_DAYS` widen it,
-    for example to a year, at the cost of drifting toward older, more-audited contracts."""
-    import os
+    for example to a year, at the cost of drifting toward older, more-audited contracts. A
+    set-but-unparsable bound fails loud rather than silently using the default, invariant 5."""
+    from opfor.scenarios.onchain.env import env_float
 
-    def _f(var: str, default: float) -> float:
-        try:
-            return max(0.0, float(os.environ.get(var, default)))
-        except ValueError:
-            return default
-
-    return _f("OPFOR_ONCHAIN_MIN_AGE_DAYS", 2.0), _f("OPFOR_ONCHAIN_MAX_AGE_DAYS", 45.0)
+    return (env_float("OPFOR_ONCHAIN_MIN_AGE_DAYS", 2.0, minimum=0.0),
+            env_float("OPFOR_ONCHAIN_MAX_AGE_DAYS", 45.0, minimum=0.0))
 
 
 def seed(name: str, *, chain="ethereum", min_liquidity=10_000.0, min_volume=5_000.0,

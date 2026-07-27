@@ -31,3 +31,6 @@ runs/
 
 # Local tokensave code graph index, not part of the project
 .tokensave/
+
+# Local agent workspace and session state, not part of the project
+.claude/

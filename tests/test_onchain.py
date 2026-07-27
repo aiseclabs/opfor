@@ -947,7 +947,9 @@ def test_etherscan_fails_loud_on_a_chain_access_denial(monkeypatch):
     assert etherscan._access_denied({"status": "0", "result": "Contract source code not verified"}) is False
 
 
-def test_etherscan_min_interval_reads_the_env_and_falls_back_on_a_bad_value(monkeypatch):
+def test_etherscan_min_interval_reads_the_env_and_fails_loud_on_a_bad_value(monkeypatch):
+    import pytest
+
     from opfor.scenarios.onchain.assets.contract.sources import etherscan
 
     monkeypatch.delenv("OPFOR_ETHERSCAN_MIN_INTERVAL", raising=False)
@@ -955,7 +957,21 @@ def test_etherscan_min_interval_reads_the_env_and_falls_back_on_a_bad_value(monk
     monkeypatch.setenv("OPFOR_ETHERSCAN_MIN_INTERVAL", "0")
     assert etherscan._min_interval() == 0.0  # a paid plan disables the throttle
     monkeypatch.setenv("OPFOR_ETHERSCAN_MIN_INTERVAL", "not-a-number")
-    assert etherscan._min_interval() == float(etherscan._MIN_INTERVAL_DEFAULT)  # bad value falls back
+    # a set-but-unparsable rail fails loud rather than silently reverting to the default, invariant 5
+    with pytest.raises(ValueError):
+        etherscan._min_interval()
+
+
+def test_funds_floor_fails_loud_on_a_bad_value(monkeypatch):
+    import pytest
+
+    from opfor.scenarios.onchain.report import _funds_floor
+
+    monkeypatch.delenv("OPFOR_ONCHAIN_FUNDS_FLOOR", raising=False)
+    assert _funds_floor() == 10000.0
+    monkeypatch.setenv("OPFOR_ONCHAIN_FUNDS_FLOOR", "not-a-number")
+    with pytest.raises(ValueError):
+        _funds_floor()
 
 
 def test_discovery_age_band_is_env_tunable(monkeypatch):

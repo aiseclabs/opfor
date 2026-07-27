@@ -17,6 +17,7 @@ import urllib.parse
 import urllib.request
 
 from opfor.scenarios.onchain.assets.contract.chains import default_chain_policy
+from opfor.scenarios.onchain.env import env_float
 
 _API = "https://api.etherscan.io/v2/api"
 _TIMEOUT = 15.0
@@ -32,19 +33,15 @@ _BACKOFF = 0.6
 # One contract's funds read fires a balanceOf per value token plus native and decimals, so without
 # pacing a single read bursts past the cap. `OPFOR_ETHERSCAN_MIN_INTERVAL` tunes it, 0 disables it
 # for a paid plan. The throttle is process-wide so it holds even if reads ever run concurrently.
-_MIN_INTERVAL_DEFAULT = "0.22"
+_MIN_INTERVAL_DEFAULT = 0.22
 _THROTTLE_LOCK = threading.Lock()
 _next_call = [0.0]
 
 
 def _min_interval() -> float:
     """The configured minimum seconds between calls, read at the call so a changed environment is
-    seen. A non-numeric value falls back to the default rather than failing the read."""
-    raw = os.environ.get("OPFOR_ETHERSCAN_MIN_INTERVAL", _MIN_INTERVAL_DEFAULT)
-    try:
-        return max(0.0, float(raw))
-    except ValueError:
-        return float(_MIN_INTERVAL_DEFAULT)
+    seen. A set-but-unparsable value fails loud rather than silently using the default, invariant 5."""
+    return env_float("OPFOR_ETHERSCAN_MIN_INTERVAL", _MIN_INTERVAL_DEFAULT, minimum=0.0)
 
 
 def _etherscan_wait(interval: float) -> None:

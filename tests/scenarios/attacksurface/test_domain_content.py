@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from tests.surface_fixtures import (
+from tests.scenarios.attacksurface.fixtures import (
     _run,
     _seed,
 )

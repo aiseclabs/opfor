@@ -3,7 +3,7 @@ from __future__ import annotations
 from opfor.core import Node, World
 
 from opfor.scenarios.attacksurface.assets.domain.sources.observations import Liveness, Response
-from tests.surface_fixtures import (
+from tests.scenarios.attacksurface.fixtures import (
     ROOT,
     _fetch,
     _probe,

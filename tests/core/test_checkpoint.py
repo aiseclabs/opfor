@@ -107,7 +107,7 @@ def test_restore_refuses_a_checkpoint_for_a_different_scenario():
 
 
 def test_durable_checkpoint_resumes_across_a_simulated_process_restart():
-    from tests.test_engine import _async_scenario
+    from tests.core.test_engine import _async_scenario
 
     world = World()
     world.add(Node(id="root:1", type="root"))

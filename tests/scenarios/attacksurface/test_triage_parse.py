@@ -8,7 +8,7 @@ import json
 from opfor.core import MockProvider
 from opfor.scenarios.attacksurface.lifecycle.triage import _finding_from_dict
 
-from tests.surface_fixtures import _run_capturing
+from tests.scenarios.attacksurface.fixtures import _run_capturing
 
 
 def test_model_findings_are_mapped_to_typed_findings():

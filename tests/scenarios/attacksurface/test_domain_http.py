@@ -5,7 +5,7 @@ import pytest
 from opfor.core import Scope
 from opfor.scenarios.attacksurface.assets.domain.sources.observations import Resolution
 
-from tests.surface_fixtures import (
+from tests.scenarios.attacksurface.fixtures import (
     HostScope,
     _run,
     _seed,

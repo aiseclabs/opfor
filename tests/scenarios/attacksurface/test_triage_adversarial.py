@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from opfor.core import MockProvider
 
-from tests.surface_fixtures import _make, _two_findings
+from tests.scenarios.attacksurface.fixtures import _make, _two_findings
 
 
 def test_challenger_drops_a_refuted_finding():

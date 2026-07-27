@@ -7,7 +7,7 @@ from __future__ import annotations
 import json
 
 from opfor.core import MockProvider, Node, World
-from tests.surface_fixtures import (
+from tests.scenarios.attacksurface.fixtures import (
     _make,
 )
 

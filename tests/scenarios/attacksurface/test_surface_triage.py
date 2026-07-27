@@ -5,7 +5,7 @@ import pytest
 from opfor.core import Budget, MockProvider, Scope, run
 from opfor.scenarios.attacksurface.lifecycle.triage import TriageError
 from opfor.scenarios.attacksurface.assets.domain.sources.observations import Resolution
-from tests.surface_fixtures import (
+from tests.scenarios.attacksurface.fixtures import (
     ROOT,
     HostScope,
     _make,

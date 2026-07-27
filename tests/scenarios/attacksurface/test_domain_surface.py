@@ -4,7 +4,7 @@ from opfor.core import Budget, Node, Phase, Scope, World, run
 from opfor.core.result import CLOSED
 
 from opfor.scenarios.attacksurface.assets.domain.sources.observations import Resolution
-from tests.surface_fixtures import (
+from tests.scenarios.attacksurface.fixtures import (
     HostScope,
     ROOT,
     _make,

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from opfor.core import Node, World
 
-from tests.surface_fixtures import _run_capturing
+from tests.scenarios.attacksurface.fixtures import _run_capturing
 
 
 def test_nvd_cves_parses_id_score_severity_and_summary():

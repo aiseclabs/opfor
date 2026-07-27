@@ -12,7 +12,8 @@ from opfor.core.budget import Budget
 from opfor.core.capability import Capability, Done, Failed, Later, Outcome, Task
 from opfor.core.checkpoint import Checkpoint, checkpoint, restore
 from opfor.core.confirm import Confirm
-from opfor.core.engine import RunState, resume_async, resume_checkpoint, run
+from opfor.core.engine import resume_async, resume_checkpoint, run
+from opfor.core.runstate import RunState
 from opfor.core.json_parse import extract_json_object, require_json_object
 from opfor.core.ledger import Event, Ledger
 from opfor.core.markdown_docs import iter_md_docs, parse_frontmatter

@@ -164,8 +164,8 @@ class Checkpoint:
 
 
 def checkpoint(state, *, resume_from: Phase | None = None) -> Checkpoint:
-    """Snapshot a run's live state into a durable checkpoint. The engine imports this lazily to
-    avoid a cycle, `RunState` lives in engine and this module reads only its fields.
+    """Snapshot a run's live state into a durable checkpoint. This reads only `RunState`'s
+    fields, it never drives the run, so the snapshot is a pure read of the state.
 
     `resume_from` overrides the phase a restore re-enters, so a mid-run save records the phase in
     progress rather than the state's own resume marker, which is only set on suspend. A restore
@@ -197,7 +197,7 @@ def restore(cp: Checkpoint, scenario: Scenario):
     name. The world is rebuilt from the record snapshot through the scenario's payload
     registry, so the resumed run reads the same typed world it parked on."""
     from opfor.core.capability import Task
-    from opfor.core.engine import RunState
+    from opfor.core.runstate import RunState
 
     # The world is rebuilt through this scenario's payload registry, so restoring into the
     # wrong scenario would decode payloads against the wrong classes. Refuse the mismatch loud

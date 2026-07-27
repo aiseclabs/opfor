@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from opfor.core import (Budget, Checkpoint, Fact, Node, Phase, Scope, World, checkpoint, restore,
                         resume_async, run)
-from opfor.core.engine import RunState
+from opfor.core.runstate import RunState
 from opfor.scenarios.attacksurface.hostnames import HostScope
 from opfor.core.ledger import Ledger
 from opfor.core.result import CLOSED, SUSPENDED

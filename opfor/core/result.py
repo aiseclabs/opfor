@@ -9,13 +9,11 @@ that suspends says so, so incomplete work is never dressed as complete.
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass, field
-from typing import TYPE_CHECKING, Any
+from dataclasses import dataclass
 
+from opfor.core.finding import Finding
 from opfor.core.phase import Phase
-
-if TYPE_CHECKING:
-    from opfor.core.engine import RunState
+from opfor.core.runstate import RunState
 
 # A run either ran the whole spine to its terminal, stopped short but can resume, or hit an
 # error it cannot resume past. A suspended run is a resumable stall, an exhausted budget or
@@ -25,26 +23,6 @@ if TYPE_CHECKING:
 CLOSED = "closed"
 SUSPENDED = "suspended"
 ERRORED = "errored"
-
-
-@dataclass(frozen=True, kw_only=True)
-class Finding:
-    """One judged issue. `where` is a locator such as a node id or an address, and
-    `severity` is graded by triage against the scenario's rubric. `data` carries the
-    scenario's structured axes so an operator can sort and filter without parsing prose."""
-
-    id: str
-    title: str
-    severity: str
-    where: str
-    evidence: str = ""
-    # A safe, reproducible read that demonstrates the finding, never an attack, so an
-    # operator can confirm it by hand. Empty when the finding needs no command to show.
-    poc: str = ""
-    data: dict[str, Any] = field(default_factory=dict)
-
-    def to_dict(self) -> dict[str, Any]:
-        return asdict(self)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -73,7 +51,7 @@ class Report:
     pending: tuple[str, ...] = ()
     # The resumable state of a suspended run, live objects rather than a serialized checkpoint,
     # so `engine.resume_async` continues it in process. None on a closed or errored run.
-    state: "RunState | None" = None
+    state: RunState | None = None
 
     @property
     def closed(self) -> bool:

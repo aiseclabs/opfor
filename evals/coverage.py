@@ -16,6 +16,10 @@ A finding file under findings/ carries both the judgment prose the triage model 
 frontmatter, the deterministic payloads that class surfaces, so a concept is one file. Coverage is
 per ref, so the judgment class and each of its detection payloads are scored apart even though they
 share a file.
+
+This report is attack-surface only, by decision. The onchain scenario identifies with a model and
+carries no deterministic fingerprint table, so there is no exact-match backtest to cover, and its
+knowledge is left out until a scenario-parameterized coverage report is worth building.
 """
 
 from __future__ import annotations
@@ -45,7 +49,7 @@ def _slug(text: str) -> str:
 class KnowledgeItem:
     """One claim the coverage matrix tracks, addressed by a namespaced ref a case references."""
 
-    ref: str        # product:grafana, framework:nextjs, class:<id>, clue:<id>, secret:<id>, signature:<slug>, repro:<cve>, backup:<file>
+    ref: str        # product:grafana, framework:nextjs, class:<id>, clue:<id>, signature:<slug>, repro:<cve>
     kind: str       # detection or judgment
     path: Path      # the knowledge file the claim lives in
 
@@ -82,14 +86,9 @@ def scan_knowledge(root: Path = KNOWLEDGE) -> dict[str, KnowledgeItem]:
         for clue in meta.get("clues") or []:
             if clue.get("id"):
                 add(f"clue:{clue['id']}", DETECTION, path)
-        for secret in meta.get("secrets") or []:
-            if secret.get("id"):
-                add(f"secret:{secret['id']}", DETECTION, path)
         for sig in meta.get("signatures") or []:
             if sig.get("service"):
                 add(f"signature:{_slug(sig['service'])}", DETECTION, path)
-        if meta.get("backups"):
-            add(f"backup:{path.stem}", DETECTION, path)
 
     return items
 
@@ -178,6 +177,16 @@ def coverage_problems(items: dict[str, KnowledgeItem] | None = None,
             problems.append(CoverageProblem(kind="unresolved-reference", ref=ref,
                                             detail=f"case {source!r} names a ref no knowledge defines"))
     return problems
+
+
+def gate(items: dict[str, KnowledgeItem] | None = None, corpus: Path = CORPUS) -> list[str]:
+    """The coverage failures that block a run. Only an unresolved reference gates, a case labels a
+    knowledge ref no file defines, for example one orphaned by a renamed knowledge file. That is
+    always a real defect, so it fails loud regardless of how full the corpus is, invariant 5. The
+    missing-positive, missing-negative, and missing-case gaps are reported, not gated, until the
+    case corpus is filled in."""
+    return [f"{p.ref}: {p.detail}" for p in coverage_problems(items, corpus)
+            if p.kind == "unresolved-reference"]
 
 
 def format_inventory(items: dict[str, KnowledgeItem] | None = None) -> str:

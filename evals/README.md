@@ -1,10 +1,10 @@
-# Offline backtests
+# Offline evals
 
-An offline, deterministic gate, no Docker, network, or model. The fingerprint backtest measures
-whether opfor identifies a product. It is a CI gate, and it keeps its ground truth out of the
-pipeline, so a high score cannot come from the tool grading itself. Docker-based live lanes against
-real product containers were removed and parked, so the whole eval surface here is offline, benign,
-and deterministic.
+An offline, deterministic surface, no Docker, network, or model. It holds two things: the
+fingerprint backtest, a CI gate that measures whether opfor identifies a product, and a
+knowledge-coverage report. Both keep their ground truth out of the pipeline, so a high score cannot
+come from the tool grading itself. The corpus and coverage are attack-surface only, since the
+onchain scenario identifies with a model and carries no deterministic table to replay.
 
 ## Fingerprint backtest
 
@@ -25,16 +25,25 @@ it replays what a real scan drew from a real instance.
 - `replay.py` replays a cassette through opfor's **real probe pipeline** (fidelity by full-response
   replay), so the redirect handling, the paths probed, the evidence building, and the fingerprint
   all run against recorded reality. The identify seam is the deterministic table only, no model.
-- `backtest.py` scores three axes and gates on a regression: **recall** (each version identified),
+- `fingerprint.py` scores three axes and gates on a regression: **recall** (each version identified),
   **version accuracy** (extracted version matches), **precision** (no wrong or negative fire).
 - Ground truth lives only in the cassette labels, never fed into the pipeline, so a high score
   cannot come from the tool grading itself.
 
 ### Run the backtest (offline, deterministic, no Docker, no model, no network)
 
-    python -m evals run
+    python -m evals fingerprint
 
-Fails with a nonzero exit on any regression, so it is a CI gate.
+Fails with a nonzero exit on any regression, so it is a CI gate. `run` stays as a hidden alias.
+
+### Knowledge coverage (report)
+
+    python -m evals coverage
+
+Enumerates every knowledge claim as a namespaced ref and reports which a case exercises, so a claim
+no case exercises is a visible gap. It is a report, not a gate for the thin gaps, but it fails loud
+on an unresolved label, a case naming a knowledge ref no file defines, since that is a stale label
+rather than a thin corpus. Pass `--strict` to fail on any uncovered claim.
 
 ### Refresh the corpus (needs Docker, on-demand)
 

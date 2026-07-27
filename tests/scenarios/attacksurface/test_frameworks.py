@@ -15,13 +15,13 @@ from opfor.scenarios.attacksurface.assets.domain.classifiers import (
     classify_frameworks,
     load_frameworks,
 )
-from opfor.scenarios.attacksurface.assets.domain.types import HTTP
+from opfor.scenarios.attacksurface.assets.domain.types import HTTPProbe
 
 _FRAMEWORKS = load_frameworks(KNOWLEDGE / "fingerprints" / "frameworks")
 
 
 def _classify(*, server="", headers=(), body=""):
-    http = HTTP(alive=True, status=200, url="https://h/", server=server, title="",
+    http = HTTPProbe(alive=True, status=200, url="https://h/", server=server, title="",
                 body=body.lower(), location="", headers=tuple(headers))
     return classify_frameworks(http, _FRAMEWORKS)
 

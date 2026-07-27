@@ -40,7 +40,7 @@ class Resolved:
 
 
 @dataclass(frozen=True, kw_only=True)
-class HTTP:
+class HTTPProbe:
     """An HTTP probe result. `body` is a lowercased head of the response, kept so
     triage can match a takeover signature against it."""
 

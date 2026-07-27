@@ -70,7 +70,7 @@ class FundFact:
 
 
 @dataclass(frozen=True, kw_only=True)
-class InterfaceFn:
+class InterfaceFunction:
     """One exposed function. `is_fund_path` marks a name in the fund-path vocabulary, `guarded`
     is whether the source gates it behind an access modifier such as `onlyOwner`, a mechanical
     read of the source, not a judgment of whether the gate is sound."""
@@ -84,7 +84,7 @@ class InterfaceFn:
 class InterfaceFact:
     """The exposed functions enumerated from the ABI, each tagged fund-path and guarded."""
 
-    functions: tuple[InterfaceFn, ...] = ()
+    functions: tuple[InterfaceFunction, ...] = ()
 
 
 @dataclass(frozen=True, kw_only=True)

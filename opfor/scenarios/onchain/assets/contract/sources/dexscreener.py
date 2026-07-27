@@ -1,4 +1,4 @@
-"""The DEX source seam, the default sweep and pivot over public DEX indexes.
+"""The DEX Screener source seam, token pricing and the shallow pivot over its public index.
 
 The sweep reads the active pools for a chain from DEX Screener, bounded by the survey's activity
 floor. The pivot, from a token or pool, finds the other pools that reference the same token, the

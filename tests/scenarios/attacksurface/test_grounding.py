@@ -94,7 +94,7 @@ def test_a_versioned_cve_finding_grounds_on_the_recipe_across_every_candidate_pa
     request, and the generated script decides PASS or FAIL by the recipe's own fire condition."""
     from opfor.core import Fact
     from opfor.scenarios.attacksurface.assets.domain.types import (
-        CVE, CVEScan, DomainData, HTTP)
+        CVE, CVEScan, DomainData, HTTPProbe)
     from opfor.scenarios.attacksurface.assets.domain.nuclei import Matcher
     from opfor.core.result import Finding
     from opfor.scenarios.attacksurface.lifecycle.grounding import (
@@ -104,7 +104,7 @@ def test_a_versioned_cve_finding_grounds_on_the_recipe_across_every_candidate_pa
     world.add(Node(id="domain:g.example.com", type="domain",
                    payload=DomainData(name="g.example.com", root="example.com", source="crt")))
     world.absorb([Fact(kind="http", about="domain:g.example.com",
-                       payload=HTTP(alive=True, status=200, url="https://g.example.com/"))])
+                       payload=HTTPProbe(alive=True, status=200, url="https://g.example.com/"))])
     world.absorb([Fact(kind="cve_scan", about="domain:g.example.com", payload=CVEScan(
         product="Grafana", version="8.3.0", match="version",
         cves=(CVE(id="CVE-2021-43798"),)))])

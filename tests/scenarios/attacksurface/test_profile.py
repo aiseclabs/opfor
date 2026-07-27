@@ -7,7 +7,7 @@ from __future__ import annotations
 import re
 
 from opfor.scenarios.attacksurface.assets.domain.classifiers import classify_frameworks
-from opfor.scenarios.attacksurface.assets.domain.types import HTTP
+from opfor.scenarios.attacksurface.assets.domain.types import HTTPProbe
 
 _FRAMEWORKS = {
     "Next.js": {"body": ['id="__next"'], "headers": ["x-powered-by: next.js"], "version": None},
@@ -17,7 +17,7 @@ _FRAMEWORKS = {
 
 
 def _http(*, server="", headers=(), body=""):
-    return HTTP(alive=True, status=200, url="https://h/", server=server, title="",
+    return HTTPProbe(alive=True, status=200, url="https://h/", server=server, title="",
                 body=body.lower(), location="", headers=tuple(headers))
 
 

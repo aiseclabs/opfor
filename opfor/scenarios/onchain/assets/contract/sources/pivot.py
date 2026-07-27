@@ -17,7 +17,7 @@ from __future__ import annotations
 from collections import Counter
 
 from opfor.scenarios.onchain.assets.contract.chains import ChainPolicy, default_chain_policy
-from opfor.scenarios.onchain.assets.contract.sources import dex, etherscan, funds, rpc
+from opfor.scenarios.onchain.assets.contract.sources import dexscreener, etherscan, funds, rpc
 from opfor.scenarios.onchain.assets.contract.sources.observations import RelatedObservation
 
 # How many recent transfers to read, how many top counterparties to code-check, and how many
@@ -82,7 +82,7 @@ def pivot(contract, policy: ChainPolicy | None = None) -> tuple[RelatedObservati
     if contract.address.lower() in policy.value_token_addresses(contract.chain):
         return ()
     related: dict[str, RelatedObservation] = {}
-    for obs in dex.pivot(contract):
+    for obs in dexscreener.pivot(contract):
         related[obs.address.lower()] = obs
     for obs in counterparty_pivot(contract, fetch_transfers=_etherscan_transfers,
                                   is_contract=rpc.is_contract, policy=policy):

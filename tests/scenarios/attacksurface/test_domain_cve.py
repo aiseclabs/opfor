@@ -224,14 +224,14 @@ def test_profile_evidence_surfaces_the_spec_version_from_the_endpoint_body():
 
 def test_cve_render_ranks_by_cvss_and_notes_truncation():
     from opfor.core import Fact
-    from opfor.scenarios.attacksurface.assets.domain.types import CVE, CVEScan, DomainData, HTTP, Resolved
+    from opfor.scenarios.attacksurface.assets.domain.types import CVE, CVEScan, DomainData, HTTPProbe, Resolved
     from opfor.scenarios.attacksurface.render import SurfaceRenderer
 
     world = World()
     world.add(Node(id="domain:h", type="domain", payload=DomainData(name="h", root="h", source="s")))
     world.absorb([
         Fact(kind="resolved", about="domain:h", payload=Resolved(resolvable=True, addresses=("1.2.3.4",))),
-        Fact(kind="http", about="domain:h", payload=HTTP(alive=True, status=200, url="https://h/")),
+        Fact(kind="http", about="domain:h", payload=HTTPProbe(alive=True, status=200, url="https://h/")),
     ])
     # eleven CVEs, the critical one last in database order so a blind head slice would drop it
     cves = tuple(CVE(id=f"CVE-{i}", cvss=1.0, severity="LOW", summary="low") for i in range(10))
@@ -246,14 +246,14 @@ def test_cve_render_ranks_by_cvss_and_notes_truncation():
 
 def test_cve_render_states_a_weak_match_basis_so_the_judge_weighs_it():
     from opfor.core import Fact
-    from opfor.scenarios.attacksurface.assets.domain.types import CVE, CVEScan, DomainData, HTTP, Resolved
+    from opfor.scenarios.attacksurface.assets.domain.types import CVE, CVEScan, DomainData, HTTPProbe, Resolved
     from opfor.scenarios.attacksurface.render import SurfaceRenderer
 
     world = World()
     world.add(Node(id="domain:h", type="domain", payload=DomainData(name="h", root="h", source="s")))
     world.absorb([
         Fact(kind="resolved", about="domain:h", payload=Resolved(resolvable=True, addresses=("1.2.3.4",))),
-        Fact(kind="http", about="domain:h", payload=HTTP(alive=True, status=200, url="https://h/")),
+        Fact(kind="http", about="domain:h", payload=HTTPProbe(alive=True, status=200, url="https://h/")),
     ])
     cves = (CVE(id="CVE-1", cvss=7.0, severity="HIGH", summary="x"),)
     world.absorb([Fact(kind="cve_scan", about="domain:h",

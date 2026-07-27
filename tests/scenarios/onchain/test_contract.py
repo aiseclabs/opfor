@@ -38,7 +38,7 @@ def test_triage_drops_known_infrastructure_however_much_it_holds():
     from opfor.core import Fact, Node, World
     from opfor.scenarios.onchain.lifecycle.triage import AuditTriage
     from opfor.scenarios.onchain.assets.contract.types import (
-        ContractData, FundFact, IdentityFact, InterfaceFact, InterfaceFn, SignalFact, SourceFact,
+        ContractData, FundFact, IdentityFact, InterfaceFact, InterfaceFunction, SignalFact, SourceFact,
     )
 
     infra = "0x000000000004444c5dc75cb358380d2e3de08a90"  # a router-like singleton, not a target
@@ -53,7 +53,7 @@ def test_triage_drops_known_infrastructure_however_much_it_holds():
             Fact(kind="identified", about=nid, payload=IdentityFact(role="router")),
             Fact(kind="funded", about=nid, payload=FundFact(funds_at_risk_usd=200_000_000)),
             Fact(kind="interfaces", about=nid, payload=InterfaceFact(
-                functions=(InterfaceFn(name="swap", is_fund_path=True, guarded=False),))),
+                functions=(InterfaceFunction(name="swap", is_fund_path=True, guarded=False),))),
             Fact(kind="signals", about=nid, payload=SignalFact(
                 flags=("dex_spot_price_dependency", "delegatecall"))),
         ])
@@ -272,7 +272,7 @@ def _auditable_world(addr="0xffff000000000000000000000000000000000009"):
     mints a finding the adversarial roles can then weigh."""
     from opfor.core import Fact, Node, World
     from opfor.scenarios.onchain.assets.contract.types import (
-        ContractData, FundFact, IdentityFact, InterfaceFact, InterfaceFn, SignalFact, SourceFact,
+        ContractData, FundFact, IdentityFact, InterfaceFact, InterfaceFunction, SignalFact, SourceFact,
     )
 
     world = World()
@@ -284,7 +284,7 @@ def _auditable_world(addr="0xffff000000000000000000000000000000000009"):
         Fact(kind="identified", about=nid, payload=IdentityFact(role="vault")),
         Fact(kind="funded", about=nid, payload=FundFact(funds_at_risk_usd=1_000_000)),
         Fact(kind="interfaces", about=nid, payload=InterfaceFact(
-            functions=(InterfaceFn(name="withdraw", is_fund_path=True, guarded=False),))),
+            functions=(InterfaceFunction(name="withdraw", is_fund_path=True, guarded=False),))),
         Fact(kind="signals", about=nid, payload=SignalFact(flags=("share_accounting",))),
     ])
     return world, addr

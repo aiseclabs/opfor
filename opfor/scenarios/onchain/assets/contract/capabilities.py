@@ -29,7 +29,7 @@ from opfor.scenarios.onchain.assets.contract.types import (
     FundFact,
     IdentityFact,
     InterfaceFact,
-    InterfaceFn,
+    InterfaceFunction,
     SignalFact,
     SourceFact,
 )
@@ -143,7 +143,7 @@ class PivotRelated(Capability):
                                       source="pivoted", related_to=contract.address))
             for rel in related if rel.address
         )
-        return Done(facts=(Fact(kind="related", about=task.node, yields=nodes),))
+        return Done(facts=(Fact(kind="related_contracts", about=task.node, yields=nodes),))
 
 
 class FetchSource(Capability):
@@ -263,7 +263,7 @@ class EnumInterfaces(Capability):
                                     payload=InterfaceFact()),))
         guarded = guarded_functions(sourced.payload.source_text, self._detections.guards)
         functions = tuple(
-            InterfaceFn(name=name, is_fund_path=name.lower() in self._detections.fund_paths,
+            InterfaceFunction(name=name, is_fund_path=name.lower() in self._detections.fund_paths,
                         guarded=name in guarded)
             for name in sourced.payload.functions
         )

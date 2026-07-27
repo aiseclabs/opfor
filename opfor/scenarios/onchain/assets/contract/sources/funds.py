@@ -13,7 +13,7 @@ from __future__ import annotations
 import re
 
 from opfor.scenarios.onchain.assets.contract.chains import ChainPolicy, default_chain_policy
-from opfor.scenarios.onchain.assets.contract.sources import dex, rpc
+from opfor.scenarios.onchain.assets.contract.sources import dexscreener, rpc
 from opfor.scenarios.onchain.assets.contract.sources.observations import FundObservation
 
 # A 20-byte EVM address, `0x` and forty hex digits. A discovery source can hand back a 32-byte pool
@@ -92,7 +92,7 @@ def read_funds(contract, hint_usd: float, policy: ChainPolicy | None = None) -> 
         return FundObservation(note=f"no value-token table for chain {contract.chain!r}")
     value_tokens = value_tokens_for(contract, decimals_fn=rpc.token_decimals, policy=policy)
     total, assets = compute_funds(contract, native_wei_fn=rpc.native_wei,
-                                  token_balance_fn=rpc.token_balance, price_fn=dex.token_price_usd,
+                                  token_balance_fn=rpc.token_balance, price_fn=dexscreener.token_price_usd,
                                   value_tokens=value_tokens, native_decimals=policy.native_decimals)
     note = "priced native, value-token, and project-token balances" if total > 0 else "no priced balance held"
     return FundObservation(funds_at_risk_usd=total, assets=assets, note=note)

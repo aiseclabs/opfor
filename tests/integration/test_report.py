@@ -18,7 +18,7 @@ from opfor.scenarios.attacksurface.assets.domain.types import (
     DomainData,
     Endpoint,
     HostProfile,
-    HTTP,
+    HTTPProbe,
     Resolved,
 )
 from opfor.scenarios.attacksurface.report import host_records, report_view
@@ -31,7 +31,7 @@ def _world() -> World:
     world.absorb([Fact(kind="resolved", about="domain:api.example.com",
                        payload=Resolved(resolvable=True, addresses=("93.184.216.34",)))])
     world.absorb([Fact(kind="http", about="domain:api.example.com",
-                       payload=HTTP(alive=True, status=200, url="https://api.example.com/"))])
+                       payload=HTTPProbe(alive=True, status=200, url="https://api.example.com/"))])
     world.absorb([Fact(kind="host_profile", about="domain:api.example.com",
                        payload=HostProfile(product="Grafana", version="8.3.0", frameworks=("angular",)))])
     world.absorb([Fact(kind="cve_scan", about="domain:api.example.com",
@@ -71,7 +71,7 @@ def test_an_identified_host_with_no_cve_scan_is_marked_unchecked_not_silently_cl
     world.absorb([Fact(kind="resolved", about="domain:id.example.com",
                        payload=Resolved(resolvable=True, addresses=("93.184.216.34",)))])
     world.absorb([Fact(kind="http", about="domain:id.example.com",
-                       payload=HTTP(alive=True, status=200, url="https://id.example.com/"))])
+                       payload=HTTPProbe(alive=True, status=200, url="https://id.example.com/"))])
     world.absorb([Fact(kind="host_profile", about="domain:id.example.com",
                        payload=HostProfile(product="Grafana", version="8.3.0"))])
     # no cve_scan fact: the lookup failed or the run was suspended before it ran

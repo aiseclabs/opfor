@@ -174,7 +174,7 @@ def test_http_domain_records_a_gap_when_unreachable_but_not_when_refused():
     # the run could not reach the host, while a refused connection is a real negative, so the
     # gap is recorded for the first and not the second, invariant 3 and 5.
     from opfor.core import Done, Fact, Task
-    from opfor.scenarios.attacksurface.assets.domain.capabilities.http import HTTPDomain
+    from opfor.scenarios.attacksurface.assets.domain.capabilities.http import ProbeDomainHTTP
     from opfor.scenarios.attacksurface.assets.domain.types import DomainData, Resolved
 
     world = World()
@@ -183,13 +183,13 @@ def test_http_domain_records_a_gap_when_unreachable_but_not_when_refused():
                        payload=Resolved(resolvable=True, addresses=("8.8.8.8",)))])
     task = Task(capability="domain_http", node="domain:h")
 
-    unreachable = HTTPDomain(
+    unreachable = ProbeDomainHTTP(
         lambda name, addresses: Liveness(alive=False, reason="unreachable")).run(task, world)
     assert isinstance(unreachable, Done)
     gaps = [f.payload for f in unreachable.facts if f.kind == "coverage_gap"]
     assert len(gaps) == 1 and gaps[0].scan == "domain_http" and gaps[0].host == "h"
 
-    refused = HTTPDomain(
+    refused = ProbeDomainHTTP(
         lambda name, addresses: Liveness(alive=False, reason="refused")).run(task, world)
     assert isinstance(refused, Done)
     assert not any(f.kind == "coverage_gap" for f in refused.facts)

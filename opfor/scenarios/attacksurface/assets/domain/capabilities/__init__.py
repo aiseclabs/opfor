@@ -10,7 +10,7 @@ from opfor.scenarios.attacksurface.assets.domain.capabilities.dns import Resolve
 from opfor.scenarios.attacksurface.assets.domain.capabilities.http import (
     ProbeEndpoints,
     HarvestPaths,
-    HTTPDomain,
+    ProbeDomainHTTP,
     PermutePaths,
 )
 from opfor.scenarios.attacksurface.assets.domain.capabilities.profile import ProfileHost
@@ -27,7 +27,7 @@ __all__ = [
     "ExpandSpec",
     "GraphQLIntrospect",
     "HarvestPaths",
-    "HTTPDomain",
+    "ProbeDomainHTTP",
     "PermutePaths",
     "PermuteSubdomains",
     "ProbeSpec",

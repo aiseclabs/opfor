@@ -331,7 +331,7 @@ def test_a_vendored_contract_is_excluded_from_the_audit_targets():
     from opfor.scenarios.onchain.report import contract_records
     from opfor.scenarios.onchain.lifecycle.triage import AuditTriage
     from opfor.scenarios.onchain.assets.contract.types import (
-        ContractData, CodebaseFact, FundFact, IdentityFact, InterfaceFact, InterfaceFn, SignalFact, SourceFact,
+        ContractData, CodebaseFact, FundFact, IdentityFact, InterfaceFact, InterfaceFunction, SignalFact, SourceFact,
     )
 
     addr = "0xcccc000000000000000000000000000000000052"
@@ -343,7 +343,7 @@ def test_a_vendored_contract_is_excluded_from_the_audit_targets():
                   Fact(kind="funded", about=nid, payload=FundFact(funds_at_risk_usd=500_000)),
                   Fact(kind="sourced", about=nid, payload=SourceFact(verified=True, source_text="x")),
                   Fact(kind="interfaces", about=nid, payload=InterfaceFact(
-                      functions=(InterfaceFn(name="withdraw", is_fund_path=True, guarded=False),))),
+                      functions=(InterfaceFunction(name="withdraw", is_fund_path=True, guarded=False),))),
                   Fact(kind="signals", about=nid, payload=SignalFact(flags=("share_accounting",))),
                   Fact(kind="codebase", about=nid, payload=CodebaseFact(vendored=True, vendored_files=3))])
 

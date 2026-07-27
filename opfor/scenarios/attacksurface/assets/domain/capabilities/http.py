@@ -31,11 +31,11 @@ from opfor.scenarios.attacksurface.assets.domain.sources.parsers import (
 from opfor.scenarios.attacksurface.assets.domain.types import (
     Candidates,
     Endpoint,
-    HTTP,
+    HTTPProbe,
 )
 
 
-class HTTPDomain(Capability):
+class ProbeDomainHTTP(Capability):
     """ENRICH: probe a resolvable domain over HTTP, capturing status and body head."""
 
     name = "domain_http"
@@ -53,7 +53,7 @@ class HTTPDomain(Capability):
             result = self._probe(name, addresses)
         except Exception as exc:
             return net_failed("http", exc)
-        payload = HTTP(
+        payload = HTTPProbe(
             alive=result.alive,
             status=result.status,
             url=result.url,

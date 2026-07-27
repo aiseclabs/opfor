@@ -8,7 +8,7 @@ test. The seams return the typed observations in `observations`, never a loose d
 from __future__ import annotations
 
 from opfor.scenarios.onchain.assets.contract.sources import (
-    dex,
+    dexscreener,
     explorer,
     funds as funds_src,
     geckoterminal,

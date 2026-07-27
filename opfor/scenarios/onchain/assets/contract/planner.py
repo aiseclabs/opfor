@@ -28,7 +28,7 @@ def _pivot_rule(world: World) -> list[Task]:
     for node in world.nodes("contract"):
         if node.payload.role not in _PIVOTABLE_ROLES:
             continue
-        if world.has_fact(node.id, "related"):
+        if world.has_fact(node.id, "related_contracts"):
             continue
         tasks.append(Task(capability="pivot_related", node=node.id))
     return tasks

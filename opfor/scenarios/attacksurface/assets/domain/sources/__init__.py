@@ -1,16 +1,17 @@
-"""Domain-class sources facade, re-exporting the dns, http, tls, enumeration, nvd, seeds, parsers,
-javascript, and storage modules. These are the external-data adapters and low-level parsers a
+"""Domain-class sources facade, re-exporting the dns, http, enumeration, nvd, seeds, parsers,
+javascript, and observations modules. These are the external-data adapters and low-level parsers a
 capability acts through. Identification logic that reads the knowledge tables, the service
 fingerprint and the framework and provider classifiers, lives one level up in
 `domain/fingerprint.py` and `domain/classifiers.py`, not here.
 
 Resolution, the shared network constants, and address filtering live in `dns`, HTTP transport in
-`http`, the TLS posture in `tls`, passive subdomain and path enumeration in `enumeration`, the NVD
-CVE lookup in `nvd`, the operator seed-file loaders in `seeds`, body and document parsers in
-`parsers`, JavaScript extraction in `javascript`, and cloud object-storage URL parsing in
-`storage`. This module gathers the public names in one place so a caller keeps a single import. It
-re-exports public names only, a caller that needs a module's private detail imports it from the
-owning module, so the facade does not turn implementation into public API.
+`http`, passive subdomain and path enumeration in `enumeration`, the NVD CVE lookup in `nvd`, the
+operator seed-file loaders in `seeds`, body and document parsers in `parsers`, JavaScript
+extraction in `javascript`, and the typed source observations in `observations`. The per-source
+API keys live in `keys`, read there by the adapters that use them. This module gathers the public
+names in one place so a caller keeps a single import. It re-exports public names only, a caller
+that needs a module's private detail imports it from the owning module, so the facade does not turn
+implementation into public API.
 """
 
 from __future__ import annotations

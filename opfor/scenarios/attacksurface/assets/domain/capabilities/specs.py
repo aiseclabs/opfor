@@ -9,7 +9,7 @@ from opfor.core import Capability, Done, Fact, Failed, Outcome, Phase, Task, Wor
 from opfor.scenarios.attacksurface.assets.domain.failures import _coverage_gap, net_failed
 from opfor.scenarios.attacksurface.assets.domain.responses import _baseline, _distinct
 from opfor.scenarios.attacksurface.assets.domain.capabilities.http import ProbeEndpoints
-from opfor.scenarios.attacksurface.assets.domain.sources import (
+from opfor.scenarios.attacksurface.assets.domain.sources.parsers import (
     info_from_openapi,
     operations_from_introspection,
     paths_from_openapi,

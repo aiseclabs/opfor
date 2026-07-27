@@ -14,7 +14,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
-from opfor.scenarios.attacksurface import config
+from opfor.scenarios.attacksurface.assets.domain.sources import keys
 from opfor.scenarios.attacksurface.hostnames import host_from_record, looks_like_host
 from opfor.scenarios.attacksurface.assets.domain.sources.dns import _JSON_LIMIT, _TIMEOUT, _UA
 from opfor.scenarios.attacksurface.assets.domain.sources.parsers import same_host_path
@@ -60,9 +60,9 @@ def subdomains(domain: str) -> Enumeration:
     # wildcard certificate hides. Each is tolerated if it fails, the union raises only when every
     # source fails. The keyed passive-DNS sources below add a third window when configured.
     sources = [certspotter_subdomains, wayback_subdomains]
-    if config.virustotal_key():
+    if keys.virustotal_key():
         sources.append(virustotal_subdomains)
-    if config.otx_key():
+    if keys.otx_key():
         sources.append(otx_subdomains)
     names: set[str] = set()
     truncated = False
@@ -125,7 +125,7 @@ def _certspotter_paged(domain: str) -> tuple[list, bool]:
     that may still answer. So a 429 on the token walk falls back to one keyless walk rather
     than blinding the source, and only when the keyless walk also fails is the error raised.
     """
-    token = config.certspotter_token()
+    token = keys.certspotter_token()
     if not token:
         return _certspotter_issuances(domain, token=None, pages=_CERTSPOTTER_PAGES_KEYLESS)
     try:
@@ -183,7 +183,7 @@ def virustotal_subdomains(domain: str) -> Enumeration:
     the page cap, and a next cursor still present at the cap means more subdomains remain
     unfetched, so the result is flagged truncated rather than passing as complete.
     """
-    key = config.virustotal_key()
+    key = keys.virustotal_key()
     if not key:
         return Enumeration()
     headers = {"User-Agent": _UA, "Accept": "application/json", "x-apikey": key}
@@ -230,7 +230,7 @@ def otx_subdomains(domain: str) -> Enumeration:
     that certificate transparency cannot see. Empty without a key, so the union runs
     without it. The endpoint caps its reply and does not page, so a reply at the cap is
     flagged truncated, invariant 5."""
-    key = config.otx_key()
+    key = keys.otx_key()
     if not key:
         return Enumeration()
     url = f"https://otx.alienvault.com/api/v1/indicators/domain/{domain}/passive_dns"

@@ -26,10 +26,10 @@ def test_hosts_from_file_normalizes_a_dns_export(tmp_path):
 def test_virustotal_enumeration_flags_truncation_at_the_page_cap(monkeypatch):
     import urllib.request
 
-    from opfor.scenarios.attacksurface import config
     from opfor.scenarios.attacksurface.assets.domain import sources as domains
+    from opfor.scenarios.attacksurface.assets.domain.sources import keys
 
-    monkeypatch.setattr(config, "virustotal_key", lambda: "vt")
+    monkeypatch.setattr(keys, "virustotal_key", lambda: "vt")
 
     class _Resp:
         def __init__(self, payload):
@@ -66,8 +66,8 @@ def test_virustotal_enumeration_flags_truncation_at_the_page_cap(monkeypatch):
 def test_otx_passive_dns_parses_and_flags_the_cap(monkeypatch):
     import urllib.request
 
-    from opfor.scenarios.attacksurface import config
     from opfor.scenarios.attacksurface.assets.domain import sources as domains
+    from opfor.scenarios.attacksurface.assets.domain.sources import keys
 
     # the parse keeps hosts under the domain and drops the apex and any other domain, apart
     # from the network so it is driven by a fixture
@@ -80,10 +80,10 @@ def test_otx_passive_dns_parses_and_flags_the_cap(monkeypatch):
     assert domains.subdomains_from_otx(reply, "example.com") == {"api.example.com", "dev.example.com"}
 
     # no key leaves the source out of the union, an empty enumeration rather than a call
-    monkeypatch.setattr(config, "otx_key", lambda: "")
+    monkeypatch.setattr(keys, "otx_key", lambda: "")
     assert domains.otx_subdomains("example.com") == set()
 
-    monkeypatch.setattr(config, "otx_key", lambda: "otx")
+    monkeypatch.setattr(keys, "otx_key", lambda: "otx")
 
     class _Resp:
         def __init__(self, payload):
@@ -109,10 +109,10 @@ def test_certspotter_token_429_falls_back_to_an_anonymous_walk(monkeypatch):
     import urllib.error
     import urllib.request
 
-    from opfor.scenarios.attacksurface import config
     from opfor.scenarios.attacksurface.assets.domain import sources as domains
+    from opfor.scenarios.attacksurface.assets.domain.sources import keys
 
-    monkeypatch.setattr(config, "certspotter_token", lambda: "spent-token")
+    monkeypatch.setattr(keys, "certspotter_token", lambda: "spent-token")
 
     class _Resp:
         def __init__(self, payload):
@@ -141,10 +141,10 @@ def test_certspotter_token_error_that_is_not_429_is_raised(monkeypatch):
     import urllib.error
     import urllib.request
 
-    from opfor.scenarios.attacksurface import config
     from opfor.scenarios.attacksurface.assets.domain import sources as domains
+    from opfor.scenarios.attacksurface.assets.domain.sources import keys
 
-    monkeypatch.setattr(config, "certspotter_token", lambda: "tok")
+    monkeypatch.setattr(keys, "certspotter_token", lambda: "tok")
 
     # a non-429 stays loud, it is not a quota signal and must not be swallowed as empty
     def fake_urlopen(request, timeout=0):
@@ -227,10 +227,10 @@ def test_certspotter_flags_truncation_when_the_page_budget_is_spent(monkeypatch)
     unread, so it reports the blind spot rather than passing as complete, invariant 5."""
     import urllib.request
 
-    from opfor.scenarios.attacksurface import config
     from opfor.scenarios.attacksurface.assets.domain import sources as domains
+    from opfor.scenarios.attacksurface.assets.domain.sources import keys
 
-    monkeypatch.setattr(config, "certspotter_token", lambda: "")
+    monkeypatch.setattr(keys, "certspotter_token", lambda: "")
 
     class _Resp:
         def __init__(self, payload):
@@ -257,10 +257,10 @@ def test_certspotter_flags_truncation_when_the_page_budget_is_spent(monkeypatch)
 def test_certspotter_does_not_flag_truncation_when_the_cursor_runs_dry(monkeypatch):
     import urllib.request
 
-    from opfor.scenarios.attacksurface import config
     from opfor.scenarios.attacksurface.assets.domain import sources as domains
+    from opfor.scenarios.attacksurface.assets.domain.sources import keys
 
-    monkeypatch.setattr(config, "certspotter_token", lambda: "")
+    monkeypatch.setattr(keys, "certspotter_token", lambda: "")
 
     class _Resp:
         def __init__(self, payload):

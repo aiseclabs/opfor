@@ -18,13 +18,15 @@ from opfor.scenarios.attacksurface.assets.domain.responses import (
 )
 from opfor.scenarios.attacksurface.assets.domain.sources.parsers import path_permutations
 from opfor.scenarios.attacksurface.assets.domain.sources.http import _BODY_VERSION
-from opfor.scenarios.attacksurface.assets.domain.sources import (
+from opfor.scenarios.attacksurface.assets.domain.sources.javascript import (
     paths_in_javascript,
+    script_sources,
+    urls_in_javascript,
+)
+from opfor.scenarios.attacksurface.assets.domain.sources.parsers import (
     robots_entries,
     same_host_path,
-    script_sources,
     sitemap_paths,
-    urls_in_javascript,
 )
 from opfor.scenarios.attacksurface.assets.domain.types import (
     Candidates,

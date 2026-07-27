@@ -15,7 +15,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
-from opfor.scenarios.attacksurface import config
+from opfor.scenarios.attacksurface.assets.domain.sources import keys
 from opfor.scenarios.attacksurface.assets.domain.sources.dns import _JSON_LIMIT, _UA
 
 
@@ -96,7 +96,7 @@ def _nvd_fetch(query: str) -> list[dict]:
     process-wide throttle serializes concurrent scans under the rate limit, and a 429 is
     retried with a back-off that honors a Retry-After header before it is raised loud."""
     headers = {"User-Agent": _UA, "Accept": "application/json"}
-    key = config.nvd_api_key()
+    key = keys.nvd_api_key()
     if key:
         headers["apiKey"] = key
     url = f"https://services.nvd.nist.gov/rest/json/cves/2.0?{query}&resultsPerPage={_NVD_MAX}"

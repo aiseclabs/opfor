@@ -14,7 +14,7 @@ from collections import Counter
 from typing import Any
 
 from opfor.core import World
-from opfor.scenarios.onchain.env import env_float
+from opfor.core import env_float
 from opfor.scenarios.onchain.assets.contract import KNOWLEDGE
 from opfor.scenarios.onchain.assets.contract.known import load_known_infrastructure
 from opfor.scenarios.onchain.assets.contract.targeting import structural_exclusion

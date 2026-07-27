@@ -11,11 +11,11 @@ resolution is testable without touching the network or the model.
 from __future__ import annotations
 
 import argparse
-import os
 import sys
 from pathlib import Path
 
 from opfor import __version__
+from opfor.core import env_float, env_int
 from opfor.envfile import load_env_file
 from opfor.report import default_output, persist, report_text
 from opfor.scenarios.registry import known_scenarios
@@ -27,28 +27,20 @@ _ENV_LOADED = load_env_file()
 
 
 def _env_int(name: str, default: int) -> int:
-    """An integer environment override, the default when unset. A set-but-unparsable value fails
-    loud rather than silently falling back, so an operator never believes a rail is set while the
-    run uses a different limit, invariant 5."""
-    raw = os.environ.get(name)
-    if raw is None:
-        return default
+    """The kernel's integer env rail, with a set-but-unparsable value surfaced as a clean CLI
+    error rather than a traceback. The parse contract lives in `core.env`, invariant 5."""
     try:
-        return int(raw)
-    except ValueError:
-        raise SystemExit(f"{name} must be an integer, got {raw!r}")
+        return env_int(name, default)
+    except ValueError as exc:
+        raise SystemExit(str(exc))
 
 
 def _env_float(name: str, default: float) -> float:
-    """A float environment override, the default when unset. A set-but-unparsable value fails loud
-    rather than silently falling back, invariant 5."""
-    raw = os.environ.get(name)
-    if raw is None:
-        return default
+    """The kernel's float env rail, surfaced as a clean CLI error on a bad value, invariant 5."""
     try:
-        return float(raw)
-    except ValueError:
-        raise SystemExit(f"{name} must be a number, got {raw!r}")
+        return env_float(name, default)
+    except ValueError as exc:
+        raise SystemExit(str(exc))
 
 
 def _run(args) -> int:

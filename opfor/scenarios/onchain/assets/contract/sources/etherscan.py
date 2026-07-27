@@ -17,7 +17,7 @@ import urllib.parse
 import urllib.request
 
 from opfor.scenarios.onchain.assets.contract.chains import default_chain_policy
-from opfor.scenarios.onchain.env import env_float
+from opfor.core import env_float
 
 _API = "https://api.etherscan.io/v2/api"
 _TIMEOUT = 15.0

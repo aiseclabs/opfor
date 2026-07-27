@@ -19,7 +19,7 @@ from datetime import datetime, timezone
 
 from opfor.scenarios.onchain.assets.contract.chains import default_chain_policy
 from opfor.scenarios.onchain.assets.contract.sources.observations import PoolObservation
-from opfor.scenarios.onchain.env import env_float, env_int
+from opfor.core import env_float, env_int
 
 _BASE = "https://api.geckoterminal.com/api/v2"
 _TIMEOUT = 15.0

@@ -13,6 +13,7 @@ from opfor.core.capability import Capability, Done, Failed, Later, Outcome, Task
 from opfor.core.checkpoint import Checkpoint, checkpoint, restore
 from opfor.core.confirm import Confirm
 from opfor.core.engine import resume_async, resume_checkpoint, run
+from opfor.core.env import env_float, env_int
 from opfor.core.runstate import RunState
 from opfor.core.json_parse import extract_json_object, require_json_object
 from opfor.core.ledger import Event, Ledger
@@ -67,6 +68,8 @@ __all__ = [
     "checkpoint",
     "default_model",
     "each",
+    "env_float",
+    "env_int",
     "extract_json_object",
     "is_transient",
     "iter_md_docs",

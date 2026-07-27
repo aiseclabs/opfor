@@ -118,7 +118,7 @@ def _age_band() -> tuple[float, float]:
     young long-tail focus, `OPFOR_ONCHAIN_MIN_AGE_DAYS` and `OPFOR_ONCHAIN_MAX_AGE_DAYS` widen it,
     for example to a year, at the cost of drifting toward older, more-audited contracts. A
     set-but-unparsable bound fails loud rather than silently using the default, invariant 5."""
-    from opfor.scenarios.onchain.env import env_float
+    from opfor.core import env_float
 
     return (env_float("OPFOR_ONCHAIN_MIN_AGE_DAYS", 2.0, minimum=0.0),
             env_float("OPFOR_ONCHAIN_MAX_AGE_DAYS", 45.0, minimum=0.0))

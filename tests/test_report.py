@@ -62,6 +62,23 @@ def test_a_host_record_carries_identity_service_state_and_its_findings():
     assert api["findings"] == ["finding:kv:api"]  # the finding folded onto its host by url
 
 
+def test_an_identified_host_with_no_cve_scan_is_marked_unchecked_not_silently_clean():
+    # a host identified but whose CVE lookup never completed must not read as no-known-vulns, so
+    # the record marks the status unobtained rather than omitting the section, invariant 5
+    world = World()
+    world.add(Node(id="domain:id.example.com", type="domain",
+                   payload=DomainData(name="id.example.com", root="example.com", source="passive")))
+    world.absorb([Fact(kind="resolved", about="domain:id.example.com",
+                       payload=Resolved(resolvable=True, addresses=("93.184.216.34",)))])
+    world.absorb([Fact(kind="http", about="domain:id.example.com",
+                       payload=HTTP(alive=True, status=200, url="https://id.example.com/"))])
+    world.absorb([Fact(kind="host_profile", about="domain:id.example.com",
+                       payload=HostProfile(product="Grafana", version="8.3.0"))])
+    # no cve_scan fact: the lookup failed or the run was suspended before it ran
+    record = {r["subdomain"]: r for r in host_records(world, ())}["id.example.com"]
+    assert record["cves"] == {"checked": False}
+
+
 def test_a_dead_passive_only_subdomain_is_not_listed():
     # nothing to analyze on a name that does not resolve and answered nothing, so it is not a host
     names = {r["subdomain"] for r in host_records(_world(), ())}

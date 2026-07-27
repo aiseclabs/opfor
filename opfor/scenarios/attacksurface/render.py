@@ -146,6 +146,10 @@ class SurfaceRenderer:
                 # vulnerability set, invariant 5
                 line += (f"\n  {len(ranked) - _MAX_CVES} more CVE(s) not shown, ranked below "
                          f"the {_MAX_CVES} highest-scored")
+        elif scan is None and profile_data is not None:
+            # The host was identified but its CVE lookup never completed, so tell the model the
+            # status is unknown rather than let a missing line read as a clean negative, invariant 5.
+            line += "\n  cve lookup did not complete, this host's known-vulnerability status is unknown"
         return line
 
     def _endpoint_line(self, ep) -> str:

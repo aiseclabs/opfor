@@ -90,6 +90,11 @@ def host_records(world: World, findings) -> list[dict]:
                 "items": [{"id": cve.id, "cvss": cve.cvss, "severity": cve.severity}
                           for cve in ranked[:_MAX_CVES]],
             }
+        elif scan is None and profile is not None:
+            # The host was identified but its CVE lookup never completed, so mark the status
+            # unobtained rather than omit it, since an absent `cves` key otherwise reads as a clean
+            # no-known-vulnerabilities negative, invariant 5.
+            record["cves"] = {"checked": False}
         if interfaces:
             record["interfaces"] = interfaces
         if finding_ids:

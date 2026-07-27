@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import re
 
+from opfor.scenarios.onchain.assets.contract.chains import ChainPolicy, default_chain_policy
 from opfor.scenarios.onchain.assets.contract.sources import dex, rpc
 from opfor.scenarios.onchain.assets.contract.sources.observations import FundObservation
 
@@ -25,63 +26,22 @@ def is_evm_address(address: str) -> bool:
     """Whether a string is a well-formed 20-byte EVM address."""
     return bool(_EVM_ADDRESS.match(address or ""))
 
-# The value tokens per chain, the assets counted toward funds at risk. Each entry carries its own
-# decimals, since a stable is 6 decimals on Ethereum but 18 on BSC. `native` prices at the
-# native-coin price, `stable` at one dollar, `priced` at the token's own DEX price. The native coin
-# itself is 18 decimals on both chains. A broader set is a data change here, not a code change.
-_NATIVE_DECIMALS = 18
-_VALUE_TOKENS = {
-    "ethereum": (
-        ("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2", "WETH", "native", 18),
-        ("0xdAC17F958D2ee523a2206206994597C13D831ec7", "USDT", "stable", 6),
-        ("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48", "USDC", "stable", 6),
-        ("0x6B175474E89094C44Da98b954EedeAC495271d0F", "DAI", "stable", 18),
-        ("0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599", "WBTC", "priced", 8),
-    ),
-    "polygon": (
-        ("0x0d500B1d8E8eF31E21C99d1Db9A6444d3ADf1270", "WMATIC", "native", 18),
-        ("0xc2132D05D31c914a87C6611C10748AEb04B58e8F", "USDT", "stable", 6),
-        ("0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174", "USDC.e", "stable", 6),
-        ("0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359", "USDC", "stable", 6),
-        ("0x8f3Cf7ad23Cd3CaDbD9735AFf958023239c6A063", "DAI", "stable", 18),
-        ("0x7ceB23fD6bC0adD59E62ac25578270cFf1b9f619", "WETH", "priced", 18),
-        ("0x1BFD67037B42Cf73acF2047067bd4F2C47D9BfD6", "WBTC", "priced", 8),
-    ),
-    "arbitrum": (
-        ("0x82aF49447D8a07e3bd95BD0d56f35241523fBab1", "WETH", "native", 18),
-        ("0xaf88d065e77c8cC2239327C5EDb3A432268e5831", "USDC", "stable", 6),
-        ("0xFF970A61A04b1cA14834A43f5dE4533eBDDB5CC8", "USDC.e", "stable", 6),
-        ("0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9", "USDT", "stable", 6),
-        ("0xDA10009cBd5D07dd0CeCc66161FC93D7c9000da1", "DAI", "stable", 18),
-        ("0x2f2a2543B76A4166549F7aaB2e75Bef0aefC5B0f", "WBTC", "priced", 8),
-        ("0x912CE59144191C1204E64559FE8253a0e49E6548", "ARB", "priced", 18),
-    ),
-}
-
-
-# The null and burn sinks. They are not contracts, they are where tokens go to be destroyed, so
-# every chain's burned supply piles up at them and a naive balance read prices that pile as funds.
-# They are never an audit target, so they are skipped at the sweep and dropped by triage.
-NULL_ADDRESSES = frozenset({
-    "0x0000000000000000000000000000000000000000",
-    "0x000000000000000000000000000000000000dead",
-})
-
-
-def value_token_addresses(chain: str) -> frozenset[str]:
+def value_token_addresses(chain: str, policy: ChainPolicy | None = None) -> frozenset[str]:
     """The value-token addresses for a chain, lowercased. The pivot uses this to skip pivoting a
     money token such as WETH or a stable, which is a quote token in half the pools on the chain and
-    would pull the whole DeFi ecosystem back as counterparties, not a project's fund contracts."""
-    return frozenset(address.lower() for address, _, _, _ in _VALUE_TOKENS.get(chain, ()))
+    would pull the whole DeFi ecosystem back as counterparties, not a project's fund contracts. The
+    policy carries the table, loaded from data, the packaged default when none is passed."""
+    return (policy or default_chain_policy()).value_token_addresses(chain)
 
 
-def value_tokens_for(contract, *, decimals_fn):
+def value_tokens_for(contract, *, decimals_fn, policy: ChainPolicy | None = None):
     """The value tokens to price for a contract, the chain's base set plus the project token the
     contract was pivoted from. This is the fix for the long tail, a new project's vault holds its
     own token, not a stable, so a table of stables alone reads its funds as zero. The project token
     is priced like any other priced token, its decimals read live since a project token is not in
     the static table."""
-    tokens = list(_VALUE_TOKENS.get(contract.chain, ()))
+    policy = policy or default_chain_policy()
+    tokens = list(policy.base_value_tokens(contract.chain))
     project = (contract.related_to or "").strip()
     known = {address.lower() for address, _, _, _ in tokens}
     if project and project.lower() not in known:
@@ -90,14 +50,15 @@ def value_tokens_for(contract, *, decimals_fn):
     return tuple(tokens)
 
 
-def compute_funds(contract, *, native_wei_fn, token_balance_fn, price_fn, value_tokens):
+def compute_funds(contract, *, native_wei_fn, token_balance_fn, price_fn, value_tokens,
+                  native_decimals: int = 18):
     """Sum the USD the contract holds across the native coin and the value tokens. Pure, the three
     reads are injected. The native price is the wrapped-native price, the first entry, read once.
     Each token is divided by its own decimals, since a stable is 6 decimals on Ethereum."""
     total = 0.0
     assets: list[str] = []
     native_price = price_fn(value_tokens[0][0], contract.chain) or 0.0
-    native = native_wei_fn(contract.address, contract.chain) / 10 ** _NATIVE_DECIMALS * native_price
+    native = native_wei_fn(contract.address, contract.chain) / 10 ** native_decimals * native_price
     if native > 0:
         total += native
         assets.append("native")
@@ -119,17 +80,19 @@ def compute_funds(contract, *, native_wei_fn, token_balance_fn, price_fn, value_
     return total, tuple(dict.fromkeys(assets))
 
 
-def read_funds(contract, hint_usd: float) -> FundObservation:
+def read_funds(contract, hint_usd: float, policy: ChainPolicy | None = None) -> FundObservation:
     """The funds the contract manages. A pool or token reuses the DEX liquidity hint. Any other
-    contract is priced across the value-token set, a conservative floor that names what it counted."""
+    contract is priced across the value-token set, a conservative floor that names what it counted.
+    The policy carries the value-token table, the packaged default when none is injected."""
+    policy = policy or default_chain_policy()
     if hint_usd and hint_usd > 0:
         return FundObservation(funds_at_risk_usd=hint_usd, assets=("dex_liquidity",),
                                note="reused DEX sweep liquidity")
-    if contract.chain not in _VALUE_TOKENS:
+    if not policy.has_chain(contract.chain):
         return FundObservation(note=f"no value-token table for chain {contract.chain!r}")
-    value_tokens = value_tokens_for(contract, decimals_fn=rpc.token_decimals)
+    value_tokens = value_tokens_for(contract, decimals_fn=rpc.token_decimals, policy=policy)
     total, assets = compute_funds(contract, native_wei_fn=rpc.native_wei,
                                   token_balance_fn=rpc.token_balance, price_fn=dex.token_price_usd,
-                                  value_tokens=value_tokens)
+                                  value_tokens=value_tokens, native_decimals=policy.native_decimals)
     note = "priced native, value-token, and project-token balances" if total > 0 else "no priced balance held"
     return FundObservation(funds_at_risk_usd=total, assets=assets, note=note)

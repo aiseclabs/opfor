@@ -18,6 +18,7 @@ import urllib.error
 import urllib.request
 from datetime import datetime, timezone
 
+from opfor.scenarios.onchain.assets.contract.chains import default_chain_policy
 from opfor.scenarios.onchain.assets.contract.sources.observations import PoolObservation
 
 _BASE = "https://api.geckoterminal.com/api/v2"
@@ -52,8 +53,12 @@ def _throttle(interval: float) -> None:
         if wait > 0:
             time.sleep(wait)
         _next_call[0] = time.monotonic() + interval
-# The GeckoTerminal network id per chain, distinct from the DexScreener and Etherscan chain names.
-_NETWORK = {"ethereum": "eth", "polygon": "polygon_pos", "arbitrum": "arbitrum"}
+# The GeckoTerminal network id per chain lives in the chain policy, `knowledge/chains.yaml`,
+# distinct from the DexScreener and Etherscan chain names. A new chain is one data edit there.
+
+
+def _network(chain: str) -> str | None:
+    return default_chain_policy().gecko_network(chain)
 # How many recent pools to read across pages, and the cap on what a sweep hands to ENRICH so a
 # broad discovery does not fan out past the budget. Both default small, precision over breadth, and
 # both are env-tunable so an operator can widen the sweep to accumulate more of the long tail when
@@ -127,7 +132,7 @@ def _parse(item: dict, chain: str) -> PoolObservation | None:
     return PoolObservation(
         address=address, chain=chain,
         dex_id=(((relationships.get("dex") or {}).get("data") or {}).get("id") or ""),
-        url=f"https://www.geckoterminal.com/{_NETWORK.get(chain, chain)}/pools/{address}",
+        url=f"https://www.geckoterminal.com/{_network(chain) or chain}/pools/{address}",
         base_address=_relationship_address(relationships, "base_token"),
         base_symbol=base_symbol,
         quote_address=_relationship_address(relationships, "quote_token"),
@@ -158,7 +163,7 @@ def discover(survey) -> tuple[PoolObservation, ...]:
     """Read the chain's trending and recently created pools and keep the young-but-real ones. The
     two feeds together cover the band, trending surfaces the projects with traction and new_pools
     the fresher ones, and `select` keeps only those the age band and liquidity floor admit."""
-    network = _NETWORK.get(survey.chain)
+    network = _network(survey.chain)
     if network is None:
         return ()
     raw: list = []

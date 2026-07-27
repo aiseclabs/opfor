@@ -19,20 +19,12 @@ import hashlib
 import json
 import re
 
-# The import-path markers of third-party libraries. A source file whose path carries one of these
-# is vendored, inlined by the compiler rather than written by the project, so it is not the
-# project's own code and does not distinguish one codebase from another.
-_VENDORED_MARKERS = (
-    "@openzeppelin", "openzeppelin", "@uniswap", "uniswap/", "v2-core", "v2-periphery",
-    "v3-core", "v3-periphery", "v4-core", "v4-periphery", "@chainlink", "chainlink",
-    "solmate", "solady", "@prb", "prb-math", "@ensdomains", "node_modules", "/lib/",
-    "erc4626", "layerzero", "@layerzerolabs",
-)
+from opfor.scenarios.onchain.assets.contract.chains import default_vendored_markers
 
 
-def _is_vendored(path: str) -> bool:
+def _is_vendored(path: str, markers: tuple[str, ...]) -> bool:
     low = path.lower()
-    return any(marker in low for marker in _VENDORED_MARKERS)
+    return any(marker in low for marker in markers)
 
 
 def parse_sources(source_text: str) -> dict[str, str]:
@@ -70,18 +62,21 @@ def _normalize(content: str) -> str:
     return re.sub(r"\s+", "", content)
 
 
-def fingerprint(source_text: str) -> tuple[tuple[str, ...], int, int]:
+def fingerprint(source_text: str,
+                markers: tuple[str, ...] | None = None) -> tuple[tuple[str, ...], int, int]:
     """The own-file content hashes, the own-file count, and the vendored-file count for a source.
 
     Returns `(own_hashes, own_files, vendored_files)`. A file whose normalized content is empty is
     dropped, so an interface-only or comment-only stub does not create a spurious shared hash. The
     hashes are sorted, so the tuple is a stable set the report can intersect to cluster codebases.
+    The vendored markers are data, injected, the packaged default when none is passed.
     """
+    markers = default_vendored_markers() if markers is None else markers
     files = parse_sources(source_text)
     own: set[str] = set()
     vendored = 0
     for path, content in files.items():
-        if _is_vendored(path):
+        if _is_vendored(path, markers):
             vendored += 1
             continue
         normalized = _normalize(content)

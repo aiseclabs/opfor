@@ -19,11 +19,8 @@ from opfor.scenarios.onchain.assets.contract.signals import (
     guarded_functions,
     scan_source,
 )
-from opfor.scenarios.onchain.assets.contract.sources.funds import (
-    NULL_ADDRESSES,
-    is_evm_address,
-    value_token_addresses,
-)
+from opfor.scenarios.onchain.assets.contract.chains import ChainPolicy
+from opfor.scenarios.onchain.assets.contract.sources.funds import is_evm_address
 from opfor.scenarios.onchain.assets.contract.types import (
     CodebaseFact,
     ContractData,
@@ -53,8 +50,9 @@ class SweepPools(Capability):
     phase = Phase.MAP
     osint = True
 
-    def __init__(self, sweep_fn) -> None:
+    def __init__(self, sweep_fn, policy: ChainPolicy) -> None:
         self._sweep = sweep_fn
+        self._policy = policy
 
     def run(self, task: Task, world: World) -> Outcome:
         survey = world.node(task.node).payload
@@ -66,8 +64,9 @@ class SweepPools(Capability):
         # This keeps the quote side of every pool out of ENRICH, where it would only be fetched and
         # then skipped, and leaves the project token as the thing to pivot. The null and burn sinks
         # are skipped for the same reason, a pool that lists one as a side would otherwise become a
-        # node whose burned-supply balance a naive funds read prices as millions.
-        skip = value_token_addresses(survey.chain) | NULL_ADDRESSES
+        # node whose burned-supply balance a naive funds read prices as millions. The policy carries
+        # both sets, injected, so this capability shapes the surface from data, not a hardcoded table.
+        skip = self._policy.value_token_addresses(survey.chain) | self._policy.null_addresses
         nodes: list[Node] = []
         for pool in pools:
             # A discovery source can hand back a 32-byte pool id rather than the pool's address, so a
@@ -253,10 +252,13 @@ class FingerprintSource(Capability):
     phase = Phase.ENRICH
     osint = True
 
+    def __init__(self, markers: tuple[str, ...]) -> None:
+        self._markers = markers
+
     def run(self, task: Task, world: World) -> Outcome:
         sourced = world.latest("sourced", task.node)
         source_text = sourced.payload.source_text if sourced is not None else ""
-        own_hashes, own_files, vendored_files = fingerprint(source_text)
+        own_hashes, own_files, vendored_files = fingerprint(source_text, self._markers)
         # A contract whose every file is a third-party library is a dependency copy, not a project's
         # own code, so it is marked vendored to be kept out of the audit targets.
         vendored = own_files == 0 and vendored_files > 0

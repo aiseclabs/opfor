@@ -16,6 +16,8 @@ import time
 import urllib.parse
 import urllib.request
 
+from opfor.scenarios.onchain.assets.contract.chains import default_chain_policy
+
 _API = "https://api.etherscan.io/v2/api"
 _TIMEOUT = 15.0
 # The free tier caps calls per second, and a throttled reply comes back as an HTTP 200 whose body
@@ -59,8 +61,8 @@ def _etherscan_wait(interval: float) -> None:
 # The V2 chain id per chain the scenario speaks. Ethereum is the primary chain, its free tier has
 # full module access, source, transfers, and the proxy RPC. A non-Ethereum chain such as bsc reads
 # verified source on the free tier but not the account and logs modules the deep pivot needs, so it
-# needs a paid plan. A new chain is one entry here, not a code change.
-_CHAIN_ID = {"ethereum": 1, "polygon": 137, "arbitrum": 42161}
+# needs a paid plan. The per-chain id lives in the chain policy, `knowledge/chains.yaml`, so a new
+# chain is one data edit there, not a code change here.
 
 
 def api_key() -> str | None:
@@ -70,7 +72,7 @@ def api_key() -> str | None:
 
 
 def chain_id(chain: str) -> int | None:
-    return _CHAIN_ID.get(chain)
+    return default_chain_policy().chain_id(chain)
 
 
 def configured(chain: str) -> bool:

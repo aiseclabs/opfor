@@ -11,20 +11,14 @@ that triage had already dropped.
 
 from __future__ import annotations
 
-from opfor.scenarios.onchain.assets.contract.sources.funds import (
-    NULL_ADDRESSES,
-    is_evm_address,
-    value_token_addresses,
-)
-
-# The DEX-layer roles, a raw pair or a plain token, not an audit target on their own. The pivot's
-# job is to reach the fund contract behind them, and that is what is judged.
-_DEX_LAYER_ROLES = ("pool", "token")
+from opfor.scenarios.onchain.assets.contract.chains import ChainPolicy, default_chain_policy
+from opfor.scenarios.onchain.assets.contract.sources.funds import is_evm_address
 
 
 def structural_exclusion(chain: str, address: str, role: str,
                          known_infrastructure: dict[str, frozenset[str]] | None,
-                         is_implementation: bool = False, is_vendored: bool = False) -> str | None:
+                         is_implementation: bool = False, is_vendored: bool = False,
+                         policy: ChainPolicy | None = None) -> str | None:
     """Why a contract is not an audit target on structural grounds, or None when it is a candidate.
 
     The reason is a short slug, so the report can record why a contract was excluded rather than
@@ -35,16 +29,17 @@ def structural_exclusion(chain: str, address: str, role: str,
     contract whose every source file is a third-party library is a dependency copy, not a project's
     own code, so it is excluded as vendored.
     """
+    policy = policy or default_chain_policy()
     if not is_evm_address(address):
         return "malformed-address"
     addr = address.lower()
     if is_vendored:
         return "vendored-library"
-    if role in _DEX_LAYER_ROLES and not is_implementation:
+    if policy.is_dex_layer(role) and not is_implementation:
         return "dex-layer"
-    if addr in NULL_ADDRESSES:
+    if policy.is_null(addr):
         return "null-address"
-    if addr in value_token_addresses(chain):
+    if addr in policy.value_token_addresses(chain):
         return "value-token"
     if addr in (known_infrastructure or {}).get(chain, frozenset()):
         return "known-infrastructure"

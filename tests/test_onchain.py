@@ -739,8 +739,9 @@ def test_sweep_skips_the_null_and_burn_sinks():
     world = World()
     world.add(Node(id="survey:ethereum", type="survey",
                    payload=Survey(name="t", chain="ethereum")))
-    outcome = SweepPools(lambda s: (pool,)).run(Task(capability="sweep_pools", node="survey:ethereum"),
-                                                world)
+    from opfor.scenarios.onchain.assets.contract.chains import default_chain_policy
+    outcome = SweepPools(lambda s: (pool,), default_chain_policy()).run(
+        Task(capability="sweep_pools", node="survey:ethereum"), world)
     yielded = {n.payload.address.lower() for f in outcome.facts for n in f.yields}
     assert _TOKEN.lower() in yielded  # the real project token is kept
     assert zero not in yielded  # the null sink is skipped, never a node
@@ -761,8 +762,9 @@ def test_sweep_skips_a_malformed_pool_address_but_keeps_its_valid_token():
     world = World()
     world.add(Node(id="survey:ethereum", type="survey",
                    payload=Survey(name="t", chain="ethereum")))
-    outcome = SweepPools(lambda s: (pool,)).run(Task(capability="sweep_pools", node="survey:ethereum"),
-                                                world)
+    from opfor.scenarios.onchain.assets.contract.chains import default_chain_policy
+    outcome = SweepPools(lambda s: (pool,), default_chain_policy()).run(
+        Task(capability="sweep_pools", node="survey:ethereum"), world)
     yielded = {n.payload.address.lower() for f in outcome.facts for n in f.yields}
     assert bad_pool_id.lower() not in yielded  # the 32-byte id is not a node
     assert "0xnothex" not in yielded  # a non-hex token side is dropped too
@@ -956,16 +958,17 @@ def test_discovery_age_band_is_env_tunable(monkeypatch):
 
 def test_polygon_and_arbitrum_are_wired_across_the_three_config_points():
     # the free Etherscan V2 key covers ethereum, polygon, and arbitrum, so all three must resolve a
-    # chainid, a GeckoTerminal network, and a value-token set, or a chain is only half-supported
+    # chainid, a GeckoTerminal network, and a value-token set, or a chain is only half-supported.
+    # All three now come from one data file, the chain policy, so this guards a single data edit.
     from opfor.scenarios.onchain.assets.contract.sources import etherscan, geckoterminal
     from opfor.scenarios.onchain.assets.contract.sources.funds import value_token_addresses
 
     for chain in ("ethereum", "polygon", "arbitrum"):
         assert etherscan.chain_id(chain) is not None, chain  # explorer knows the chainid
-        assert geckoterminal._NETWORK.get(chain), chain      # discovery knows the network slug
+        assert geckoterminal._network(chain), chain          # discovery knows the network slug
         assert value_token_addresses(chain), chain           # funds knows the value tokens
     # the native/wrapped token decimals are sane, so a native balance is not mispriced
-    assert geckoterminal._NETWORK["polygon"] == "polygon_pos"  # GeckoTerminal's slug, not "polygon"
+    assert geckoterminal._network("polygon") == "polygon_pos"  # GeckoTerminal's slug, not "polygon"
 
 
 def test_rpc_uses_the_explorer_proxy_by_default_and_a_public_node_only_when_configured(monkeypatch):

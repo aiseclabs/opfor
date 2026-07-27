@@ -16,6 +16,7 @@ from __future__ import annotations
 
 from collections import Counter
 
+from opfor.scenarios.onchain.assets.contract.chains import ChainPolicy, default_chain_policy
 from opfor.scenarios.onchain.assets.contract.sources import dex, etherscan, funds, rpc
 from opfor.scenarios.onchain.assets.contract.sources.observations import RelatedObservation
 
@@ -24,21 +25,22 @@ from opfor.scenarios.onchain.assets.contract.sources.observations import Related
 _TRANSFER_SCAN = 200
 _COUNTERPARTY_CHECK = 12
 _MAX_DEEP = 5
-# Burn and mint sinks that are never audit targets, dropped before ranking, shared with the sweep.
-_DEAD = funds.NULL_ADDRESSES
 
 
-def counterparty_pivot(contract, *, fetch_transfers, is_contract, max_deep=_MAX_DEEP):
+def counterparty_pivot(contract, *, fetch_transfers, is_contract, max_deep=_MAX_DEEP,
+                       policy: ChainPolicy | None = None):
     """The pure deep-pivot logic. Rank the token's transfer counterparties by frequency, keep the
     contracts, and emit them as related. `fetch_transfers(address, chain)` returns transfer records
     with `from` and `to`, `is_contract(address, chain)` decides code presence. Both are injected,
-    so this is tested with no network."""
+    so this is tested with no network. The policy carries the burn and mint sinks dropped before
+    ranking, shared with the sweep, the packaged default when none is passed."""
+    policy = policy or default_chain_policy()
     token = contract.address.lower()
     counts: Counter[str] = Counter()
     for transfer in fetch_transfers(contract.address, contract.chain):
         for side in ("from", "to"):
             addr = (transfer.get(side) or "").lower()
-            if addr and addr != token and addr not in _DEAD:
+            if addr and addr != token and not policy.is_null(addr):
                 counts[addr] += 1
     related: list[RelatedObservation] = []
     for addr, _ in counts.most_common(_COUNTERPARTY_CHECK):
@@ -67,20 +69,22 @@ def _etherscan_transfers(address: str, chain: str) -> list[dict]:
     return result if isinstance(result, list) else []
 
 
-def pivot(contract) -> tuple[RelatedObservation, ...]:
+def pivot(contract, policy: ChainPolicy | None = None) -> tuple[RelatedObservation, ...]:
     """The default pivot, shallow pools always plus deep fund contracts when a key is set. Only a
     token is pivoted, a pool is already the leaf a token pointed at. Deduped by address, the
-    shallow pools first so a contract seen both ways keeps its richer origin."""
+    shallow pools first so a contract seen both ways keeps its richer origin. The policy carries the
+    value-token set, the packaged default when none is passed."""
+    policy = policy or default_chain_policy()
     if contract.role != "token":
         return ()
     # A money token, WETH or a stable, is a quote token across the chain, so pivoting it would pull
     # the whole ecosystem back rather than one project's fund contracts. Skip it.
-    if contract.address.lower() in funds.value_token_addresses(contract.chain):
+    if contract.address.lower() in policy.value_token_addresses(contract.chain):
         return ()
     related: dict[str, RelatedObservation] = {}
     for obs in dex.pivot(contract):
         related[obs.address.lower()] = obs
     for obs in counterparty_pivot(contract, fetch_transfers=_etherscan_transfers,
-                                  is_contract=rpc.is_contract):
+                                  is_contract=rpc.is_contract, policy=policy):
         related.setdefault(obs.address.lower(), obs)
     return tuple(related.values())

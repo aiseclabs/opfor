@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from opfor.scenarios.onchain.assets.contract import planner
+from opfor.scenarios.onchain.assets.contract.chains import load_chain_policy, load_vendored_markers
 from opfor.scenarios.onchain.assets.contract.capabilities import (
     EnumInterfaces,
     FetchSource,
@@ -46,11 +47,15 @@ class ContractClassBundle:
 
 def assemble(*, sweep_fn, pivot_fn, source_fn, identify_fn, funds_fn, resolve_fn) -> ContractClassBundle:
     """The contract class's contribution. The seams are the public sources, injected so a test
-    drives the class with fixtures. The detection data is loaded once here at assemble time, not
-    at import, so the content root stays swappable and importing the class triggers no file IO."""
+    drives the class with fixtures. The detection data, the chain policy, and the vendored-library
+    markers are loaded once here at assemble time, not at import, so the content root stays swappable
+    and importing the class triggers no file IO. A capability that shapes the surface is handed its
+    reference data, it never reaches the knowledge tree itself, invariant 1."""
     detections = load_detections(DETECTIONS)
+    policy = load_chain_policy(KNOWLEDGE)
+    markers = load_vendored_markers(KNOWLEDGE)
     capabilities = (
-        SweepPools(sweep_fn),
+        SweepPools(sweep_fn, policy),
         PivotRelated(pivot_fn),
         FetchSource(source_fn),
         IdentifyContract(identify_fn),
@@ -58,7 +63,7 @@ def assemble(*, sweep_fn, pivot_fn, source_fn, identify_fn, funds_fn, resolve_fn
         ReadFunds(funds_fn),
         EnumInterfaces(detections),
         ScanSignals(detections),
-        FingerprintSource(),
+        FingerprintSource(markers),
     )
     return ContractClassBundle(
         name=planner.CLASS,

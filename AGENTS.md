@@ -78,8 +78,10 @@ sequenced along a fixed lifecycle spine so a run either closes or says why it di
 ### Scenarios
 
 - A scenario is a package under `opfor/scenarios/<name>/` that builds a `Scenario`. It
-  supplies capabilities, a planner, a triage, a declared terminal phase, and a content root
-  holding its `knowledge/` and data files.
+  supplies capabilities, a planner, a triage, a declared terminal phase, and one or more
+  asset classes under `assets/<class>/`. Each asset class owns its capabilities, planner
+  rules, and `knowledge/` tree, so a scenario's knowledge and data files live at
+  `assets/<class>/knowledge/`, not at the scenario package root.
 - `scenarios/registry.py` is the one place that lists scenarios. `mock` is the reference,
   the smallest run that closes the loop, and the kernel's own fixture.
 - `attacksurface` is the mission scenario. It maps the mission onto the spine. MAP discovers the
@@ -102,9 +104,10 @@ sequenced along a fixed lifecycle spine so a run either closes or says why it di
 
 ## Adding Things
 
-- Add a scenario: a new package under `opfor/scenarios/`, with its node and fact payload
-  types, capabilities, planner rules, triage, a declared terminal phase, a `knowledge/`
-  tree, and a registry entry. The kernel does not change.
+- Add a scenario: a new package under `opfor/scenarios/`, with an asset class under
+  `assets/<class>/` carrying its node and fact payload types, capabilities, planner rules,
+  and `knowledge/` tree, plus a triage, a declared terminal phase, and a registry entry. The
+  kernel does not change.
 - Add a technique to an existing scenario: extend a knowledge markdown or a data file, or
   add a thin capability. Do not move attack knowledge into engine or capability logic.
 - Add or update tests when behavior changes, especially for failure handling, scope, and

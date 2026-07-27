@@ -35,7 +35,9 @@ gates every action by authorized scope, survives async waits, and keeps an audit
 
 The kernel is generic and names no host, contract, or person. A scenario is a plugin
 under `opfor/scenarios/<name>/` that supplies capabilities, a planner, a triage, a
-declared terminal phase, and a `knowledge/` tree.
+declared terminal phase, and one or more asset classes under `assets/<class>/`. Each
+asset class owns its capabilities, planner rules, and a `knowledge/` tree, so the
+knowledge root is `assets/<class>/knowledge/`, not the scenario package root.
 
 ## Install
 

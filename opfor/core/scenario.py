@@ -2,7 +2,8 @@
 
 A scenario supplies the capabilities that act, the planner that proposes tasks per
 phase, the triage that judges, the terminal phase that declares how far the run
-goes, and a content root where its knowledge markdown and data files live. The
+goes, and a content root anchoring the package. Its knowledge lives in asset-class
+subtrees, read through the bundle each asset class assembles, not off the root. The
 engine imports no scenario, the runner resolves one and hands the engine its parts.
 Adding a scenario is a new package under `opfor/scenarios/`, never an engine change,
 which is how one engine drives web, network, chain, and phishing alike.
@@ -26,6 +27,9 @@ from opfor.core.triage import Triage
 @dataclass(frozen=True, kw_only=True)
 class Scenario:
     name: str
+    # The scenario package root, a stable anchor for the run. Knowledge does not live at
+    # `content_root / "knowledge"`, a scenario reads it from each asset class bundle's own
+    # `knowledge_dir`, so this root names the package, not the knowledge tree.
     content_root: Path
     capabilities: tuple[Capability, ...]
     planner: Planner
@@ -52,10 +56,6 @@ class Scenario:
     # scenario with a richer rule, a host suffix say, passes its own factory, and the kernel
     # stays free of naming a host.
     scope_matcher: Callable[[Mapping], ScopeMatcher] = ExactScope.from_dict
-
-    @property
-    def knowledge_dir(self) -> Path:
-        return self.content_root / "knowledge"
 
     def capability(self, name: str) -> Capability:
         """Resolve a capability by name, fail loud when a task names an unknown one."""

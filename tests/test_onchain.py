@@ -146,6 +146,9 @@ def test_triage_mints_one_audit_candidate_on_the_fund_contract():
     assert {"share_accounting", "dex_spot_price_dependency"} <= set(data["risk_flags"])
     # centralization is recorded but is not what raised the finding
     assert "owner_can_pause" in data["centralization_flags"]
+    # the provenance breadcrumb names the world facts the verdict was judged from, so a reader can
+    # trace it to the observations rather than the model's word alone
+    assert {"identified", "funded"} <= set(data["sources"])
 
 
 def test_a_bare_pool_is_not_an_audit_target_but_stays_in_the_inventory():

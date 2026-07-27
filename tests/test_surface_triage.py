@@ -167,6 +167,21 @@ def test_knowledge_and_class_ids_ride_the_system_prompt():
     assert "Exposed Non-Production Or Admin Interface" in system
 
 
+def test_a_model_finding_carries_its_provenance_breadcrumb():
+    import json
+
+    # the model mints a finding on the admin host, which the pipeline resolved and probed, so the
+    # finding must carry a `sources` breadcrumb naming the world facts it was judged from
+    mint = json.dumps({"findings": [
+        {"category": "exposed-admin-interface", "title": "Exposed admin", "severity": "HIGH",
+         "where": "https://admin.example.com/admin", "evidence": "an admin panel answered"}]})
+    report, _, _ = _run_capturing(provider=MockProvider(default=mint))
+    found = [f for f in report.findings if f.where == "https://admin.example.com/admin"]
+    assert found, "the model finding on the admin host was not minted"
+    sources = found[0].data["sources"]
+    assert "resolved" in sources and "http" in sources
+
+
 def test_chunk_failure_is_a_degraded_finding_not_a_crash():
     class Broken:
         def complete(self, **kwargs):

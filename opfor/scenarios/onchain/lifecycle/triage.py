@@ -160,7 +160,7 @@ class AuditTriage(Triage):
                     where=f"(chunk {i})",
                     evidence=f"the model call failed, {type(exc).__name__}: {exc}, so the "
                              "contracts in this chunk were not judged, rerun to cover them",
-                    data={"kind": "degraded", "error": type(exc).__name__},
+                    data={"kind": "degraded", "error": type(exc).__name__, "sources": []},
                 ))
         return self._dedup(findings)
 
@@ -190,6 +190,12 @@ class AuditTriage(Triage):
         return {"role": role, "funds": funds, "open_paths": open_paths, "guarded": guarded,
                 "risk_flags": risk_flags, "central": central, "verified": verified,
                 "vendored": vendored}
+
+    @staticmethod
+    def _sources(world: World, node) -> list[str]:
+        """The world fact kinds that back a finding, a provenance breadcrumb so a reader can trace
+        the verdict to the observations it was judged from, not the model's word alone."""
+        return sorted({fact.kind for fact in world.facts(about=node.id)})
 
     def _is_target(self, node, facts: dict) -> bool:
         """Whether a contract belongs in the surface the model judges. The structural exclusions, a
@@ -363,6 +369,7 @@ class AuditTriage(Triage):
                 "open_fund_paths": list(facts["open_paths"]),
                 "risk_flags": list(facts["risk_flags"]),
                 "centralization_flags": list(facts["central"]),
+                "sources": self._sources(world, node),
             },
         )
 

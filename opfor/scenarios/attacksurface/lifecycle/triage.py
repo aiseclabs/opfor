@@ -196,8 +196,14 @@ class SurfaceTriage(Triage):
         self._class_ids = frozenset(c["id"] for c in self._classes)
         self._class_impact = {c["id"]: c["impact"] for c in self._classes}
         self._renderer = SurfaceRenderer(self._clues, self._takeover, recipe_cves=recipe_cves)
+        # Host to the world fact kinds that back it, rebuilt at the start of each judge so a
+        # finding can carry its provenance breadcrumb. Empty until judge runs.
+        self._provenance: dict[str, list[str]] = {}
 
     def judge(self, world: World) -> list[Finding]:
+        # The provenance index, host to the world fact kinds that back it, so every finding
+        # carries a breadcrumb of the observations it was judged from, not the verdict alone.
+        self._provenance = _provenance_index(world)
         findings: list[Finding] = []
         # The completeness findings live in `completeness`, each a deterministic inventory or
         # inventory rule rather than a semantic verdict, so the judge here stays about the
@@ -235,7 +241,7 @@ class SurfaceTriage(Triage):
                     where=f"(chunk {index})",
                     evidence=f"the model call failed, {type(exc).__name__}: {exc}, so the "
                              "assets in this chunk were not judged, rerun to cover them",
-                    data={"kind": "degraded", "error": type(exc).__name__},
+                    data={"kind": "degraded", "error": type(exc).__name__, "sources": []},
                 ))
         return out
 
@@ -286,7 +292,8 @@ class SurfaceTriage(Triage):
                          "a non-object entry, one with no location, or one whose location is not "
                          "in the report, so they were dropped and the surface may be "
                          "under-reported. Rerun or inspect the model output",
-                data={"kind": "triage_degraded", "dropped": dropped, "total": len(raw)}))
+                data={"kind": "triage_degraded", "dropped": dropped, "total": len(raw),
+                      "sources": []}))
         return found
 
     def _survives(self, finding: Finding, chunk: str) -> bool:
@@ -354,8 +361,15 @@ class SurfaceTriage(Triage):
         )
 
     def _map_finding(self, data: object, report_text: str) -> Finding | None:
-        return _finding_from_dict(data, known_ids=self._class_ids, impacts=self._class_impact,
-                                  report_text=report_text)
+        finding = _finding_from_dict(data, known_ids=self._class_ids, impacts=self._class_impact,
+                                     report_text=report_text)
+        if finding is None:
+            return None
+        # Attach the provenance breadcrumb, the world fact kinds behind the host this finding sits
+        # on, so the verdict is traceable to observed evidence and not the model's word alone.
+        host = urlparse(finding.where).hostname or finding.where.split("/", 1)[0].split(":", 1)[0]
+        sources = self._provenance.get(host, [])
+        return replace(finding, data={**finding.data, "sources": sources})
 
     @staticmethod
     def _dedup(findings: list[Finding]) -> list[Finding]:
@@ -432,6 +446,26 @@ def _merge_findings(a: Finding, b: Finding) -> Finding:
     if extra and extra not in evidence:
         evidence = f"{evidence}\n{extra}".strip()
     return replace(strong, evidence=evidence, poc=strong.poc or weak.poc)
+
+
+def _provenance_index(world: World) -> dict[str, list[str]]:
+    """A host to the sorted world fact kinds that back it, the observations a finding on that host
+    was judged from. Keyed by hostname, so a finding whose location is a bare host or a full url
+    resolves the same way. Read only from the world the run mutated, so it is a faithful breadcrumb
+    of the evidence, invariant 5, and never a claim the run did not observe."""
+    index: dict[str, set[str]] = {}
+    for node in world.nodes("domain"):
+        host = node.payload.name
+        kinds = index.setdefault(host, set())
+        for fact in world.facts(about=node.id):
+            kinds.add(fact.kind)
+    for node in world.nodes("endpoint"):
+        host = urlparse(node.payload.url).hostname or node.payload.url
+        kinds = index.setdefault(host, set())
+        kinds.add("endpoint")
+        for fact in world.facts(about=node.id):
+            kinds.add(fact.kind)
+    return {host: sorted(kinds) for host, kinds in index.items()}
 
 
 def _finding_from_dict(data: object, *, known_ids: frozenset[str] = frozenset(),

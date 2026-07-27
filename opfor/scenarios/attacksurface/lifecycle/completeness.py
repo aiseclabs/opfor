@@ -35,7 +35,7 @@ def wildcards(world: World) -> list[Finding]:
                  "it, so certificate transparency never names the individual hosts and "
                  "passive discovery cannot see them. Enumerate these bases from DNS or an "
                  "internal source to close the gap",
-        data={"kind": "blindspot", "bases": bases},
+        data={"kind": "blindspot", "bases": bases, "sources": ["wildcard"]},
     )]
 
 
@@ -58,7 +58,7 @@ def truncated(world: World) -> list[Finding]:
         evidence="a passive source returned more subdomains than the page cap fetched, so "
                  "the enumeration under these roots is incomplete. Raise the cap or "
                  "enumerate from DNS or an internal source to close the gap",
-        data={"kind": "blindspot", "roots": found},
+        data={"kind": "blindspot", "roots": found, "sources": ["enumeration_truncated"]},
     )]
 
 
@@ -81,7 +81,7 @@ def coverage_gaps(world: World) -> list[Finding]:
                      f"partial rather than complete. Sample: {sample}. Rerun to cover the "
                      "skipped items",
             data={"kind": "coverage_gap", "scan": gap.scan, "failed": gap.failed,
-                  "attempted": gap.attempted},
+                  "attempted": gap.attempted, "sources": ["coverage_gap"]},
         ))
     return out
 
@@ -108,7 +108,8 @@ def resolution_caveat(world: World) -> Finding | None:
         evidence="almost nothing resolved, so probing and dangling checks were suppressed "
                  "to avoid false positives, rerun from a host with a working resolver to "
                  "assess reachability",
-        data={"kind": "incomplete", "unresolved": unresolved, "domains": len(domains)},
+        data={"kind": "incomplete", "unresolved": unresolved, "domains": len(domains),
+              "sources": ["resolved"]},
     )
 
 

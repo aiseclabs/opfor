@@ -57,7 +57,7 @@ def test_a_host_record_carries_identity_service_state_and_its_findings():
     api = by_name["api.example.com"]
     assert api["live"] and api["resolvable"]
     assert api["identity"] == {"product": "Grafana", "version": "8.3.0", "frameworks": ["angular"]}
-    assert api["cve_match"] == "version" and api["cves"][0]["id"] == "CVE-2021-43798"
+    assert api["cves"]["match"] == "version" and api["cves"]["items"][0]["id"] == "CVE-2021-43798"
     assert api["interfaces"][0]["path"] == "/openapi.json"
     assert api["findings"] == ["finding:kv:api"]  # the finding folded onto its host by url
 

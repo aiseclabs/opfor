@@ -82,10 +82,14 @@ def host_records(world: World, findings) -> list[dict]:
         if scan is not None and scan.payload.cves:
             ranked = sorted(scan.payload.cves,
                             key=lambda cve: cve.cvss if cve.cvss is not None else -1.0, reverse=True)
-            record["cve_match"] = scan.payload.match
-            record["cves_total"] = len(ranked)
-            record["cves"] = [{"id": cve.id, "cvss": cve.cvss, "severity": cve.severity}
-                              for cve in ranked[:_MAX_CVES]]
+            # The match kind, the full total, and the ranked slice ride together under one `cves`
+            # object, so the three read as one fact and a slice never reads as the whole set.
+            record["cves"] = {
+                "match": scan.payload.match,
+                "total": len(ranked),
+                "items": [{"id": cve.id, "cvss": cve.cvss, "severity": cve.severity}
+                          for cve in ranked[:_MAX_CVES]],
+            }
         if interfaces:
             record["interfaces"] = interfaces
         if finding_ids:

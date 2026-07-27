@@ -87,7 +87,7 @@ def test_a_dead_passive_only_subdomain_is_not_listed():
 
 
 def test_the_cli_report_merges_the_hosts_section_between_summary_and_findings():
-    from opfor.cli import _report_json
+    from opfor.report import _report_json
 
     report = Report(scenario="attacksurface", status=CLOSED, reached=Phase.CONFIRM,
                     terminal=Phase.CONFIRM,
@@ -101,7 +101,7 @@ def test_the_cli_report_merges_the_hosts_section_between_summary_and_findings():
 
 
 def test_a_scenario_without_an_adapter_reports_findings_only():
-    from opfor.cli import _report_json
+    from opfor.report import _report_json
 
     report = Report(scenario="mock", status=CLOSED, reached=Phase.TRIAGE, terminal=Phase.TRIAGE)
     out = _report_json(report, _world())

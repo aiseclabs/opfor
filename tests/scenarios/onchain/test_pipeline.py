@@ -67,7 +67,7 @@ def test_a_dead_token_with_no_funds_or_signals_is_not_listed():
 
 
 def test_the_cli_report_merges_the_contracts_section():
-    from opfor.cli import _report_json
+    from opfor.report import _report_json
 
     report, world = _run()
     out = _report_json(report, world)

@@ -11,8 +11,8 @@ import json
 
 import pytest
 
-from opfor.cli import (
-    _default_output, _persist, _report_json, _slug_target, main)
+from opfor.cli import main
+from opfor.report import _report_json, _slug_target, default_output, persist
 from opfor.scenarios.attacksurface import prepare_run
 
 
@@ -127,7 +127,7 @@ def test_report_json_carries_the_closure_contract_and_a_summary():
 
 
 def test_persist_writes_findings_json_and_report_md(tmp_path):
-    outdir = _persist(_report_with_findings(), None, "1example.com", str(tmp_path / "run"))
+    outdir = persist(_report_with_findings(), None, "example.com", str(tmp_path / "run"))
     assert outdir is not None
     loaded = json.loads((outdir / "findings.json").read_text(encoding="utf-8"))
     assert loaded["status"] == "closed" and len(loaded["findings"]) == 2
@@ -142,8 +142,8 @@ def test_persist_writes_findings_json_and_report_md(tmp_path):
 
 def test_default_output_is_user_private_under_xdg_state(monkeypatch, tmp_path):
     monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path))
-    out = _default_output("1example.com")
-    assert out == tmp_path / "opfor" / "runs" / "1example.com"
+    out = default_output("example.com")
+    assert out == tmp_path / "opfor" / "runs" / "example.com"
 
 
 def test_slug_target_makes_a_filesystem_safe_name():

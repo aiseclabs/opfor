@@ -1,7 +1,5 @@
 """The universal offensive-security engine: one generic engine, knowledge held as data."""
 
-from __future__ import annotations
-
 from importlib.metadata import PackageNotFoundError, version
 
 # The single source of truth is the packaging version. Read it from the installed

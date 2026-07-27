@@ -10,9 +10,8 @@ module, this module imports them.
 Operator note on TLS: the recon probe does not verify the target certificate on purpose, a
 self-signed or mismatched certificate is itself a signal and refusing it would blind the
 scan. The trade-off is that content read over that unverified channel could be spoofed by a
-man in the middle and become a finding. The read-only reproduce replay verifies the
-certificate, so a spoofed finding on an https target fails to reproduce, which bounds how
-far a man-in-the-middle fabrication can travel.
+man in the middle and become a finding, so a finding grounded on an https read is a recon
+observation, not a verified fact.
 """
 
 from __future__ import annotations
@@ -23,9 +22,6 @@ import re
 import socket
 import ssl
 import time
-import urllib.error
-import urllib.parse
-import urllib.request
 
 from opfor.scenarios.attacksurface.assets.domain.sources.dns import (
     _TIMEOUT,
@@ -117,121 +113,6 @@ def _no_url_answer(name: str, path: str, reason: str) -> Response:
     """A null-status `fetch_url` result carrying why no address answered, so the shape is the
     same as a real answer and the caller reads the reason rather than guessing at a bare null."""
     return Response(status=None, url=f"https://{name}{path}", reason=reason)
-
-
-# The read-only reproduce replay must never follow a redirect. Following one would chase a
-# server-controlled Location, which can be an off-scope host or a GET that triggers an
-# action, breaking the read-only and in-scope guarantees. A larger body cap than the bucket
-# probe, so the receipt size reflects a real exposed document rather than a 4096-byte floor.
-_REPRODUCE_BODY = 262_144
-
-
-class _NoRedirect(urllib.request.HTTPRedirectHandler):
-    """A redirect handler that never redirects, so a 3xx is returned raw rather than chased."""
-
-    def redirect_request(self, req, fp, code, msg, headers, newurl):
-        return None
-
-
-_NO_REDIRECT_OPENER = urllib.request.build_opener(_NoRedirect)
-
-
-def fetch_readonly(url: str) -> Response:
-    """A single GET for the read-only reproduce replay, connected to a vetted public address.
-
-    The host is resolved and filtered to its public addresses, and the request is pinned to
-    that address, so a name repointed at a private or link-local target between observation
-    and replay cannot steer the replay at an internal host, the same private-IP guard every
-    other probe uses. The certificate is verified, so a man in the middle cannot feed the
-    replay fabricated content. A redirect is captured raw with its Location, never followed,
-    so an off-site or login redirect is recorded rather than chased. A host with no public
-    address, or one that does not answer, returns a null status carrying why, `no-public-address`
-    or `unreachable`. Only transport errors are caught, a certificate that fails verification
-    among them, so an unexpected error is raised loud rather than swallowed as a null status.
-    """
-    parts = urllib.parse.urlsplit(url)
-    host = parts.hostname or ""
-    scheme = parts.scheme or "https"
-    path = parts.path or "/"
-    if parts.query:
-        path = f"{path}?{parts.query}"
-    def empty(reason: str) -> Response:
-        return Response(status=None, url=url, reason=reason)
-    public = public_addresses(resolve_host(host).addresses)
-    if not public:
-        return empty("no-public-address")
-    for ip in public:
-        try:
-            status, _server, content_type, body, location, _headers = _connect(
-                host, ip, scheme, path, read_limit=_REPRODUCE_BODY, verify=True)
-        except (OSError, http.client.HTTPException):
-            continue
-        return Response(status=status, url=url, content_type=content_type,
-                        location=location, body=body, reason="")
-    return empty("unreachable")
-
-
-def fetch_exploit(url: str, method: str, body: str) -> Response:
-    """A single state-changing request for the exploit-tier replay, to a vetted public address.
-
-    The write counterpart of fetch_readonly, holding the same guards, resolve and pin to a public
-    address, verify the certificate, capture a redirect raw, so a repointed name or a man in the
-    middle cannot steer or forge the replay. It sends the recipe's method and body, a known CVE's
-    own published proof, so opfor drives a recorded exploit rather than an authored one. The body's
-    content type rides as `application/json` for now, a per-recipe content type is the increment the
-    first live write lane needs.
-    """
-    parts = urllib.parse.urlsplit(url)
-    host = parts.hostname or ""
-    scheme = parts.scheme or "https"
-    path = parts.path or "/"
-    if parts.query:
-        path = f"{path}?{parts.query}"
-    payload = body.encode("utf-8") if body else None
-    def empty(reason: str) -> Response:
-        return Response(status=None, url=url, reason=reason)
-    public = public_addresses(resolve_host(host).addresses)
-    if not public:
-        return empty("no-public-address")
-    for ip in public:
-        try:
-            status, _server, content_type, resp_body, location, _headers = _connect(
-                host, ip, scheme, path, read_limit=_REPRODUCE_BODY, verify=True,
-                method=method, payload=payload,
-                content_type="application/json" if payload else "")
-        except (OSError, http.client.HTTPException):
-            continue
-        return Response(status=status, url=url, content_type=content_type,
-                        location=location, body=resp_body, reason="")
-    return empty("unreachable")
-
-
-def chain_fetch(method: str, url: str, headers, body: str) -> dict:
-    """One step of a multi-step exploit chain, to a vetted public address. Same guards as the other
-    replay seams, resolve and pin to a public address and verify the certificate. It carries the
-    step's own Content-Type so a json body is accepted, and returns a plain dict the chain executor
-    reads, `status`, `body`, `content_type`, `location`, a null status when no address answered."""
-    parts = urllib.parse.urlsplit(url)
-    host = parts.hostname or ""
-    scheme = parts.scheme or "https"
-    path = parts.path or "/"
-    if parts.query:
-        path = f"{path}?{parts.query}"
-    content_type = next((v for k, v in (headers or ()) if k.lower() == "content-type"), "")
-    payload = body.encode("utf-8") if body else None
-    miss = {"status": None, "body": "", "content_type": "", "location": ""}
-    public = public_addresses(resolve_host(host).addresses)
-    if not public:
-        return miss
-    for ip in public:
-        try:
-            status, _server, ctype, resp_body, location, _headers = _connect(
-                host, ip, scheme, path, read_limit=_REPRODUCE_BODY, verify=True,
-                method=method, payload=payload, content_type=content_type)
-        except (OSError, http.client.HTTPException):
-            continue
-        return {"status": status, "body": resp_body, "content_type": ctype, "location": location}
-    return miss
 
 
 # --- self-declared interfaces: an app maps its own API --------------------
@@ -395,21 +276,18 @@ def _read_capped(resp, read_limit: int) -> bytes:
 
 def _connect(name: str, ip: str, scheme: str, path: str, *, read_limit: int = _BODY_HEAD,
              method: str = "GET", payload: bytes | None = None,
-             content_type: str = "", verify: bool = False) -> tuple:
+             content_type: str = "") -> tuple:
     """One request to ip, with SNI and Host set to name, returning status and shape.
 
-    Certificate validation is off by default on purpose, a recon probe records what a server
-    serves, a self-signed or mismatched certificate is itself signal, not a reason to skip.
-    A caller that acts on the content, such as the read-only reproduce replay, passes
-    `verify=True` so a man in the middle cannot feed it fabricated content over a trusted
-    channel. The read limit is a full document when a caller needs to parse a body such as a
-    spec, and a payload turns the request into a POST for a GraphQL introspection.
+    Certificate validation is off on purpose, a recon probe records what a server serves, a
+    self-signed or mismatched certificate is itself signal, not a reason to skip. The read
+    limit is a full document when a caller needs to parse a body such as a spec, and a payload
+    turns the request into a POST for a GraphQL introspection.
     """
     if scheme == "https":
         context = ssl.create_default_context()
-        if not verify:
-            context.check_hostname = False
-            context.verify_mode = ssl.CERT_NONE
+        context.check_hostname = False
+        context.verify_mode = ssl.CERT_NONE
         raw = socket.create_connection((ip, 443), timeout=_TIMEOUT)
         # Close the raw socket if the TLS handshake fails, else a host that keeps 443 open but
         # is not TLS leaks a file descriptor on every probe and a scan exhausts the fd limit.

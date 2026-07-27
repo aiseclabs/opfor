@@ -17,10 +17,7 @@ from __future__ import annotations
 
 from opfor.scenarios.attacksurface.assets.domain.sources.dns import resolve_host
 from opfor.scenarios.attacksurface.assets.domain.sources.http import (
-    chain_fetch,
     fetch_document,
-    fetch_exploit,
-    fetch_readonly,
     fetch_url,
     graphql_introspect,
     http_probe,
@@ -75,10 +72,7 @@ __all__ = [
     "Response",
     "certspotter_subdomains",
     "cves_from_nvd",
-    "chain_fetch",
     "fetch_document",
-    "fetch_exploit",
-    "fetch_readonly",
     "fetch_url",
     "graphql_introspect",
     "hosts_from_file",

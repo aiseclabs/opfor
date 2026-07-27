@@ -64,8 +64,7 @@ def _run(args) -> int:
         name, world, scope, scenario = adapter(
             name=args.name, roots=tuple(args.root or []), roots_file=args.roots or "",
             hosts=tuple(args.host or []), hosts_file=args.hosts or "", tier=args.tier,
-            authorized=args.authorize, reproduce=getattr(args, "reproduce", False),
-            confirm=getattr(args, "confirm", False))
+            authorized=args.authorize)
     except (KeyError, ValueError) as exc:
         raise SystemExit(str(exc))
 
@@ -110,7 +109,6 @@ def _print_report(report, world=None) -> None:
           f"terminal: {report.terminal.name}")
     for note in report.notes:
         print(f"note: {note}")
-    reproductions = _reproductions(world)
     print(f"findings: {len(report.findings)}")
     for finding in sorted(report.findings, key=_severity_order):
         print(f"  [{finding.severity}] {finding.title} -> {finding.where}")
@@ -122,30 +120,6 @@ def _print_report(report, world=None) -> None:
         if request:
             print(f"      grounded poc: {request['method']} {request['url']} "
                   f"(expect {request['expect']}, source {request['source']})")
-        repro = reproductions.get(finding.id)
-        if repro is not None:
-            detail = f"HTTP {repro.status} {repro.content_type}".strip()
-            note = f" [{repro.error}]" if repro.error else ""
-            print(f"      reproduced: {repro.method} {repro.url} -> {detail}{note}")
-        status = finding.data.get("reproduction_status")
-        verdict = finding.data.get("reproduction_verdict")
-        attempts = finding.data.get("reproduction_attempts", 1)
-        if status == "suspected":
-            print(f"      suspected: version matched but not reproduced on this deployment "
-                  f"after {attempts} attempt(s) (severity {finding.severity})")
-        elif verdict:
-            reason = finding.data.get("reproduction_reason", "")
-            print(f"      confirmed: {verdict} (severity {finding.severity})"
-                  + (f" {reason}" if reason else ""))
-
-
-def _reproductions(world) -> dict:
-    """Reproduction receipts keyed by the finding id they are about, empty when the run did
-    not reproduce. Read from the world the engine mutated, since a receipt is a fact, not a
-    report field."""
-    if world is None:
-        return {}
-    return {fact.about: fact.payload for fact in world.facts("reproduction")}
 
 
 def _severity_order(finding) -> int:
@@ -155,21 +129,13 @@ def _severity_order(finding) -> int:
 def _report_json(report, world=None) -> dict:
     """The run as a structured object, the machine-readable twin of the printed report. It
     carries the closure contract, status, reached, and terminal, so a reader knows whether the
-    run finished, not only what it found. A reproduction receipt is folded into its finding, so
-    the record is complete whether or not the finding was regraded in confirm."""
-    reproductions = _reproductions(world)
+    run finished, not only what it found. Each finding carries its grounded PoC request in its
+    data, so the record is a complete, hand-runnable account of what was found."""
     summary = {sev: 0 for sev in _SEVERITY_ORDER}
     findings = []
     for finding in sorted(report.findings, key=_severity_order):
         summary[finding.severity] = summary.get(finding.severity, 0) + 1
-        record = finding.to_dict()
-        repro = reproductions.get(finding.id)
-        if repro is not None and "receipt" not in record["data"]:
-            record["data"]["reproduction"] = {
-                "method": repro.method, "url": repro.url, "status": repro.status,
-                "content_type": repro.content_type, "size": repro.size,
-                "error": repro.error, "excerpt": repro.excerpt}
-        findings.append(record)
+        findings.append(finding.to_dict())
     out = {
         "scenario": report.scenario,
         "status": report.status,
@@ -190,7 +156,6 @@ def _report_json(report, world=None) -> dict:
 
 def _report_md(report, world=None) -> str:
     """The printed report rendered as markdown, the durable human twin of the json."""
-    reproductions = _reproductions(world)
     lines = [f"# opfor {report.scenario} run", ""]
     lines.append(f"- status: {report.status}")
     lines.append(f"- reached: {report.reached.name}")
@@ -215,21 +180,6 @@ def _report_md(report, world=None) -> str:
         if request:
             lines.append(f"- grounded poc: {request['method']} {request['url']} "
                          f"(expect {request['expect']}, source {request['source']})")
-        repro = reproductions.get(finding.id)
-        if repro is not None:
-            detail = f"HTTP {repro.status} {repro.content_type}".strip()
-            note = f" [{repro.error}]" if repro.error else ""
-            lines.append(f"- reproduced: {repro.method} {repro.url} -> {detail}{note}")
-        status = finding.data.get("reproduction_status")
-        verdict = finding.data.get("reproduction_verdict")
-        attempts = finding.data.get("reproduction_attempts", 1)
-        if status == "suspected":
-            lines.append(f"- suspected: version matched but not reproduced on this deployment "
-                         f"after {attempts} attempt(s) (severity {finding.severity})")
-        elif verdict:
-            reason = finding.data.get("reproduction_reason", "")
-            lines.append(f"- confirmed: {verdict} (severity {finding.severity})"
-                         + (f" {reason}" if reason else ""))
     return "\n".join(lines) + "\n"
 
 
@@ -280,13 +230,6 @@ def main(argv: list[str] | None = None) -> int:
     run.add_argument("--authorize", action="store_true", help="record the intrusive-tier authorization")
     run.add_argument("--resume", action="store_true",
                      help="continue from a checkpoint in the output directory rather than starting fresh")
-    run.add_argument("--reproduce", action="store_true",
-                     help="raise the terminal to EXPLOIT and replay each grounded safe-read poc, "
-                          "read only, also needs --tier intrusive --authorize")
-    run.add_argument("--confirm", action="store_true",
-                     help="raise the terminal to CONFIRM and regrade each finding against its "
-                          "reproduction receipt, implies --reproduce, also needs "
-                          "--tier intrusive --authorize")
     run.add_argument("--budget", type=int, default=500, help="the task budget, default 500")
     run.add_argument("--output",
                      help="the run output directory for findings.json and report.md, defaults "

@@ -137,8 +137,8 @@ class SurfaceRenderer:
             for cve in ranked[:_MAX_CVES]:
                 line += f"\n  CVE {cve.id} CVSS {cve.cvss} {cve.severity}: {cve.summary}"
                 if cve.id.upper() in self._recipe_cves:
-                    line += ("\n    opfor carries a reproduction for this CVE, so it is demonstrable "
-                             "here and is reported as its own finding")
+                    line += ("\n    opfor carries a reproduction recipe for this CVE, so it can write "
+                             "an accurate PoC for it and reports it as its own finding")
                 if cve.references:
                     line += f"\n    refs: {', '.join(cve.references)}"
             if len(ranked) > _MAX_CVES:

@@ -11,8 +11,8 @@ Only a tractable subset is consumed, the http protocol with status, word, and re
 structured request block or a single raw request. A template that reaches beyond it, another
 protocol, a payload sweep, a multi-step raw chain, or a dsl matcher, is reported unsupported with the
 reason, never silently half-loaded, so coverage stays honest, invariant 5. A multi-step raw chain is
-driven by the separate `nuclei_chain` consumer. A `code` or `javascript` protocol is refused
-outright, since consuming it would run template-authored code on the scanner.
+not supported. A `code` or `javascript` protocol is refused outright, since consuming it would run
+template-authored code on the scanner.
 """
 
 from __future__ import annotations
@@ -104,13 +104,9 @@ class NucleiTemplate:
 
     @property
     def writes(self) -> bool:
-        """Whether any request is a state-changing method, so the template needs the exploit tier
-        rather than the read-only intrusive one, and is gated by the stronger authorization."""
+        """Whether any request is a state-changing method, so the grounder writes a PoC carrying
+        that method and body rather than a bare read. The PoC is written, never sent."""
         return any(r.method.upper() not in _READ_METHODS for r in self.requests)
-
-    @property
-    def tier(self) -> str:
-        return "exploit" if self.writes else "intrusive"
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -159,7 +155,7 @@ def parse_template(text: str) -> NucleiTemplate | UnsupportedTemplate:
         raw_list = block.get("raw")
         if raw_list:
             if len(raw_list) > 1:
-                return unsupported("a multi-step raw chain, driven by nuclei_chain not this consumer")
+                return unsupported("a multi-step raw chain, not supported")
             parsed = _raw_request(str(raw_list[0]))
             if isinstance(parsed, str):
                 return unsupported(parsed)

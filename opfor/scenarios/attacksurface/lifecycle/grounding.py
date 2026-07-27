@@ -1,36 +1,42 @@
-"""Post-triage grounding: attach a reproducible request to a finding and materialize it.
+"""Post-triage grounding: rewrite each finding's proof of concept to the deterministic truth.
 
-Triage judges the surface into findings and mutates nothing. This step runs once after
-TRIAGE and does the two deterministic things that are not judgment. It matches a finding's
-safe-read proof of concept against the GETs the surface actually recorded, and when one
-matches it carries the observed receipt into the finding's data and materializes the finding
-as a world node, so the read-only reproduce phase has a grounded request to replay.
+Triage judges the surface into findings and mutates nothing, and the model writes a proof of
+concept as a hint. This step runs once after TRIAGE and does the one deterministic thing that is
+not judgment. It derives an accurate, hand-runnable request for the finding, then overwrites the
+finding's proof of concept with it, so the reported PoC is never a command the model invented.
 
-Strict grounding, so a request no capability made is never marked reproducible. A model can
-phrase a proof of concept for a request that was never sent, so the url it names is matched
-against the recorded GETs, a host root probe, an endpoint probe, or a verified specification
-operation. A finding whose proof of concept needs an attack, a write or an exploit, is never
-grounded here, since replaying it would not be a safe read. The step mints no finding and
-drops none, so the surface a run reports is unchanged in count, and it never mutates a
-finding in place, a grounded finding is a new object with the observed receipt in its data.
+A finding grounds on one of two sources. When the only ground is a request the surface already
+observed, a safe read, the finding grounds on that recorded receipt, strict so a request no
+capability made is never presented as reproducible. When the asset is a known product at a version,
+a CVE the lookup tied to that version carries a recorded reproduction recipe, so the finding grounds
+on the recipe's request directly, the request that demonstrates that CVE.
+
+This run never sends the request to the target, so a grounded PoC is written and labelled
+unverified, an operator runs it by hand. A finding that grounds on neither source gets an honest
+note saying no reproducible request could be grounded, never a fabricated command, invariant 5. The
+step mints no finding and drops none, so the surface a run reports is unchanged in count, and it
+never mutates a finding in place, a grounded finding is a new object.
 """
 
 from __future__ import annotations
 
 import re
+import shlex
 from dataclasses import dataclass, replace
 from pathlib import Path
 from urllib.parse import parse_qsl, urlencode, urljoin, urlsplit
 
-from opfor.core import Finding, Node, World, iter_md_docs
+from opfor.core import Finding, World, iter_md_docs
 from opfor.core import Grounding
-from opfor.scenarios.attacksurface.lifecycle.reproduce import FindingClaim, PoCRequest
-from opfor.scenarios.attacksurface.assets.domain.nuclei_chain import chain_summary
 
 _URL_RE = re.compile(r"https?://[^\s;'\"`)>]+")
 # The CVE ids a finding names, so a recipe is grounded only on the finding that actually claims its
 # CVE, never stapled onto a more severe finding about a different CVE it cannot demonstrate.
 _CVE_RE = re.compile(r"CVE-\d{4}-\d{4,7}", re.IGNORECASE)
+
+# The label every grounded PoC carries, since this reconnaissance run writes the request but never
+# sends it to the target, so a reader never mistakes a written PoC for one opfor executed.
+_UNVERIFIED = "UNVERIFIED, not executed against the target by this reconnaissance run"
 
 
 def _cited_cves(finding) -> set[str]:
@@ -62,9 +68,9 @@ _VERSION_MATCH = "version"
 class ReproductionRecipe:
     """One CVE's recorded reproduction, the exact request that demonstrates it and the marker its
     response bears when the instance is affected. A read-only recipe is a GET, a state-changing one
-    carries a write method and a body and is replayed only at the exploit tier. It is data read from
-    a vendored template or a product's frontmatter, so adding one is a knowledge change and no attack
-    decision lives in code, invariant 1."""
+    carries a write method and a body. It is data read from a vendored template or a product's
+    frontmatter, so adding one is a knowledge change and no attack decision lives in code,
+    invariant 1."""
 
     cve: str
     method: str
@@ -113,24 +119,55 @@ def _norm_url(url: str) -> str:
     return f"{parts.scheme.lower()}://{host.lower()}{path}{query}"
 
 
-class FindingGrounder(Grounding):
-    """Ground each finding on a reproducible request, then materialize the grounded ones as world
-    nodes for the reproduce phase.
+def _curl(request: dict) -> str:
+    """A hand-runnable curl for a grounded request. A GET is a bare read, a state-changing method
+    carries its verb and body, so the written command reproduces exactly the request the finding
+    grounds on rather than a paraphrase. The url and body are shell-quoted, so a query or a payload
+    reaches curl intact rather than being split by the shell."""
+    method = (request.get("method") or "GET").upper()
+    parts = ["curl", "-s"]
+    if method != "GET":
+        parts += ["-X", method]
+    body = request.get("body") or ""
+    if body:
+        parts += ["--data", shlex.quote(body)]
+    parts.append(shlex.quote(request["url"]))
+    return " ".join(parts)
 
-    A finding grounds on one of two sources. When the asset is unknown the only ground is a request
-    the surface already observed, a safe read replayed later, strict so a request no capability made
-    is never reproducible. When the asset is a known product at a version, a CVE the lookup tied to
-    that version has a recorded read-only reproduction, so the finding grounds on the recipe's
-    request directly, the request that demonstrates that CVE, without having observed it first. The
-    recipe source fires only under the intrusive EXPLOIT phase, so the default recon run replays
-    only observed reads.
+
+def _grounded_poc(request: dict) -> str:
+    """The proof-of-concept string for a grounded finding, the labelled command and its expected
+    marker, so an operator sees both how to reproduce it and what confirms the instance is affected."""
+    return f"{_UNVERIFIED}. Reproduce by hand: {_curl(request)} . Expected: {request['expect']}"
+
+
+def _ungrounded_poc(finding: Finding) -> str:
+    """The proof-of-concept string for a finding that grounds on nothing, an honest note and no
+    fabricated command, invariant 5. A finding whose demonstration would take an attack says so,
+    since this run does not exploit, and any other says no reproducible read could be grounded."""
+    if "authorized exploitation" in (finding.poc or "").lower():
+        return ("demonstrating this would require authorized exploitation, which this "
+                "reconnaissance run does not perform, and no safe read could be grounded from the "
+                "observed surface, so no reproducible PoC is asserted")
+    return ("no reproducible request could be grounded from the observed surface, so no PoC is "
+            "asserted for this finding")
+
+
+class FindingGrounder(Grounding):
+    """Rewrite each finding's proof of concept to a grounded, hand-runnable request, or an honest
+    note when none grounds.
+
+    A finding grounds on one of two sources. The recon-tier ground is a request the surface already
+    observed, a safe read, strict so a request no capability made is never presented as reproducible.
+    When the asset is a known product at a version, a CVE the lookup tied to that version has a
+    recorded reproduction recipe, so the finding grounds on the recipe's request, the request that
+    demonstrates that CVE. Either way the request is written into the finding's PoC labelled
+    unverified, since this run never sends it to the target.
     """
 
-    def __init__(self, reproductions: tuple[ReproductionRecipe, ...] = (),
-                 chains: tuple = ()) -> None:
+    def __init__(self, reproductions: tuple[ReproductionRecipe, ...] = ()) -> None:
         # Keyed by upper-cased CVE id, so a lookup record and a recipe match regardless of case.
         self._recipes = {r.cve.upper(): r for r in reproductions}
-        self._chains = {c.cve.upper(): c for c in chains}
 
     def run(self, world: World, findings: tuple[Finding, ...]) -> list[Finding]:
         observed = self._observed_gets(world)
@@ -139,30 +176,22 @@ class FindingGrounder(Grounding):
             # Prefer an observed safe read, the recon-tier ground. Fall to a recipe only when the
             # finding names a known vulnerability whose CVE the lookup tied to the running version.
             request = self._poc_request(finding, observed)
-            chain = None
             if request is None:
                 request = self._recipe_request(finding, world)
             if request is None:
-                request, chain = self._chain_request(finding, world)
-            if request is None:
-                out.append(finding)
+                out.append(replace(finding, poc=_ungrounded_poc(finding)))
                 continue
-            grounded = replace(finding, data={**finding.data, "poc_request": request})
-            # Only a grounded finding becomes a node, so the reproduce step never sees an
-            # ungrounded claim. The node is materialized here, never inside triage.
-            world.add(Node(id=grounded.id, type="finding", payload=FindingClaim(
-                finding_id=grounded.id, title=grounded.title, severity=grounded.severity,
-                where=grounded.where, request=PoCRequest(**request), chain=chain)))
-            out.append(grounded)
+            out.append(replace(finding, poc=_grounded_poc(request),
+                               data={**finding.data, "poc_request": request}))
         return out
 
     def _poc_request(self, finding: Finding, observed: dict) -> dict | None:
         """The reproducible GET a finding's safe-read proof of concept names, or None. The
         url is taken from the proof of concept itself, never from the finding's location, so
-        the reproduce phase replays exactly the request the finding claims rather than a
+        the grounded PoC states exactly the request the finding claims rather than a
         different one that merely shares a host. The url must match a recorded observation,
-        and an exploit-tier proof of concept, one the model marked as needing authorization,
-        is never reproducible by a safe read."""
+        and an exploit proof of concept, one the model marked as needing authorization,
+        is never grounded as a safe read."""
         poc = finding.poc or ""
         if not poc or "authorized exploitation" in poc.lower():
             return None
@@ -179,12 +208,12 @@ class FindingGrounder(Grounding):
     def _recipe_request(self, finding: Finding, world: World) -> dict | None:
         """The recipe-sourced request for a known-vulnerability finding, or None. The finding must
         name the known-vulnerability class, and its host must carry a CVE the lookup matched to the
-        running version, since a recipe is never replayed against a product-wide or name-only match.
+        running version, since a recipe is never grounded against a product-wide or name-only match.
         The request url is built from the recipe path against the host's observed scheme and
-        authority, not normalized, so the traversal the recipe encodes reaches the target as written
-        rather than being collapsed away. The recipe is grounded only on a CVE the finding itself
-        names, so a file read recipe is never stapled onto a finding claiming a different, more
-        severe CVE it cannot demonstrate, which the confirm judge would then rightly weaken."""
+        authority, not normalized, so the traversal the recipe encodes reads as written rather than
+        being collapsed away. The recipe is grounded only on a CVE the finding itself names, so a
+        file read recipe is never stapled onto a finding claiming a different, more severe CVE it
+        cannot demonstrate."""
         if not self._recipes or finding.data.get("kind") != _KNOWN_VULN:
             return None
         host = urlsplit(finding.where).hostname or finding.where.split("/", 1)[0].split(":", 1)[0]
@@ -207,41 +236,6 @@ class FindingGrounder(Grounding):
                   f"satisfies: {recipe.expect}")
         return {"method": recipe.method, "url": url, "body": recipe.body, "expect": expect,
                 "source": f"reproduction:{recipe.cve}"}
-
-    def _chain_request(self, finding: Finding, world: World):
-        """The multi-step exploit chain a known-vulnerability finding grounds on, as a poc_request
-        describing its final step and the chain itself, or (None, None). Like the single recipe it
-        fires only for a CVE the finding names and the lookup tied to the running version, and only
-        at the exploit tier. The chain is driven whole by the exploit_chain capability, the
-        poc_request's url is its final step, so confirm binds the receipt to it."""
-        if not self._chains or finding.data.get("kind") != _KNOWN_VULN:
-            return None, None
-        host = urlsplit(finding.where).hostname or finding.where.split("/", 1)[0].split(":", 1)[0]
-        node = next((n for n in world.nodes("domain") if n.payload.name == host), None)
-        if node is None:
-            return None, None
-        scan = world.latest("cve_scan", node.id)
-        if scan is None or scan.payload.match != _VERSION_MATCH:
-            return None, None
-        primary = _primary_cve(finding)
-        chain = self._chains.get(primary)
-        if chain is None or primary not in {c.id.upper() for c in scan.payload.cves}:
-            return None, None
-        http = world.latest("http", node.id)
-        base = getattr(http.payload, "url", "") if http is not None else ""
-        parts = urlsplit(base or f"https://{host}/")
-        authority = parts.netloc or host
-        scheme = parts.scheme or "https"
-        last = chain.steps[-1]
-        path = re.sub(r"^https?://[^/]+", "",
-                      last.path.replace("{{BaseURL}}", "").replace("{{RootURL}}", ""))
-        if not path.startswith("/"):
-            path = "/" + path
-        request = {"method": last.method.upper(), "url": f"{scheme}://{authority}{path}",
-                   "body": "", "expect": (f"the {chain.cve} reproduction is confirmed when the "
-                                          f"live chain satisfies: {chain_summary(chain)}"),
-                   "source": f"reproduction:{chain.cve}"}
-        return request, chain
 
     def _observed_gets(self, world: World) -> dict:
         """Every GET the surface recorded, keyed by normalized url, so a finding's proof of

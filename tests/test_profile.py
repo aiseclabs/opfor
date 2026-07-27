@@ -53,6 +53,45 @@ def test_profile_host_records_product_and_frameworks_in_one_fact():
     assert profile.frameworks == ("Next.js",)
 
 
+def test_profile_host_records_a_coverage_gap_when_the_seam_finds_the_evidence_too_thin():
+    # a live host the identify seam could not judge for lack of evidence is a visible blind spot,
+    # its empty product is unknown rather than a confirmed bespoke negative, invariant 3 and 5
+    from opfor.core import Fact, Node, Task, World
+    from opfor.scenarios.attacksurface.assets.domain.capabilities import ProfileHost
+    from opfor.scenarios.attacksurface.assets.domain.types import DomainData
+
+    world = World()
+    world.add(Node(id="domain:h", type="domain",
+                   payload=DomainData(name="h", root="h", source="passive")))
+    world.absorb([Fact(kind="http", about="domain:h", payload=_http(body="hi"))])
+
+    identify = lambda evidence: {"product": "", "version": "", "cpe": "", "conclusive": False}
+    out = ProfileHost(identify, lambda http: []).run(
+        Task(capability="domain_profile", node="domain:h"), world)
+    kinds = [f.kind for f in out.facts]
+    assert "host_profile" in kinds and "coverage_gap" in kinds
+    gap = next(f.payload for f in out.facts if f.kind == "coverage_gap")
+    assert gap.scan == "domain_profile" and gap.host == "h"
+
+
+def test_profile_host_records_no_gap_when_an_empty_product_is_a_conclusive_negative():
+    # the seam judged the evidence sufficient and named no product, a real bespoke negative, so
+    # there is no blind spot to record, only the host_profile fact
+    from opfor.core import Fact, Node, Task, World
+    from opfor.scenarios.attacksurface.assets.domain.capabilities import ProfileHost
+    from opfor.scenarios.attacksurface.assets.domain.types import DomainData
+
+    world = World()
+    world.add(Node(id="domain:h", type="domain",
+                   payload=DomainData(name="h", root="h", source="passive")))
+    world.absorb([Fact(kind="http", about="domain:h", payload=_http(body="a bespoke app"))])
+
+    identify = lambda evidence: {"product": "", "version": "", "cpe": "", "conclusive": True}
+    out = ProfileHost(identify, lambda http: []).run(
+        Task(capability="domain_profile", node="domain:h"), world)
+    assert [f.kind for f in out.facts] == ["host_profile"]
+
+
 def test_report_renders_product_and_tech_from_the_host_profile_fact():
     from opfor.core import Fact, Node, World
     from opfor.scenarios.attacksurface.render import SurfaceRenderer

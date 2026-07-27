@@ -21,19 +21,25 @@ SYSTEM = (
     "vendor and product as a `vendor:product` string, for example grafana:grafana, "
     "gitlab:gitlab, or jenkins:jenkins. Give the version only when the evidence shows it.\n\n"
     "Reply with a single JSON object and nothing else, of the form "
-    '{"product": "", "version": "", "cpe": ""}. Leave a field empty when the evidence does '
-    "not support it, and return every field empty when the host is a bespoke application or "
-    "cannot be identified. Do not invent a product or a version."
+    '{"product": "", "version": "", "cpe": "", "conclusive": true}. Leave a field empty when the '
+    "evidence does not support it, and return every field empty when the host is a bespoke "
+    "application or cannot be identified. Do not invent a product or a version. Set `conclusive` "
+    "to true when the evidence was enough to decide, whether you named a product or judged the "
+    "host a bespoke application, and false only when the host exposed too little to judge at all, "
+    "such as a page that answered but carried almost no identifying content."
 )
 
 
 def identify_service(provider: Provider, model: str, evidence: str) -> dict:
     """Ask the model to name the product, version, and CPE for one host's evidence.
 
-    Returns a dict with `product`, `version`, and `cpe`, each empty when unknown. A model
-    call that fails raises, the caller reports that loud. A reply that carries no JSON object
-    raises too, since that is the model failing the contract, not a host that is unrecognizable.
-    A JSON object with empty fields is the clean empty answer, not every host is a product.
+    Returns a dict with `product`, `version`, and `cpe`, each empty when unknown, and
+    `conclusive`, false when the host exposed too little to judge at all so an empty product is
+    unknown rather than a confirmed bespoke negative, which the profiler records as a coverage
+    gap. A model call that fails raises, the caller reports that loud. A reply that carries no
+    JSON object raises too, since that is the model failing the contract, not a host that is
+    unrecognizable. A JSON object with empty fields is the clean empty answer, not every host
+    is a product.
     """
     result = provider.complete(
         system=SYSTEM,
@@ -49,4 +55,5 @@ def identify_service(provider: Provider, model: str, evidence: str) -> dict:
         "product": str(obj.get("product", "")).strip(),
         "version": str(obj.get("version", "")).strip(),
         "cpe": str(obj.get("cpe", "")).strip(),
+        "conclusive": bool(obj.get("conclusive", True)),
     }

@@ -20,8 +20,8 @@ path is probed and the version read there, in the four-part form NVD keys its CP
 
 SonarQube through 8.4.2 carries CVE-2020-27986, an unauthenticated read of the instance settings
 through `/api/settings/values`, which returns configured secrets such as the SMTP credentials
-without authentication. Its read-only reproduction is the vendored Nuclei template
-`knowledge/nuclei/CVE-2020-27986.yaml`, which opfor consumes as data. The recipe fires only for a
-CVE the lookup tied to the running version, and only under the intrusive EXPLOIT phase as a read.
-The leak has content only once a secret is configured, that configured secret being the precondition
-the vulnerability reads back.
+without authentication. Its read-only reproduction recipe is the vendored Nuclei template
+`knowledge/nuclei/CVE-2020-27986.yaml`, which opfor consumes as data. The recipe grounds an accurate
+PoC only for a CVE the lookup tied to the running version, a read written for the operator to run,
+never sent to the target. The leak has content only once a secret is configured, that configured
+secret being the precondition the vulnerability reads back.

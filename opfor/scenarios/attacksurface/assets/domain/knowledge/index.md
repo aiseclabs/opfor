@@ -39,9 +39,9 @@ A finding file's frontmatter fields:
 
 A product file's `reproductions` frontmatter is one entry per read-only reproducible CVE the product
 carries, each naming the CVE `id`, the read `method`, the request `path`, and the `expect` marker the
-confirm judge weighs. It lives with the product because it is specific to it, not with the generic
-known-vulnerability class. The grounder replays a recipe only for a CVE the lookup tied to the running
-version, only in the intrusive EXPLOIT phase, and only as a read, a capability never does, invariant 1.
+PoC states as the fire condition. It lives with the product because it is specific to it, not with the
+generic known-vulnerability class. The grounder writes a PoC from a recipe only for a CVE the lookup
+tied to the running version, and the PoC is written for the operator to run, never sent to the target.
 
 Every unit is meant to be backtested, so a detection marker that stops matching or a judgment class
 no case exercises is a visible gap rather than a silent one. Adding knowledge is a new or extended

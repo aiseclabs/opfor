@@ -19,8 +19,8 @@ so that path is probed and the version read there.
 ## Reproductions
 
 Grafana 8.0.0 through 8.3.0 carries CVE-2021-43798, an unauthenticated path traversal that reads an
-arbitrary file through a plugin's public asset path. Its read-only reproduction is not written here,
-it is the vendored Nuclei template `knowledge/nuclei/CVE-2021-43798.yaml`, which opfor consumes as
-data. The recipe fires only when the CVE lookup tied the CVE to the running version, only under the
-intrusive EXPLOIT phase, and only as a read, and whether it actually fired is the confirm judgment
-on the live receipt, not a match in code.
+arbitrary file through a plugin's public asset path. Its read-only reproduction recipe is not written
+here, it is the vendored Nuclei template `knowledge/nuclei/CVE-2021-43798.yaml`, which opfor consumes
+as data. The recipe grounds an accurate PoC only when the CVE lookup tied the CVE to the running
+version, and the PoC is a read written for the operator to run, never sent to the target by this
+reconnaissance run.

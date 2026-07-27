@@ -9,7 +9,7 @@
  ╚═════╝ ╚═╝     ╚═╝      ╚═════╝ ╚═╝  ╚═╝
 ```
 
-AI-assisted external attack-surface reconnaissance, from a root domain to a confirmed PoC.
+AI-assisted external attack-surface reconnaissance, from a root domain to an accurate PoC.
 
 From a root domain it discovers the subdomains, identifies what each one is, analyzes the state
 of the service it runs, the interfaces it exposes, its known CVEs, its unauthorized-access holes,
@@ -54,14 +54,10 @@ opfor scenarios
 opfor run attacksurface --root example.com
 ```
 
-A default run maps the surface and judges it at the recon tier, then writes a structured
-`findings.json`, one record per subdomain with what it is and its service state, and a human
-`report.md`. To reproduce and confirm a PoC for what it finds, opt into the intrusive phases and
-authorize the tier:
-
-```bash
-opfor run attacksurface --root example.com --reproduce --confirm --tier intrusive --authorize
-```
+A run maps the surface and judges it, then writes a structured `findings.json`, one record per
+subdomain with what it is and its service state, and a human `report.md`. For each finding it writes
+an accurate PoC, a hand-runnable request labeled unverified, since the run never sends it to the
+target. It stops at TRIAGE, there is no intrusive tier, so the engine touches a target only for recon.
 
 The `onchain` scenario maps a chain's on-chain surface to a ranked audit queue. It is recon-only,
 it reads public chain data and never sends a transaction. It aims at the long tail, the young,

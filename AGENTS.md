@@ -85,9 +85,10 @@ sequenced along a fixed lifecycle spine so a run either closes or says why it di
 - `attacksurface` is the mission scenario. It maps the mission onto the spine. MAP discovers the
   subdomains, ENRICH identifies each host and analyzes its service state, the interfaces it
   exposes, the product it runs and that product's CVEs. TRIAGE judges the findings, the exposed
-  interfaces, the known vulnerabilities, and the unauthorized-access holes. The opt-in EXPLOIT and
-  CONFIRM write and confirm an accurate PoC. Its terminal is TRIAGE by default, raised to EXPLOIT
-  or CONFIRM only when the operator opts in and authorizes the intrusive tier.
+  interfaces, the known vulnerabilities, and the unauthorized-access holes, and writes an accurate
+  PoC for each. The PoC is written, never sent, so a grounded finding carries a hand-runnable curl
+  labeled unverified rather than a live receipt. Its terminal is TRIAGE, there is no intrusive tier,
+  the engine never sends a request to a target beyond recon.
 - `onchain` is a second CLI-runnable scenario, recon-only. From a chain it sweeps the active DEX
   pools, pivots from each token or pool to the fund-management contracts behind it, identifies the
   role, reads the funds, enumerates the exposed interfaces, and matches risk signals, then TRIAGE

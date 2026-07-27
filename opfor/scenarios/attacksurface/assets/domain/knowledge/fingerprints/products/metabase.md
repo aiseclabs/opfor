@@ -21,13 +21,7 @@ dropped so the value is the plain NVD version.
 
 Metabase before 0.40.5 carries CVE-2021-41277, an unauthenticated local file read through the
 custom GeoJSON map loader, whose `url` parameter is loaded without validation so a `file://` URL
-reads an arbitrary file. Its read-only reproduction is not written here, it is the vendored Nuclei
-template `knowledge/nuclei/CVE-2021-41277.yaml`, which opfor consumes as data. The recipe fires only
-for a CVE the lookup tied to the running version, only under the intrusive EXPLOIT phase, and only
-as a read.
-
-Metabase before 0.46.6.1 also carries CVE-2023-38646, an unauthenticated command execution through
-the H2 database setup endpoint. Its reproduction is a multi-step chain, the vendored template
-`knowledge/nuclei/CVE-2023-38646.yaml`, which reads the setup token from one response and spends it
-in the next. It is a state-changing exploit, so it is driven whole only at the exploit tier under the
-explicit authorization, and it is confirmed on the H2 error its injection returns.
+reads an arbitrary file. Its read-only reproduction recipe is not written here, it is the vendored
+Nuclei template `knowledge/nuclei/CVE-2021-41277.yaml`, which opfor consumes as data. The recipe
+grounds an accurate PoC only for a CVE the lookup tied to the running version, and the PoC is written
+for the operator to run, never sent to the target by this reconnaissance run.

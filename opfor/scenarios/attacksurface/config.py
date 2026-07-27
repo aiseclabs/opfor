@@ -2,9 +2,10 @@
 
 These are the campaign seed and target knobs the scenario's run adapter reads. The per-source
 API keys live beside the sources that use them in `assets/domain/sources/keys.py`, so a source
-leaf never imports this scenario package to reach a key. The tool does not auto-load a `.env`
-file, so a caller sources one first. See `.env.example` for the vars and their defaults. Every
-key is optional and falls back to a documented default.
+leaf never imports this scenario package to reach a key. The CLI auto-loads a `.env` from the
+working directory before these are read, see `envfile`, so a fixed target lives in the file
+without a manual source. See `.env.example` for the vars and their defaults. Every key is
+optional and falls back to a documented default.
 """
 
 from __future__ import annotations

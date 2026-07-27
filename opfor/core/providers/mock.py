@@ -1,4 +1,4 @@
-"""A provider that returns canned text instead of calling a model.
+"""MockProvider: a provider that returns canned text instead of calling a model.
 
 It drives the tests and any keyless dry run, so the judgment path runs with no API key
 and deterministic output. It holds no parsing logic, it returns the text it was given
@@ -9,7 +9,7 @@ supplies too few responses fails loud instead of masking a missing stub, invaria
 
 from __future__ import annotations
 
-from opfor.core.providers.contract import CompletionResult, Message, Provider, require_completion_text
+from opfor.core.providers.base import CompletionResult, Message, Provider, require_completion_text
 
 
 class MockProvider(Provider):

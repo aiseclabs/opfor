@@ -1,4 +1,4 @@
-"""A provider backed by the Anthropic Messages API.
+"""AnthropicProvider: a provider backed by the Anthropic Messages API.
 
 When `cache` is set the system prompt is marked with an ephemeral cache_control block,
 since a scenario's knowledge is large and reused across a run, so caching it is the
@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from opfor.core.providers.contract import CompletionResult, Message, Provider, require_completion_text
+from opfor.core.providers.base import CompletionResult, Message, Provider, require_completion_text
 
 
 class AnthropicProvider(Provider):

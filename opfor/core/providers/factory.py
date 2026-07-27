@@ -17,7 +17,7 @@ from dataclasses import dataclass
 from typing import Mapping
 
 from opfor.core.providers.anthropic import AnthropicProvider
-from opfor.core.providers.contract import Provider
+from opfor.core.providers.base import Provider
 from opfor.core.providers.claude_agent import ClaudeAgentProvider
 from opfor.core.providers.openai import OpenAIProvider
 from opfor.core.providers.retry import RetryProvider

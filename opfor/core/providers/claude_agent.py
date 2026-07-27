@@ -1,4 +1,4 @@
-"""The headless `claude -p` provider, the keyless subscription backend.
+"""ClaudeAgentProvider: the headless `claude -p` provider, the keyless subscription backend.
 
 A subscription seat runs a headless Claude Code agent through `claude -p` instead of
 calling a vendor API, so it judges on the operator's Claude Code access with no provider
@@ -9,7 +9,7 @@ The exact `claude` invocation varies by version, so the binary and its extra arg
 configurable through the constructor or `OPFOR_CLAUDE_BIN` and `OPFOR_CLAUDE_ARGS`. The
 prompt is fed on stdin so a large mandate does not hit the argv limit. The subprocess
 call goes through an injected runner, so this tests with no real `claude`. This module
-imports only the standard library and `providers.contract`, so it stays a leaf.
+imports only the standard library and `providers.base`, so it stays a leaf.
 """
 
 from __future__ import annotations
@@ -21,7 +21,7 @@ import subprocess
 import time
 from typing import Callable
 
-from opfor.core.providers.contract import CompletionResult, Message, Provider, require_completion_text
+from opfor.core.providers.base import CompletionResult, Message, Provider, require_completion_text
 
 _OUTPUT_ARGS = ("--output-format", "json")
 # The nested `claude -p` must authenticate with the operator's subscription, not an API

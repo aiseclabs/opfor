@@ -1,4 +1,4 @@
-"""A provider wrapper that retries a transient failure and bounds each call.
+"""RetryProvider: a provider wrapper that retries a transient failure and bounds each call.
 
 A rate limit or a network blip is usually transient, so one retry recovers it. The
 wrapper enforces a hard timeout with a daemon thread as well, for the case the wrapped
@@ -13,7 +13,7 @@ import threading
 import time
 from concurrent.futures import Future
 
-from opfor.core.providers.contract import CompletionResult, Message, Provider
+from opfor.core.providers.base import CompletionResult, Message, Provider
 
 
 class RetryProvider(Provider):

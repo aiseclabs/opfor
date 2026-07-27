@@ -1,4 +1,4 @@
-"""A provider backed by the OpenAI API, Chat Completions or Responses.
+"""OpenAIProvider: a provider backed by the OpenAI API, Chat Completions or Responses.
 
 The default wire is Chat Completions, where the system prompt is the first chat message.
 `wire_api="responses"` switches to the Responses API the GPT-5 reasoning models use, where
@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from opfor.core.providers.contract import CompletionResult, Message, Provider, require_completion_text
+from opfor.core.providers.base import CompletionResult, Message, Provider, require_completion_text
 
 
 class OpenAIProvider(Provider):

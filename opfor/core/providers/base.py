@@ -1,4 +1,4 @@
-"""The provider contract and its typed input and output.
+"""The Provider ABC and its typed input and output.
 
 Deliberately minimal, one synchronous non-streaming `complete`. Streaming and tool
 calling are left out until a concrete need appears, so the interface does not

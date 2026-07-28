@@ -5,15 +5,18 @@ concept as a hint. This step runs once after TRIAGE and does the one determinist
 not judgment. It derives an accurate, hand-runnable request for the finding, then overwrites the
 finding's proof of concept with it, so the reported PoC is never a command the model invented.
 
-A finding grounds on the one request the surface already observed, a safe read, so the finding
-grounds on that recorded receipt, strict so a request no capability made is never presented as
-reproducible.
+A finding grounds strongest-first. The firmest ground is the one request the surface already
+observed, a safe read, so the finding grounds on that recorded receipt and a request no capability
+made is never dressed as an opfor-generated script. Failing that, a known vulnerability whose CVE
+was matched on the running version keeps the model's own written PoC, since the version establishes
+the instance is affected even when no safe read was observed, labelled unverified and not confirmed
+against this instance.
 
 This run never sends the request to the target, so a grounded PoC is written and labelled
-unverified, an operator runs it by hand. A finding that grounds on neither source gets an honest
-note saying no reproducible request could be grounded, never a fabricated command, invariant 5. The
-step mints no finding and drops none, so the surface a run reports is unchanged in count, and it
-never mutates a finding in place, a grounded finding is a new object.
+unverified, an operator runs it by hand. A finding that grounds on neither gets an honest note
+saying no reproducible request could be grounded, never a fabricated command, invariant 5. The step
+mints no finding and drops none, so the surface a run reports is unchanged in count, and it never
+mutates a finding in place, a grounded finding is a new object.
 """
 
 from __future__ import annotations
@@ -27,7 +30,7 @@ from opfor.core import Finding, World
 from opfor.core import Grounding
 
 _URL_RE = re.compile(r"https?://[^\s;'\"`)>]+")
-# The CVE ids a finding names, so a recipe is grounded only on the finding that actually claims its
+# The CVE ids a finding names, so a version match binds only to the finding that actually claims its
 # CVE, never stapled onto a more severe finding about a different CVE it cannot demonstrate.
 _CVE_RE = re.compile(r"CVE-\d{4}-\d{4,7}", re.IGNORECASE)
 
@@ -44,8 +47,8 @@ def _cited_cves(finding) -> set[str]:
 
 def _primary_cve(finding) -> str:
     """The CVE a finding is chiefly about, its title's first CVE, else its first cited one. Grounding
-    binds to this, so a recipe matches the finding's own claim and a secondary CVE mentioned in the
-    evidence cannot hijack the finding onto a different recipe, a file read stapled onto an RCE."""
+    binds to this, so a version match keys off the finding's own claim and a secondary CVE mentioned
+    in the evidence cannot hijack the finding onto a different CVE, a file read stapled onto an RCE."""
     in_title = _CVE_RE.findall(finding.title)
     if in_title:
         return in_title[0].upper()
@@ -224,29 +227,82 @@ def _ungrounded_poc(finding: Finding) -> str:
             "asserted for this finding")
 
 
+def _model_poc(finding: Finding) -> str:
+    """The proof of concept for a version-matched known vulnerability, the model's own writeup kept
+    verbatim behind an honest label. The running version establishes the instance is affected, but
+    this run neither observed the request nor fired it, so the PoC rests on the matched CVE's public
+    mechanics, not on a confirmation against this instance. An exploit-class writeup is kept too, and
+    flagged as taking an authorized exploitation this run does not perform."""
+    poc = (finding.poc or "").strip()
+    lead = (f"{_UNVERIFIED}, and not confirmed against this instance, written from the public "
+            "mechanics of the matched CVE for the identified version.")
+    if "authorized exploitation" in poc.lower():
+        lead += " Demonstrating it would take an authorized exploitation this run does not perform."
+    return f"{lead} {poc}" if poc else lead
+
+
+def _host_of(where: str) -> str:
+    """The hostname a finding's locator points at, so a finding maps back to its subdomain. A locator
+    is usually a url, but a bare host is accepted too."""
+    parsed = urlsplit(where if "//" in where else f"//{where}")
+    return parsed.hostname or where
+
+
+def _version_matched_cves(world: World) -> dict[str, set[str]]:
+    """The CVE ids each host carries on a version basis, keyed by host name. A finding whose primary
+    CVE appears here is tied to the running version, the one basis strong enough to keep the model's
+    written PoC when no observed safe read grounds it. A `product` or `keyword` match is excluded, so
+    a CVE not tied to the running version never keeps a version-specific PoC, invariant 5."""
+    out: dict[str, set[str]] = {}
+    for node in world.nodes("domain"):
+        scan = world.latest("cve_scan", node.id)
+        if scan is None or scan.payload.match != "version":
+            continue
+        out[node.payload.name] = {cve.id.upper() for cve in scan.payload.cves}
+    return out
+
+
+def _is_version_matched(finding: Finding, version_matched: dict[str, set[str]]) -> bool:
+    """True when the finding's primary CVE was matched on its host's running version."""
+    cve = _primary_cve(finding)
+    if not cve:
+        return False
+    return cve in version_matched.get(_host_of(finding.where), set())
+
+
 class FindingGrounder(Grounding):
     """Rewrite each finding's proof of concept to a grounded, hand-runnable request, or an honest
     note when none grounds.
 
-    A finding grounds on a request the surface already observed, a safe read, strict so a request no
-    capability made is never presented as reproducible. The request is written into the finding's PoC
-    labelled unverified, since this run never sends it to the target.
+    A finding grounds strongest-first. The firmest ground is a request the surface already observed,
+    a safe read, strict so a request no capability made is never dressed as an opfor-generated
+    script. Failing that, a known vulnerability matched on the running version keeps the model's own
+    written PoC, labelled unverified and not confirmed against this instance. A finding that grounds
+    on neither gets an honest no-PoC note. Every PoC is labelled unverified, this run never sends it.
     """
 
     def run(self, world: World, findings: tuple[Finding, ...]) -> list[Finding]:
         observed = self._observed_gets(world)
+        version_matched = _version_matched_cves(world)
         out: list[Finding] = []
         taken: set[str] = set()
         for finding in findings:
-            # The recon-tier ground is a request the surface already observed, a safe read.
+            # Tier 1: a request the surface already observed, a safe read, grounds a runnable script.
             request = self._poc_request(finding, observed)
-            if request is None:
-                out.append(replace(finding, poc=_ungrounded_poc(finding)))
+            if request is not None:
+                request = {**request, "script": f"poc/{_script_name(finding, taken)}"}
+                script = _poc_script(request, finding)
+                out.append(replace(finding, poc=_grounded_poc(request),
+                                   data={**finding.data, "poc_request": request,
+                                         "poc_script": script}))
                 continue
-            request = {**request, "script": f"poc/{_script_name(finding, taken)}"}
-            script = _poc_script(request, finding)
-            out.append(replace(finding, poc=_grounded_poc(request),
-                               data={**finding.data, "poc_request": request, "poc_script": script}))
+            # Tier 2: a version-matched known vulnerability keeps the model's written PoC. The version
+            # establishes the instance is affected, so the writeup stands even with no observed read.
+            if _is_version_matched(finding, version_matched):
+                out.append(replace(finding, poc=_model_poc(finding)))
+                continue
+            # Tier 3: nothing grounds it, an honest no-PoC note.
+            out.append(replace(finding, poc=_ungrounded_poc(finding)))
         return out
 
     def _poc_request(self, finding: Finding, observed: dict) -> dict | None:

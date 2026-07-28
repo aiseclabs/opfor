@@ -39,10 +39,15 @@ A finding file's frontmatter fields:
   for a clue-based class and a CNAME signature for subdomain takeover. The triage reads them to
   render the surface, a capability never does, invariant 1.
 
-A finding's PoC is grounded after triage, not written into knowledge. When a finding's proof names a
-request the surface already observed, a safe read, the grounder rewrites the PoC to that recorded
-request, labeled unverified since this reconnaissance run writes it for an operator to run and never
-sends it to the target. A finding that grounds on no observed read carries an honest no-PoC note.
+A finding's PoC is grounded after triage, not written into knowledge, strongest first. When a
+finding's proof names a request the surface already observed, a safe read, the grounder rewrites the
+PoC to that recorded request. Failing that, a known vulnerability whose CVE was matched on the
+running version keeps the model's own written PoC, since the version establishes the instance is
+affected even when no safe read was observed. Either way the PoC is labeled unverified and not
+confirmed against this instance, since this reconnaissance run writes it for an operator to run and
+never sends it to the target. A finding that grounds on neither, such as a CVE matched only on the
+product name or one whose demonstration would take an authorized exploitation this run does not
+perform, carries an honest no-PoC note.
 
 Every scored unit is meant to be backtested, so a detection marker that stops matching or a judgment
 class no case exercises is a visible gap the coverage report names, not a silent one. Adding

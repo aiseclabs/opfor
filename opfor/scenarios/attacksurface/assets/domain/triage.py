@@ -176,7 +176,7 @@ class TriageError(RuntimeError):
 
 
 class SurfaceTriage(Triage):
-    def __init__(self, knowledge_dirs, *, provider: Provider, model: str,
+    def __init__(self, knowledge_dirs, *, playbook_dirs=(), provider: Provider, model: str,
                  max_tokens: int = 8192, max_chunk_chars: int = _MAX_CHUNK_CHARS,
                  challenger: Provider | None = None, challenger_model: str | None = None,
                  judge: Provider | None = None, judge_model: str | None = None) -> None:
@@ -205,7 +205,10 @@ class SurfaceTriage(Triage):
             self._classes.extend(_load_classes(directory / "findings"))
             self._clues.extend(_load_clues(directory / "findings"))
             self._takeover.extend(_load_takeover(directory / "findings"))
-            self._playbook.update(_load_playbook(directory / "playbook"))
+        # The playbook is the shared judgment method, a sibling of the knowledge tree rather than a
+        # child, so it is passed as its own path rather than derived from the knowledge dirs.
+        for directory in playbook_dirs:
+            self._playbook.update(_load_playbook(Path(directory)))
         # The challenger's whole job is refuting a false positive, so the false-positive traps
         # ride its system prompt, the shared catalogue rather than a per-finding restatement.
         traps = self._playbook.get("false-positive-traps", "")

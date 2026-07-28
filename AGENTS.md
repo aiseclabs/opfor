@@ -82,7 +82,10 @@ sequenced along a fixed lifecycle spine so a run either closes or says why it di
   supplies capabilities, a planner, a triage, a declared terminal phase, and one or more
   asset classes under `assets/<class>/`. Each asset class owns its capabilities, planner
   rules, and `knowledge/` tree, so a scenario's knowledge and data files live at
-  `assets/<class>/knowledge/`, not at the scenario package root.
+  `assets/<class>/knowledge/`, not at the scenario package root. A class's cross-cutting
+  judgment method, the severity rubric, the false-positive traps, and the run methodology,
+  lives beside the tree in `assets/<class>/playbook/`, a sibling of `knowledge/` since it is
+  the shared method rather than a backtested claim, mirroring the codejury domain layout.
 - `scenarios/registry.py` is the one place that lists scenarios. `mock` is the reference,
   the smallest run that closes the loop, and the kernel's own fixture.
 - `attacksurface` is the mission scenario. It carries two self-contained asset classes under

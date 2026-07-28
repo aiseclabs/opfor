@@ -68,7 +68,9 @@ class KnowledgePaths:
     surfaces, so a concept is one file. `technologies` holds the technology identification data,
     the same directory name the chain class uses for its role fingerprints. `playbook` holds the
     cross-cutting judgment method every finding class shares, the severity rubric and the
-    false-positive traps triage reads into the judge."""
+    false-positive traps triage reads into the judge. It is a sibling of `knowledge`, not a child,
+    since it is the shared method rather than a backtested claim, mirroring the codejury domain
+    layout where `playbook/` sits beside `knowledge/` under the class content root."""
 
     root: Path
     products: Path
@@ -81,7 +83,7 @@ class KnowledgePaths:
         technologies = root / "technologies"
         return cls(root=root, products=technologies / "products",
                    frameworks=technologies / "frameworks", findings=root / "findings",
-                   playbook=root / "playbook")
+                   playbook=root.parent / "playbook")
 
 
 PATHS = KnowledgePaths.under(KNOWLEDGE)
@@ -244,8 +246,8 @@ def build(
         content_root=Path(__file__).resolve().parent,
         capabilities=bundle.capabilities,
         planner=RuleSet(rules),
-        triage=SurfaceTriage(knowledge_dirs, provider=provider, model=model,
-                             challenger=challenger, challenger_model=challenger_model,
+        triage=SurfaceTriage(knowledge_dirs, playbook_dirs=[PATHS.playbook], provider=provider,
+                             model=model, challenger=challenger, challenger_model=challenger_model,
                              judge=judge, judge_model=judge_model),
         grounding=FindingGrounder(),
         payloads=_payloads(),

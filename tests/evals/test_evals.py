@@ -32,8 +32,12 @@ def test_knowledge_inventory_enumerates_every_claim_by_ref_and_kind():
         by_ns[ref.split(":", 1)[0]] = by_ns.get(ref.split(":", 1)[0], 0) + 1
     # every knowledge namespace is enumerated, so a new detection or judgment unit that ships
     # without a backtest shows up as an uncovered ref rather than being invisible
-    assert by_ns["product"] == 8
+    assert by_ns["product"] == 16
     assert by_ns["framework"] == 2
+    # a newly added product is enumerated as a detection unit, so its unbacked fingerprint reads as
+    # a coverage gap rather than shipping invisibly
+    assert items["product:couchdb"].kind == DETECTION
+    assert "products" in items["product:couchdb"].path.parts
     assert by_ns["class"] == 5
     assert by_ns["clue"] >= 7 and by_ns["signature"] >= 20
     # the guides are orientation the triage selects and reads, three protocols and six surfaces,

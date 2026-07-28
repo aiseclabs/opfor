@@ -36,6 +36,11 @@ def test_knowledge_inventory_enumerates_every_claim_by_ref_and_kind():
     assert by_ns["framework"] == 2
     assert by_ns["class"] == 5
     assert by_ns["clue"] >= 7 and by_ns["signature"] >= 20
+    # the guides are orientation the triage selects and reads, three protocols and six surfaces,
+    # enumerated so a guide with no case is a visible gap rather than a silent one
+    assert by_ns["guide"] == 9
+    assert items["guide:protocols/graphql"].kind == JUDGMENT
+    assert "guides" in items["guide:surfaces/admin-console"].path.parts
     # a finding class is judgment, its embedded detection payloads are detection, so the two
     # regimes are told apart by the ref's kind
     assert items["class:information-exposure"].kind == JUDGMENT

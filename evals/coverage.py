@@ -81,6 +81,13 @@ def scan_knowledge(root: Path = KNOWLEDGE) -> dict[str, KnowledgeItem]:
         for sig in meta.get("signatures") or []:
             if sig.get("service"):
                 add(f"signature:{_slug(sig['service'])}", DETECTION, path)
+    # A guide is judgment orientation the triage selects and reads, so it needs a labeled case to be
+    # covered, the same bar as a finding class. The ref mirrors its path under guides/, so
+    # protocols/graphql and surfaces/admin-console stay distinct.
+    if paths.guides.is_dir():
+        for path, _meta, _body in iter_md_docs(paths.guides):
+            rel = path.relative_to(paths.guides).with_suffix("").as_posix()
+            add(f"guide:{rel}", JUDGMENT, path)
 
     return items
 

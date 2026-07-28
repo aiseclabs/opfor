@@ -154,6 +154,27 @@ def _load_playbook(directory: Path) -> dict[str, str]:
     return out
 
 
+def _load_guides(directory: Path) -> list[dict]:
+    """The orienting guides, one per protocol or surface, read from `guides/`. Each carries a
+    `detect.markers` list, the lowercase substrings that say its protocol or surface is present on
+    the rendered surface, and a body of judgment notes. Triage selects the guides whose markers
+    appear and reads their bodies into the judge, so the model gets surface-specific orientation
+    only when that surface is present, invariant 1. Absent, no guide rides, the prompt is unchanged."""
+    out: list[dict] = []
+    for path, meta, body in iter_md_docs(directory):
+        detect = meta.get("detect") or {}
+        markers = [str(m).lower() for m in (detect.get("markers") or [])]
+        rel = path.relative_to(directory).with_suffix("").as_posix()
+        out.append({
+            "ref": rel,
+            "title": str(meta.get("title", path.stem)),
+            "kind": str(meta.get("kind", "")),
+            "markers": markers,
+            "body": body,
+        })
+    return out
+
+
 def _load_takeover(directory: Path) -> list[tuple[str, str]]:
     """The deterministic takeover signatures, a service name and its unclaimed-page text, read from
     the `signatures` frontmatter under `findings/`, so a dangling name pointing at an unclaimed
@@ -176,8 +197,8 @@ class TriageError(RuntimeError):
 
 
 class SurfaceTriage(Triage):
-    def __init__(self, knowledge_dirs, *, playbook_dirs=(), provider: Provider, model: str,
-                 max_tokens: int = 8192, max_chunk_chars: int = _MAX_CHUNK_CHARS,
+    def __init__(self, knowledge_dirs, *, playbook_dirs=(), guide_dirs=(), provider: Provider,
+                 model: str, max_tokens: int = 8192, max_chunk_chars: int = _MAX_CHUNK_CHARS,
                  challenger: Provider | None = None, challenger_model: str | None = None,
                  judge: Provider | None = None, judge_model: str | None = None) -> None:
         self._provider = provider
@@ -209,6 +230,12 @@ class SurfaceTriage(Triage):
         # child, so it is passed as its own path rather than derived from the knowledge dirs.
         for directory in playbook_dirs:
             self._playbook.update(_load_playbook(Path(directory)))
+        # The guides are orienting primers selected per run by their detection markers, so the judge
+        # reads a surface's protocol and surface notes only when that surface is present. They ride
+        # a child dir of the knowledge tree, so a class owns its guides alongside its findings.
+        self._guides: list[dict] = []
+        for directory in guide_dirs:
+            self._guides.extend(_load_guides(Path(directory)))
         # The challenger's whole job is refuting a false positive, so the false-positive traps
         # ride its system prompt, the shared catalogue rather than a per-finding restatement.
         traps = self._playbook.get("false-positive-traps", "")
@@ -250,7 +277,7 @@ class SurfaceTriage(Triage):
         """Judge the host units in char-bounded chunks. The knowledge is selected once over
         the whole surface, so it is identical across chunks and rides the cached system
         prompt. A chunk whose call fails becomes a degraded finding, loud but contained."""
-        system = self._system()
+        system = self._system("\n".join(units))
         out: list[Finding] = []
         for index, chunk in enumerate(_pack(units, self._max_chunk)):
             try:
@@ -267,20 +294,37 @@ class SurfaceTriage(Triage):
                 ))
         return out
 
-    def _system(self) -> str:
-        """The system prompt, the static instruction, the shared playbook, then every finding
-        class, each labelled with its id so the model can name it as a finding's category. Every
-        class is offered on every run, never gated out by a keyword pre-filter, so the judge
-        decides on the evidence and a class is never silently withheld. The playbook rides once,
-        the calibration every class shares rather than restated per class. Constant across chunks,
-        so it rides the cached prompt."""
+    def _system(self, surface: str = "") -> str:
+        """The system prompt, the static instruction, the shared playbook, the guides selected for
+        this surface, then every finding class, each labelled with its id so the model can name it
+        as a finding's category. Every class is offered on every run, never gated out by a keyword
+        pre-filter, so the judge decides on the evidence and a class is never silently withheld. The
+        playbook rides once, the calibration every class shares rather than restated per class. The
+        guides are selected once over the whole surface, so the prompt stays constant across the
+        chunks of one run and rides the cached prompt."""
         blocks = [f"## Class id: {c['id']}\n\n{c['body']}" for c in self._classes]
         knowledge = "\n\n---\n\n".join(blocks)
         system = SYSTEM
         guidance = self._playbook_prose()
         if guidance:
             system = f"{system}\n\n# Playbook, the judgment method shared by every class\n\n{guidance}\n"
+        guides = self._guide_prose(surface)
+        if guides:
+            system = (f"{system}\n\n# Guides, orientation for the protocols and surfaces present "
+                      f"here\n\n{guides}\n")
         return f"{system}\n\n# Knowledge, the classes of finding to judge against\n\n{knowledge}\n"
+
+    def _guide_prose(self, surface: str) -> str:
+        """The guides whose detection markers appear on the surface, in a fixed order so the cached
+        prompt is stable. A guide with no markers never rides, and an empty surface selects none, so
+        an irrelevant primer never bloats the prompt. Empty when no guide matches or none are
+        loaded."""
+        text = surface.lower()
+        selected = [g for g in self._guides
+                    if g["markers"] and any(m in text for m in g["markers"])]
+        selected.sort(key=lambda g: g["ref"])
+        parts = [f"## {g['title']} ({g['kind']})\n\n{g['body']}" for g in selected]
+        return "\n\n---\n\n".join(parts)
 
     def _playbook_prose(self) -> str:
         """The playbook the judge reads, in a fixed order so the cached prompt is stable, the

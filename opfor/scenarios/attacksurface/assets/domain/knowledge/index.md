@@ -48,6 +48,14 @@ The tree:
   The frontmatter carries the class mechanics and, for a class that surfaces its own deterministic
   evidence, that evidence too, the clues or the takeover signatures. So a concept is one file, its
   judgment and detection read together, though coverage scores them apart by kind.
+- `guides/` the orienting primers, one per protocol under `protocols/` and one per surface under
+  `surfaces/`, that the triage selects and reads into the judge. Each carries a `detect.markers`
+  list, the lowercase substrings that say its protocol or surface is present, and a body of notes,
+  what the surface is, how it reads on recon, which finding classes it feeds, and its own traps. The
+  triage selects the guides whose markers appear, once over the whole surface, so the judge gets
+  surface-specific orientation only when that surface is present and the prompt stays cache-stable.
+  A guide is judgment orientation, not a finding class, it sharpens how the broad classes are judged
+  rather than adding a class. This is the recon analog of the codejury guides layer.
 - `technologies/` the deterministic per-product and per-framework knowledge the identify and enrich
   steps read to name what a host runs rather than to mint a finding. `products/` are the open-source
   products identified by markers, each with a version pattern and a `cpe` that drives the CVE

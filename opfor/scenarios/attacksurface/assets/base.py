@@ -26,15 +26,10 @@ from opfor.core import Capability, Rule
 @dataclass(frozen=True, kw_only=True)
 class ClassBundle:
     """One asset class's contribution to a scenario. `map_rules` and `enrich_rules` are the
-    rules the class adds to those phases, `knowledge_dir` is where its triage knowledge
-    lives, or None when the class mints only structural findings and reads no knowledge, and
-    `reproductions` are the CVE reproduction recipes its knowledge carries, which the scenario
-    grounder reads to write an accurate PoC for a known vulnerability."""
+    rules the class adds to those phases, and `knowledge_dir` is where its triage knowledge
+    lives, or None when the class mints only structural findings and reads no knowledge."""
 
     capabilities: tuple[Capability, ...]
     map_rules: tuple[Rule, ...] = ()
     enrich_rules: tuple[Rule, ...] = ()
     knowledge_dir: Path | None = None
-    # A recipe's type is a class's own, such as the domain grounder's, so the contract stays
-    # class-agnostic and holds them opaquely rather than importing a class to name the element.
-    reproductions: tuple = ()

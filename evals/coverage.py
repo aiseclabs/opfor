@@ -31,7 +31,6 @@ from pathlib import Path
 
 from opfor.core.markdown_docs import iter_md_docs
 from opfor.scenarios.attacksurface.assets.domain import KNOWLEDGE, KnowledgePaths
-from opfor.scenarios.attacksurface.assets.domain.nuclei import NucleiTemplate, parse_template
 
 CORPUS = Path(__file__).resolve().parent / "corpus"
 
@@ -49,7 +48,7 @@ def _slug(text: str) -> str:
 class KnowledgeItem:
     """One claim the coverage matrix tracks, addressed by a namespaced ref a case references."""
 
-    ref: str        # product:grafana, framework:nextjs, class:<id>, clue:<id>, signature:<slug>, repro:<cve>
+    ref: str        # product:grafana, framework:nextjs, class:<id>, clue:<id>, signature:<slug>
     kind: str       # detection or judgment
     path: Path      # the knowledge file the claim lives in
 
@@ -70,13 +69,6 @@ def scan_knowledge(root: Path = KNOWLEDGE) -> dict[str, KnowledgeItem]:
 
     for path, _meta, _body in iter_md_docs(paths.products):
         add(f"product:{path.stem}", DETECTION, path)
-    # A reproduction is one CVE's read-only check, a vendored Nuclei template opfor consumes as
-    # data. Each supported template is a `repro:<cve>` detection claim owing a backtest case, and an
-    # unsupported one is skipped here, so coverage counts only what opfor can actually drive.
-    for template_path in sorted(paths.nuclei.glob("*.yaml")):
-        parsed = parse_template(template_path.read_text(encoding="utf-8"))
-        if isinstance(parsed, NucleiTemplate) and parsed.cve:
-            add(f"repro:{_slug(parsed.cve)}", DETECTION, template_path)
     for path, _meta, _body in iter_md_docs(paths.frameworks):
         add(f"framework:{path.stem}", DETECTION, path)
     # A finding file carries the class judgment ref plus the deterministic payload refs its

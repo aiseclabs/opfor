@@ -179,8 +179,7 @@ class SurfaceTriage(Triage):
     def __init__(self, knowledge_dirs, *, provider: Provider, model: str,
                  max_tokens: int = 8192, max_chunk_chars: int = _MAX_CHUNK_CHARS,
                  challenger: Provider | None = None, challenger_model: str | None = None,
-                 judge: Provider | None = None, judge_model: str | None = None,
-                 recipe_cves=()) -> None:
+                 judge: Provider | None = None, judge_model: str | None = None) -> None:
         self._provider = provider
         self._model = model
         self._max_tokens = max_tokens
@@ -215,7 +214,7 @@ class SurfaceTriage(Triage):
             if traps else CHALLENGER_SYSTEM)
         self._class_ids = frozenset(c["id"] for c in self._classes)
         self._class_impact = {c["id"]: c["impact"] for c in self._classes}
-        self._renderer = SurfaceRenderer(self._clues, self._takeover, recipe_cves=recipe_cves)
+        self._renderer = SurfaceRenderer(self._clues, self._takeover)
         # Host to the world fact kinds that back it, rebuilt at the start of each judge so a
         # finding can carry its provenance breadcrumb. Empty until judge runs.
         self._provenance: dict[str, list[str]] = {}

@@ -27,9 +27,6 @@ The tree:
   version and a `cpe` that drives the CVE lookup. `frameworks/` front-end frameworks detected as
   context tags, no version lookup. How a host is fronted, a CDN, cloud, or vendor, is left to the
   judge, which reads the raw CNAME and headers on the surface.
-- `nuclei/` vendored Nuclei templates, one CVE per file, the read-only reproduction recipes opfor
-  consumes as data to ground a PoC. The template supplies the request shape and the fire condition,
-  opfor drives it with its own scope and never runs the Nuclei binary, see the subtree's own index.
 
 A finding file's frontmatter fields:
 
@@ -42,13 +39,10 @@ A finding file's frontmatter fields:
   for a clue-based class and a CNAME signature for subdomain takeover. The triage reads them to
   render the surface, a capability never does, invariant 1.
 
-A reproduction recipe is one read-only reproducible CVE reduced to the request that demonstrates it
-and the marker its response bears when the instance is affected. The `nuclei/` templates are the
-source in use, one CVE per template, consumed as data. A product file may also carry a
-`reproductions` frontmatter list, one entry per CVE with its `id`, `method`, `path`, and `expect`,
-an extension seam for a recipe specific enough to live with the product, that no product uses today.
-The grounder writes a PoC from a recipe only for a CVE the lookup tied to the running version, and
-the PoC is written for the operator to run, never sent to the target.
+A finding's PoC is grounded after triage, not written into knowledge. When a finding's proof names a
+request the surface already observed, a safe read, the grounder rewrites the PoC to that recorded
+request, labeled unverified since this reconnaissance run writes it for an operator to run and never
+sends it to the target. A finding that grounds on no observed read carries an honest no-PoC note.
 
 Every scored unit is meant to be backtested, so a detection marker that stops matching or a judgment
 class no case exercises is a visible gap the coverage report names, not a silent one. Adding

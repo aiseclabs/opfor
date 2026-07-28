@@ -14,12 +14,7 @@ from pathlib import Path
 from opfor.core import Node, Phase, Provider, RuleSet, Scenario, World, make_provider
 from opfor.core import default_model, role_model, triage_mode
 from opfor.scenarios.attacksurface.assets.base import ClassBundle
-from opfor.scenarios.attacksurface.assets.domain.grounding import (
-    FindingGrounder,
-    ReproductionRecipe,
-    load_reproductions,
-)
-from opfor.scenarios.attacksurface.assets.domain import nuclei
+from opfor.scenarios.attacksurface.assets.domain.grounding import FindingGrounder
 from opfor.scenarios.attacksurface.assets.domain import planner
 from opfor.scenarios.attacksurface.assets.domain.fingerprint import (
     fingerprint,
@@ -80,39 +75,16 @@ class KnowledgePaths:
     frameworks: Path
     findings: Path
     playbook: Path
-    nuclei: Path
 
     @classmethod
     def under(cls, root: Path) -> "KnowledgePaths":
         technologies = root / "technologies"
         return cls(root=root, products=technologies / "products",
                    frameworks=technologies / "frameworks", findings=root / "findings",
-                   playbook=root / "playbook", nuclei=root / "nuclei")
+                   playbook=root / "playbook")
 
 
 PATHS = KnowledgePaths.under(KNOWLEDGE)
-
-
-def _template_recipes(nuclei_dir) -> tuple[ReproductionRecipe, ...]:
-    """Reproduction recipes derived from the vendored Nuclei templates, so the recipe data is a real
-    published template opfor consumes, not a hand-typed one. A read-only template grounds a GET
-    recipe, a state-changing template grounds a recipe carrying its write method and body. Every
-    candidate path, the request headers, and the matcher set ride into the recipe, so the generated
-    PoC checks all of a CVE's endpoints and decides PASS or FAIL by the template's own fire
-    condition rather than a paraphrase. A template's matcher summary rides as the recipe's prose
-    expectation. Only the first request block is grounded for now, a template with more than one
-    request block is a later increment."""
-    supported, _unsupported = nuclei.load_templates(nuclei_dir)
-    recipes: list[ReproductionRecipe] = []
-    for template in supported:
-        request = template.requests[0]
-        paths = tuple(p.replace("{{BaseURL}}", "").replace("{{RootURL}}", "") for p in request.paths)
-        recipes.append(ReproductionRecipe(
-            cve=template.cve, method=request.method, paths=paths,
-            expect=nuclei.matcher_summary(request), headers=request.headers,
-            body=request.body, matchers=request.matchers,
-            matchers_condition=request.matchers_condition))
-    return tuple(recipes)
 
 
 def assemble(*, enumerate_fn, resolve_fn, probe_fn, fetch_fn, fetch_doc_fn,
@@ -179,7 +151,6 @@ def assemble(*, enumerate_fn, resolve_fn, probe_fn, fetch_fn, fetch_doc_fn,
         enrich_rules=tuple(planner.enrich_rules(
             config, with_profile=True, with_cve=cve_fn is not None)),
         knowledge_dir=KNOWLEDGE,
-        reproductions=load_reproductions(PATHS.products) + _template_recipes(PATHS.nuclei),
     )
 
 
@@ -266,7 +237,6 @@ def build(
                       fetch_fn=fetch_fn, fetch_doc_fn=fetch_doc_fn, introspect_fn=introspect_fn,
                       wayback_fn=wayback_fn, identify_fn=identify_fn, cve_fn=cve_fn)
     knowledge_dirs = [bundle.knowledge_dir] if bundle.knowledge_dir else []
-    reproductions = bundle.reproductions
     rules = {Phase.MAP: list(bundle.map_rules), Phase.ENRICH: list(bundle.enrich_rules)}
 
     return Scenario(
@@ -276,9 +246,8 @@ def build(
         planner=RuleSet(rules),
         triage=SurfaceTriage(knowledge_dirs, provider=provider, model=model,
                              challenger=challenger, challenger_model=challenger_model,
-                             judge=judge, judge_model=judge_model,
-                             recipe_cves=tuple(r.cve for r in reproductions)),
-        grounding=FindingGrounder(reproductions=reproductions),
+                             judge=judge, judge_model=judge_model),
+        grounding=FindingGrounder(),
         payloads=_payloads(),
         scope_matcher=HostScope.from_dict,
         terminal=Phase.TRIAGE,

@@ -5,11 +5,9 @@ concept as a hint. This step runs once after TRIAGE and does the one determinist
 not judgment. It derives an accurate, hand-runnable request for the finding, then overwrites the
 finding's proof of concept with it, so the reported PoC is never a command the model invented.
 
-A finding grounds on one of two sources. When the only ground is a request the surface already
-observed, a safe read, the finding grounds on that recorded receipt, strict so a request no
-capability made is never presented as reproducible. When the asset is a known product at a version,
-a CVE the lookup tied to that version carries a recorded reproduction recipe, so the finding grounds
-on the recipe's request directly, the request that demonstrates that CVE.
+A finding grounds on the one request the surface already observed, a safe read, so the finding
+grounds on that recorded receipt, strict so a request no capability made is never presented as
+reproducible.
 
 This run never sends the request to the target, so a grounded PoC is written and labelled
 unverified, an operator runs it by hand. A finding that grounds on neither source gets an honest
@@ -22,17 +20,11 @@ from __future__ import annotations
 
 import json
 import re
-from dataclasses import dataclass, replace
-from pathlib import Path
+from dataclasses import replace
 from urllib.parse import parse_qsl, urlencode, urljoin, urlsplit
 
-from opfor.core import Finding, World, iter_md_docs
+from opfor.core import Finding, World
 from opfor.core import Grounding
-from opfor.scenarios.attacksurface.assets.domain.nuclei import Matcher
-
-# The read-only methods, so the generated script warns loudly when a recipe carries a
-# state-changing verb the operator would send by hand.
-_READ_METHODS = ("GET", "HEAD", "OPTIONS")
 
 _URL_RE = re.compile(r"https?://[^\s;'\"`)>]+")
 # The CVE ids a finding names, so a recipe is grounded only on the finding that actually claims its
@@ -60,58 +52,6 @@ def _primary_cve(finding) -> str:
     cited = sorted(_cited_cves(finding))
     return cited[0] if cited else ""
 
-# The one finding class a recipe reproduces, so the grounder matches a recipe only against the
-# known-vulnerability finding that names a CVE, never against an unrelated class.
-_KNOWN_VULN = "known-vulnerability"
-# The lookup basis a recipe is allowed to fire on, the database tied the CVE to the running
-# version, so a recipe is never replayed against a product-wide or name-only match it may not
-# affect. The value mirrors the `match` tag the CVE source records.
-_VERSION_MATCH = "version"
-
-
-@dataclass(frozen=True, kw_only=True)
-class ReproductionRecipe:
-    """One CVE's recorded reproduction, the request that demonstrates it and the markers its response
-    bears when the instance is affected. A read-only recipe is a GET, a state-changing one carries a
-    write method and a body. It may name more than one candidate path, since a CVE can live at any of
-    several endpoints, and a header set the request must send. It is data read from a vendored
-    template or a product's frontmatter, so adding one is a knowledge change and no attack decision
-    lives in code, invariant 1."""
-
-    cve: str
-    method: str
-    # The candidate paths the CVE may live at, tried in order, at least one.
-    paths: tuple[str, ...]
-    expect: str
-    # The headers the request must send, empty for a header-less GET recipe.
-    headers: tuple[tuple[str, str], ...] = ()
-    # The request body a state-changing recipe carries, empty for a read-only GET recipe.
-    body: str = ""
-    # The response markers that confirm the instance is affected, so the generated script decides
-    # PASS or FAIL rather than leaving the reader to eyeball the response. Empty means no executable
-    # criterion, the script then reports MANUAL and prints the response for a hand check.
-    matchers: tuple[Matcher, ...] = ()
-    matchers_condition: str = "and"
-
-
-def load_reproductions(directory) -> tuple[ReproductionRecipe, ...]:
-    """The reproduction recipes carried in the `reproductions` frontmatter of the product files
-    under `technologies/products/`, since a CVE reproduction is specific to the product it targets
-    and lives with that product's own knowledge, not with the generic judgment class. An entry with
-    no CVE id is skipped, so a malformed recipe adds nothing rather than grounding on an empty id."""
-    out: list[ReproductionRecipe] = []
-    for _path, meta, _body in iter_md_docs(Path(directory)):
-        for entry in (meta.get("reproductions") or []):
-            cve = str(entry.get("id", "")).strip()
-            if not cve:
-                continue
-            out.append(ReproductionRecipe(
-                cve=cve, method=str(entry.get("method", "GET")).strip() or "GET",
-                paths=(str(entry.get("path", "")).strip(),),
-                expect=str(entry.get("expect", "")).strip(),
-                body=str(entry.get("body", "")).strip()))
-    return tuple(out)
-
 
 def _urls_in(text: str) -> list[str]:
     """The http urls a proof-of-concept string names, in order, so a finding's request can
@@ -134,10 +74,10 @@ def _norm_url(url: str) -> str:
 
 
 # The evaluator and driver of a generated PoC, a fixed block appended below the per-finding data
-# literals. It mirrors nuclei.matches: a status matcher compares the response code, a word or regex
-# matcher searches the chosen response part, and the matcher set combines by an `and` or `or`
-# condition. It reads only the data literals above it, so the generator injects values and never
-# code, and it sends nothing until an operator runs the file by hand.
+# literals. A status matcher compares the response code, a word or regex matcher searches the chosen
+# response part, and the matcher set combines by an `and` or `or` condition. It reads only the data
+# literals above it, so the generator injects values and never code, and it sends nothing until an
+# operator runs the file by hand.
 _SCRIPT_DRIVER = '''
 def _part_text(part, status, header_text, body):
     if part == "header":
@@ -211,10 +151,9 @@ if __name__ == "__main__":
 def _poc_script(request: dict, finding: Finding) -> str:
     """A self-contained stdlib PoC script for a grounded finding. It encodes the method, every
     candidate url, the headers, the body, and the response matchers as data, then runs the fixed
-    driver that decides PASS or FAIL exactly as triage's nuclei evaluator would. It uses only
+    driver that decides PASS or FAIL exactly as the surface's own success check would. It uses only
     `urllib`, so it runs anywhere Python does with no dependency, and it is labelled unverified and
-    never sent by this run, an operator runs it by hand against a system they are authorized to test.
-    A state-changing method is called out at the top, since running it may alter the target."""
+    never sent by this run, an operator runs it by hand against a system they are authorized to test."""
     method = (request.get("method") or "GET").upper()
     urls = request.get("urls") or [request.get("url", "")]
     headers = [list(pair) for pair in request.get("headers") or []]
@@ -222,18 +161,12 @@ def _poc_script(request: dict, finding: Finding) -> str:
     matchers = request.get("matchers") or []
     condition = request.get("matchers_condition") or "or"
     expect = request.get("expect") or ""
-    warn = ""
-    if method not in _READ_METHODS:
-        warn = ("\nWARNING, this PoC uses the state-changing method " + method + ", so running it may "
-                "alter the\ntarget. Read the request below and run it only against a system you are "
-                "authorized to test.\n")
     head = (
         '#!/usr/bin/env python3\n'
         '"""' + _UNVERIFIED + '.\n\n'
         'PoC for: ' + finding.title + '\n'
         'Where: ' + finding.where + '\n'
         'Expected: ' + expect + '\n'
-        + warn +
         '\nThis script was written by an opfor reconnaissance run and was NOT sent to the target.\n'
         'It tries each candidate url in turn and prints PASS when the response satisfies the success\n'
         'criterion, FAIL when it does not, and MANUAL when the finding carries no executable check.\n'
@@ -279,12 +212,6 @@ def _script_name(finding: Finding, taken: set[str]) -> str:
 _URL_SLUG = re.compile(r"[^a-z0-9]+")
 
 
-def _matcher_dict(matcher: Matcher) -> dict:
-    """A nuclei Matcher as a plain JSON-safe dict, the shape the generated script's driver reads."""
-    return {"type": matcher.type, "part": matcher.part,
-            "values": list(matcher.values), "condition": matcher.condition}
-
-
 def _ungrounded_poc(finding: Finding) -> str:
     """The proof-of-concept string for a finding that grounds on nothing, an honest note and no
     fabricated command, invariant 5. A finding whose demonstration would take an attack says so,
@@ -301,28 +228,18 @@ class FindingGrounder(Grounding):
     """Rewrite each finding's proof of concept to a grounded, hand-runnable request, or an honest
     note when none grounds.
 
-    A finding grounds on one of two sources. The recon-tier ground is a request the surface already
-    observed, a safe read, strict so a request no capability made is never presented as reproducible.
-    When the asset is a known product at a version, a CVE the lookup tied to that version has a
-    recorded reproduction recipe, so the finding grounds on the recipe's request, the request that
-    demonstrates that CVE. Either way the request is written into the finding's PoC labelled
-    unverified, since this run never sends it to the target.
+    A finding grounds on a request the surface already observed, a safe read, strict so a request no
+    capability made is never presented as reproducible. The request is written into the finding's PoC
+    labelled unverified, since this run never sends it to the target.
     """
-
-    def __init__(self, reproductions: tuple[ReproductionRecipe, ...] = ()) -> None:
-        # Keyed by upper-cased CVE id, so a lookup record and a recipe match regardless of case.
-        self._recipes = {r.cve.upper(): r for r in reproductions}
 
     def run(self, world: World, findings: tuple[Finding, ...]) -> list[Finding]:
         observed = self._observed_gets(world)
         out: list[Finding] = []
         taken: set[str] = set()
         for finding in findings:
-            # Prefer an observed safe read, the recon-tier ground. Fall to a recipe only when the
-            # finding names a known vulnerability whose CVE the lookup tied to the running version.
+            # The recon-tier ground is a request the surface already observed, a safe read.
             request = self._poc_request(finding, observed)
-            if request is None:
-                request = self._recipe_request(finding, world)
             if request is None:
                 out.append(replace(finding, poc=_ungrounded_poc(finding)))
                 continue
@@ -358,45 +275,6 @@ class FindingGrounder(Grounding):
                         "matchers_condition": "and", "expect": expect,
                         "source": receipt["source"]}
         return None
-
-    def _recipe_request(self, finding: Finding, world: World) -> dict | None:
-        """The recipe-sourced request for a known-vulnerability finding, or None. The finding must
-        name the known-vulnerability class, and its host must carry a CVE the lookup matched to the
-        running version, since a recipe is never grounded against a product-wide or name-only match.
-        The request url is built from the recipe path against the host's observed scheme and
-        authority, not normalized, so the traversal the recipe encodes reads as written rather than
-        being collapsed away. The recipe is grounded only on a CVE the finding itself names, so a
-        file read recipe is never stapled onto a finding claiming a different, more severe CVE it
-        cannot demonstrate."""
-        if not self._recipes or finding.data.get("kind") != _KNOWN_VULN:
-            return None
-        host = urlsplit(finding.where).hostname or finding.where.split("/", 1)[0].split(":", 1)[0]
-        node = next((n for n in world.nodes("domain") if n.payload.name == host), None)
-        if node is None:
-            return None
-        scan = world.latest("cve_scan", node.id)
-        if scan is None or scan.payload.match != _VERSION_MATCH:
-            return None
-        primary = _primary_cve(finding)
-        recipe = self._recipes.get(primary)
-        if recipe is None or primary not in {c.id.upper() for c in scan.payload.cves}:
-            return None
-        http = world.latest("http", node.id)
-        base = getattr(http.payload, "url", "") if http is not None else ""
-        parts = urlsplit(base or f"https://{host}/")
-        authority = parts.netloc or host
-        scheme = parts.scheme or "https"
-        # Every candidate path the recipe names becomes a url against this host, tried in order, so a
-        # CVE that lives at any of several endpoints is checked at all of them rather than only the
-        # first. The path is not normalized, so the traversal the recipe encodes reads as written.
-        urls = [f"{scheme}://{authority}{path}" for path in recipe.paths]
-        expect = (f"the {recipe.cve} reproduction is confirmed when the live response "
-                  f"satisfies: {recipe.expect}")
-        return {"method": recipe.method, "url": urls[0], "urls": urls,
-                "headers": [list(pair) for pair in recipe.headers], "body": recipe.body,
-                "matchers": [_matcher_dict(m) for m in recipe.matchers],
-                "matchers_condition": recipe.matchers_condition, "expect": expect,
-                "source": f"reproduction:{recipe.cve}"}
 
     def _observed_gets(self, world: World) -> dict:
         """Every GET the surface recorded, keyed by normalized url, so a finding's proof of

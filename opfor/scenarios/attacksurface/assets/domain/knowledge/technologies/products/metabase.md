@@ -16,12 +16,3 @@ cookie, two high-signal markers a page merely naming Metabase in prose does not 
 is not in that shell, but `/api/session/properties` returns it unauthenticated in
 `"version":{"tag":"vx.y.z"}`, so that path is probed and the version read there, the leading `v`
 dropped so the value is the plain NVD version.
-
-## Reproductions
-
-Metabase before 0.40.5 carries CVE-2021-41277, an unauthenticated local file read through the
-custom GeoJSON map loader, whose `url` parameter is loaded without validation so a `file://` URL
-reads an arbitrary file. Its read-only reproduction recipe is not written here, it is the vendored
-Nuclei template `knowledge/nuclei/CVE-2021-41277.yaml`, which opfor consumes as data. The recipe
-grounds an accurate PoC only for a CVE the lookup tied to the running version, and the PoC is written
-for the operator to run, never sent to the target by this reconnaissance run.

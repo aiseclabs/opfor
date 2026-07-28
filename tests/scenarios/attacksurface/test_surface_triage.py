@@ -39,10 +39,10 @@ def test_dangling_cname_target_is_surfaced_for_takeover_judgment():
     assert "CNAME to old-app.herokuapp.com" in p
 
 
-def test_exposed_admin_interface_class_is_always_present_with_the_admin_host():
+def test_missing_authentication_class_is_always_present_with_the_admin_host():
     _, sc, _ = _run_capturing()
     assert "https://admin.example.com/admin" in _prompt(sc)
-    assert "Exposed Non-Production" in _knowledge(sc)
+    assert "Missing Authentication On An Exposed Interface" in _knowledge(sc)
 
 
 def test_authenticated_endpoint_is_excluded_from_the_surface():
@@ -163,8 +163,8 @@ def test_large_surface_is_split_across_calls():
 def test_knowledge_and_class_ids_ride_the_system_prompt():
     _, sc, _ = _run_capturing()
     system = _knowledge(sc)
-    assert "Class id: exposed-admin-interface" in system
-    assert "Exposed Non-Production Or Admin Interface" in system
+    assert "Class id: missing-authentication" in system
+    assert "Missing Authentication On An Exposed Interface" in system
 
 
 def test_a_model_finding_carries_its_provenance_breadcrumb():
@@ -173,7 +173,7 @@ def test_a_model_finding_carries_its_provenance_breadcrumb():
     # the model mints a finding on the admin host, which the pipeline resolved and probed, so the
     # finding must carry a `sources` breadcrumb naming the world facts it was judged from
     mint = json.dumps({"findings": [
-        {"category": "exposed-admin-interface", "title": "Exposed admin", "severity": "HIGH",
+        {"category": "missing-authentication", "title": "Exposed admin", "severity": "HIGH",
          "where": "https://admin.example.com/admin", "evidence": "an admin panel answered"}]})
     report, _, _ = _run_capturing(provider=MockProvider(default=mint))
     found = [f for f in report.findings if f.where == "https://admin.example.com/admin"]

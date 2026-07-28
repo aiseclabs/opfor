@@ -18,6 +18,30 @@ classes are judged with, read into the model at run time. It is a sibling of `kn
 child, since it is the shared method rather than a backtested claim, mirroring the codejury domain
 layout where `playbook/` sits beside `knowledge/` under the class content root.
 
+## The Finding Taxonomy
+
+A finding class is anchored to a recognized weakness type, not invented ad hoc, so the tree stays
+systematic and a run's output maps onto categories an operator already knows. The classes sit on two
+axes, told apart by what mints them.
+
+- The surface-shape axis, minted by the shape of the exposed surface and anchored to a CWE. These
+  are mutually exclusive, one surface is one shape. `missing-authentication` is a sensitive interface
+  reachable with no credential, CWE-306, OWASP A01. `improper-authentication` is a gate that appears
+  present but does not hold, CWE-287, OWASP A07. `information-exposure` is a served map of the
+  surface, a spec or a schema, CWE-200, OWASP A05. `subdomain-takeover` is a dangling name pointing
+  at a claimable provider resource, a dangling DNS record, OWASP A05.
+- The product-provenance axis, minted by a named CVE against an identified product.
+  `known-vulnerability` is a version-matched CVE that bears on the exposed surface, CWE-1395, OWASP
+  A06.
+
+The two axes can both fit one surface, an unauthenticated console running a version with a known
+pre-auth flaw is both a shape and a provenance hit. The dedup rule is that a named CVE wins, report
+`known-vulnerability` and let the exposure be the reachability lever that class weighs, so one
+weakness is graded once by the axis carrying the most specific evidence. Absent a CVE, report the
+shape class. A new technique extends an existing class where its weakness type fits, a genuinely new
+weakness type earns a new file anchored to its own CWE, it is never a loose synonym of an existing
+class.
+
 The tree:
 
 - `findings/` one file per finding class the triage model may mint. The body is the judgment prose.
@@ -34,15 +58,29 @@ The tree:
 This is the only index in the tree. Each subdirectory carries its files directly with no
 per-directory index, matching the codejury convention of a single knowledge index.
 
-A finding file's frontmatter fields:
+Every finding file follows one contract, so the classes read uniformly and a reviewer knows where to
+look. The frontmatter fields:
 
 - `title` a short human name for the class.
 - `impact` the default severity the model reports the class at, one of INFO, LOW, MEDIUM, HIGH,
   CRITICAL. The model may grade up or down on the evidence against the severity rubric, this is the
   starting rank. Every class is offered to the model on a run, there is no keyword pre-selection.
+- `tags` the external anchors, a `cwe-nnn` weakness type and an `owasp-annn` category, the
+  recognized codes that keep a class from drifting into a loose synonym of another. A class with no
+  clean CWE, subdomain takeover, carries only its OWASP category and names its shape, a dangling DNS
+  record, in the prose rather than inventing a code.
 - `clues`, `signatures` the deterministic payloads a class surfaces, if any, a clue string for a
   clue-based class and a CNAME signature for subdomain takeover. The triage reads them off the
   rendered surface, a capability never does, invariant 1.
+
+The body follows one section order. A lead paragraph states what the class is and its impact. `##
+Signals` says how it shows on the recon surface. `## Positive And Negative Examples` gives a real
+case and a look-alike that is not this class, in surface terms, a status and a body excerpt, never
+source code, since this scenario judges an exposed surface and not a codebase. `## Not A Finding`
+draws the class-specific false-positive boundary and defers the shared look-alikes to the playbook
+traps. `## Evidence And PoC` says what to cite and the safe read that demonstrates it. A class may
+add a levers or a reachable-versus-declared subsection between Signals and Examples where its
+judgment needs one.
 
 A finding's PoC is grounded after triage, not written into knowledge, strongest first. When a
 finding's proof names a request the surface already observed, a safe read, the grounder rewrites the

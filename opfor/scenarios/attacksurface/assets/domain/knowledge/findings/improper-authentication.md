@@ -1,6 +1,7 @@
 ---
 title: Improper authentication
 impact: INFO
+tags: [cwe-287, owasp-a07]
 ---
 
 # Improper Authentication
@@ -8,7 +9,9 @@ impact: INFO
 This class judges whether a host's perimeter authentication actually covers it. A per-request
 zero-trust proxy such as Google IAP, Cloudflare Access, or Azure AD Application Proxy that
 fronts every path is the target doing the right thing. The finding is when that gate is
-absent, weaker than it looks, or bypassable, so an interface answers without it.
+absent, weaker than it looks, or bypassable, so an interface answers without it. Where missing-
+authentication asks whether a sensitive surface is exposed at all, this class asks whether a gate
+that appears present truly holds, so a host that looks protected is not waved through unchecked.
 
 A host can sit behind a gate that stands in front of the service. Two kinds of gate exist
 and they do not carry the same assurance, so the judge must tell them apart.
@@ -27,7 +30,7 @@ host, a redirect on the root is not a clean bill for the whole host, the individ
 operations still have to be verified, and any operation that answers with content instead
 of the SSO redirect is a gap to raise, not to wave through.
 
-## How To Identify The Signal
+## Signals
 
 Read the evidence, never guess from a host name.
 
@@ -53,7 +56,16 @@ gate. For an application SSO host this bar is lower, since it does not cover eve
 construction, so a verified operation that answered without the redirect is a real gap, and
 a known authentication bypass in the named SSO product is worth reporting.
 
-## What Is Not A Finding
+## Positive And Negative Examples
+
+- Positive. A host redirects the root to an Okta org, yet `GET /api/health` answers `200` with a
+  status body and no redirect, an application SSO that a background route skips, a gap to raise.
+  Positive. A `WWW-Authenticate` gate on the root while `GET /actuator/env` answers `200` with a
+  config dump, the gate does not cover the management surface.
+- Negative. Every probed path on the host answers `302` to `accounts.google.com` and the response
+  carries an IAP assertion header, a per-request proxy covering the whole host, report INFO.
+
+## Not A Finding
 
 - A host behind a per-request proxy, Google IAP, Cloudflare Access, or Azure AD Application
   Proxy, where the proxy header or cookie is present. The whole host is gated.

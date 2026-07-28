@@ -13,12 +13,12 @@ from tests.scenarios.attacksurface.fixtures import _run_capturing
 
 def test_model_findings_are_mapped_to_typed_findings():
     reply = json.dumps({"findings": [{
-        "category": "unauthenticated-interface", "title": "Open admin endpoint", "severity": "HIGH",
+        "category": "missing-authentication", "title": "Open admin endpoint", "severity": "HIGH",
         "where": "https://admin.example.com/admin", "evidence": "an admin dashboard answered 200",
         "poc": "curl -s https://admin.example.com/admin", "confidence": 0.9,
     }]})
     report, _, _ = _run_capturing(provider=MockProvider(responses=[reply]))
-    found = [f for f in report.findings if f.data.get("kind") == "unauthenticated-interface"]
+    found = [f for f in report.findings if f.data.get("kind") == "missing-authentication"]
     assert found and found[0].severity == "HIGH"
     assert found[0].where.endswith("/admin")
     # the poc field is the grounder's, an observed safe read grounds to a generated PoC script
@@ -46,7 +46,7 @@ def test_finding_without_a_location_is_dropped():
 
 
 def test_a_finding_host_that_is_only_a_substring_of_a_report_host_is_dropped():
-    data = {"category": "unauthenticated-interface", "title": "x", "severity": "HIGH",
+    data = {"category": "missing-authentication", "title": "x", "severity": "HIGH",
             "where": "https://example.com/admin"}
     # the report only mentions notexample.com, so example.com must not be accepted as a substring
     assert _finding_from_dict(data, report_text="server notexample.com only") is None
@@ -73,7 +73,7 @@ def test_malformed_findings_are_dropped_loudly_with_a_degraded_marker():
     from opfor.scenarios.attacksurface.assets.domain.triage import SurfaceTriage
 
     reply = json.dumps({"findings": [
-        {"category": "unauthenticated-interface", "title": "ok", "severity": "HIGH",
+        {"category": "missing-authentication", "title": "ok", "severity": "HIGH",
          "where": "https://h/a"},
         {"category": "x"},          # no location, dropped
         "not-an-object",            # not a dict, dropped
@@ -95,9 +95,9 @@ def test_a_finding_whose_location_is_not_in_the_report_is_dropped():
     from opfor.scenarios.attacksurface.assets.domain.triage import SurfaceTriage
 
     reply = json.dumps({"findings": [
-        {"category": "unauthenticated-interface", "title": "real", "severity": "HIGH",
+        {"category": "missing-authentication", "title": "real", "severity": "HIGH",
          "where": "https://h/real"},
-        {"category": "unauthenticated-interface", "title": "invented", "severity": "HIGH",
+        {"category": "missing-authentication", "title": "invented", "severity": "HIGH",
          "where": "https://evil.invented/x"},
     ]})
     triage = SurfaceTriage([], provider=MockProvider(responses=[reply]), model="m")
@@ -136,12 +136,12 @@ def test_dedup_collapses_title_and_scheme_variance_but_keeps_distinct_paths():
     from opfor.core.result import Finding
     from opfor.scenarios.attacksurface.assets.domain.triage import SurfaceTriage
     # same class + location worded two ways, plus a scheme/slash variant, collapse to one
-    v1 = Finding(id="finding:unauthenticated-interface:https://h/a",
+    v1 = Finding(id="finding:missing-authentication:https://h/a",
                  title="open endpoint", severity="LOW", where="https://h/a")
-    v2 = Finding(id="finding:unauthenticated-interface:https://h/a/",
+    v2 = Finding(id="finding:missing-authentication:https://h/a/",
                  title="unauthenticated endpoint", severity="LOW", where="https://h/a/")
     # a genuinely different path stays a separate finding
-    other = Finding(id="finding:unauthenticated-interface:https://h/b",
+    other = Finding(id="finding:missing-authentication:https://h/b",
                     title="open endpoint", severity="LOW", where="https://h/b")
     out = SurfaceTriage._dedup([v1, v2, other])
     assert len(out) == 2

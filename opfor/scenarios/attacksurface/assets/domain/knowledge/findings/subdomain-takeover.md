@@ -1,6 +1,7 @@
 ---
 title: Subdomain takeover
 impact: HIGH
+tags: [owasp-a05]
 signatures:
 - service: GitHub Pages
   signature: there isn't a github pages site here
@@ -123,10 +124,23 @@ Three shapes reach you:
   at a released resource. This is the weakest signal, low, worth verifying for takeover
   rather than a confirmed one.
 
-## What Is Not A Finding
+## Positive And Negative Examples
+
+- Positive. `app.acme.example` has a CNAME to `acme.github.io`, and `GET https://app.acme.example`
+  answers `404` with "there isn't a github pages site here", a released GitHub Pages resource under
+  the operator's name. Positive. `assets.acme.example` CNAMEs to `acme-assets.s3.amazonaws.com` and
+  the body reads "the specified bucket does not exist", a lapsed S3 bucket anyone can re-register.
+- Negative. `www.acme.example` answers `404` with the operator's own branded error page, a normal
+  application miss, not a provider's unclaimed-resource page. Negative. A CNAME to
+  `cdn.cloudflare.net` or to the operator's own apex, infrastructure the operator controls, not a
+  claimable provider name.
+
+## Not A Finding
 
 A live host serving the operator's own content, or a normal 404 from the operator's own
-application rather than a hosting provider's unclaimed-resource page.
+application rather than a hosting provider's unclaimed-resource page. A CNAME to infrastructure the
+operator controls, a Cloudflare target or the operator's own domain, even when the name reads
+oddly, since the resource is not one a stranger can claim.
 
 ## Evidence And PoC
 
@@ -136,5 +150,3 @@ provider the target belongs to. The PoC is the safe observation, `curl -s <url>`
 the unclaimed page or a `dig <name>` showing the CNAME to the released target, and a note
 that an operator should confirm the dangling record before claiming the resource. Do not
 claim it here.
-
-A CNAME pointing at third-party hosting, a `herokudns.com`, `netlify.app`, `vercel-dns.com`, `github.io`, or similar provider target, is the natural place for this risk: the subdomain rides on a provider resource the org may have released. Weigh such a host that also reads dangling or unclaimed as a takeover candidate.

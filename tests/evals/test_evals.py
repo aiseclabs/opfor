@@ -34,16 +34,16 @@ def test_knowledge_inventory_enumerates_every_claim_by_ref_and_kind():
     # without a backtest shows up as an uncovered ref rather than being invisible
     assert by_ns["product"] == 8
     assert by_ns["framework"] == 2
-    assert by_ns["class"] == 8
+    assert by_ns["class"] == 5
     assert by_ns["clue"] >= 7 and by_ns["signature"] >= 20
     # a finding class is judgment, its embedded detection payloads are detection, so the two
     # regimes are told apart by the ref's kind
-    assert items["class:api-spec-exposure"].kind == JUDGMENT
+    assert items["class:information-exposure"].kind == JUDGMENT
     assert items["clue:swagger-openapi"].kind == DETECTION
     # a concept is one file: the judgment prose and the detection payloads it surfaces share the
     # finding's own file, told apart by the ref's kind rather than by living in two trees
-    assert items["clue:swagger-openapi"].path == items["class:api-spec-exposure"].path
-    assert "findings" in items["class:api-spec-exposure"].path.parts
+    assert items["clue:swagger-openapi"].path == items["class:information-exposure"].path
+    assert "findings" in items["class:information-exposure"].path.parts
 
 
 def test_coverage_matrix_counts_cases_per_claim_and_flags_gaps():

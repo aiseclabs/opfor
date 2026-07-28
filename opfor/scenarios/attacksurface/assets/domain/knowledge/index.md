@@ -17,7 +17,7 @@ The tree:
   evidence, that evidence too, its clues or takeover signatures. So a concept is one file, its
   judgment and the detection it rests on read together, and the backtest scores the class by model
   judgment and each embedded payload by an exact match, apart.
-- `fingerprints/` deterministic per-product and per-framework knowledge, read to identify and enrich
+- `technologies/` deterministic per-product and per-framework knowledge, read to identify and enrich
   rather than to mint a finding. `products/` open-source products identified by markers, each with a
   version and a `cpe` that drives the CVE lookup. `frameworks/` front-end frameworks detected as
   context tags, no version lookup. How a host is fronted, a CDN, cloud, or vendor, is left to the

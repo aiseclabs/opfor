@@ -26,7 +26,7 @@ _BODY_EVIDENCE = 2048
 
 
 def load_frameworks(directory: Path) -> dict:
-    """The front-end framework signatures, one `fingerprints/frameworks/<name>.md` unit each. The
+    """The front-end framework signatures, one `technologies/frameworks/<name>.md` unit each. The
     unit's title is the framework name, and its frontmatter carries the lowercased body and header
     markers and an optional compiled version pattern. A malformed version regex fails the run loudly
     here, invariant 5."""

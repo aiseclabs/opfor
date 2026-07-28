@@ -96,7 +96,7 @@ class ReproductionRecipe:
 
 def load_reproductions(directory) -> tuple[ReproductionRecipe, ...]:
     """The reproduction recipes carried in the `reproductions` frontmatter of the product files
-    under `fingerprints/products/`, since a CVE reproduction is specific to the product it targets
+    under `technologies/products/`, since a CVE reproduction is specific to the product it targets
     and lives with that product's own knowledge, not with the generic judgment class. An entry with
     no CVE id is skipped, so a malformed recipe adds nothing rather than grounding on an empty id."""
     out: list[ReproductionRecipe] = []

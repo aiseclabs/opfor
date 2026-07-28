@@ -67,10 +67,11 @@ KNOWLEDGE = Path(__file__).resolve().parent / "knowledge"
 @dataclass(frozen=True, kw_only=True)
 class KnowledgePaths:
     """The fixed layout of the domain class's knowledge tree, resolved to absolute paths, so the
-    tree's shape lives in one contract rather than scattered `root / "fingerprints" / "products"`
+    tree's shape lives in one contract rather than scattered `root / "technologies" / "products"`
     conventions that drift as the tree grows. A finding file under `findings` carries both the
     model-read judgment prose and, in its frontmatter, the deterministic payloads that class
-    surfaces, so a concept is one file. `fingerprints` holds the technology identification data."""
+    surfaces, so a concept is one file. `technologies` holds the technology identification data,
+    the same directory name the chain class uses for its role fingerprints."""
 
     root: Path
     products: Path
@@ -80,9 +81,9 @@ class KnowledgePaths:
 
     @classmethod
     def under(cls, root: Path) -> "KnowledgePaths":
-        fingerprints = root / "fingerprints"
-        return cls(root=root, products=fingerprints / "products",
-                   frameworks=fingerprints / "frameworks", findings=root / "findings",
+        technologies = root / "technologies"
+        return cls(root=root, products=technologies / "products",
+                   frameworks=technologies / "frameworks", findings=root / "findings",
                    nuclei=root / "nuclei")
 
 

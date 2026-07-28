@@ -11,9 +11,9 @@ clues:
 
 A live, internet-facing host whose nature makes it a foothold worth reducing even before a
 specific flaw is found: an administrative console, a staging or test deployment, an
-internal tool, or an infrastructure management surface. These are reported as a MEDIUM
-because an attacker treats them as softer targets, often weaker auth, debug on, or real
-data in a non-production copy.
+internal tool, or an infrastructure management surface. An attacker treats these as softer
+targets, often weaker auth, debug on, or real data in a non-production copy, so their nature
+warrants review before a specific flaw is found. Grade on the shared severity rubric.
 
 ## Signals
 

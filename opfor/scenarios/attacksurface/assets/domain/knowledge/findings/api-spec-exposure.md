@@ -50,12 +50,10 @@ groups.
 
 ## Grading
 
-Medium by default when the specification is public but its operations are gated or unproven,
-the spec maps the surface but is not itself the data. Grade up when the verification shows
-operations reachable without authentication, higher when those return sensitive data.
-Unauthenticated write operations are the strongest case, but if they were only declared and
-not verified, say so and mark them for authorized confirmation rather than asserting they
-are open.
+Grade on the shared severity rubric, reading the three groups above as its reachability axis.
+A verified unauthenticated operation grades on what it returns, a gated or a
+declared-but-unprobed one stays low. An unauthenticated write operation is the strongest case,
+but a declared and unverified one is marked for authorized confirmation, never asserted open.
 
 ## Evidence And PoC
 

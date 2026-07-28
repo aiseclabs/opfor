@@ -71,12 +71,15 @@ class KnowledgePaths:
     conventions that drift as the tree grows. A finding file under `findings` carries both the
     model-read judgment prose and, in its frontmatter, the deterministic payloads that class
     surfaces, so a concept is one file. `technologies` holds the technology identification data,
-    the same directory name the chain class uses for its role fingerprints."""
+    the same directory name the chain class uses for its role fingerprints. `playbook` holds the
+    cross-cutting judgment method every finding class shares, the severity rubric and the
+    false-positive traps triage reads into the judge."""
 
     root: Path
     products: Path
     frameworks: Path
     findings: Path
+    playbook: Path
     nuclei: Path
 
     @classmethod
@@ -84,7 +87,7 @@ class KnowledgePaths:
         technologies = root / "technologies"
         return cls(root=root, products=technologies / "products",
                    frameworks=technologies / "frameworks", findings=root / "findings",
-                   nuclei=root / "nuclei")
+                   playbook=root / "playbook", nuclei=root / "nuclei")
 
 
 PATHS = KnowledgePaths.under(KNOWLEDGE)

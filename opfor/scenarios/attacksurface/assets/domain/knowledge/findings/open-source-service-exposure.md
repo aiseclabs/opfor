@@ -42,17 +42,15 @@ the version is what a later step matches against known vulnerabilities.
 
 Report an open-source service exposure when a management, administrative, or operational
 interface of the product is reachable without authentication, or when a version is visible
-that a later step should check against known vulnerabilities. Severity follows what the
-interface grants. A read-only login page of a product meant to face the internet is low or
-informational. An unauthenticated admin console, a metrics or debug surface, a cluster or
-config API, or an instance whose visible version carries known critical vulnerabilities is
-high.
+that a later step should check against known vulnerabilities. Grade on the shared severity
+rubric, a read-only login page of a product meant to face the internet is low, an
+unauthenticated admin console, a metrics or debug surface, or a cluster or config API is high.
 
 ## What Is Not A Finding
 
-- A product login page that correctly enforces authentication, a gate is protection.
-- A product genuinely meant to be public, judged by what it serves, not by being recognized.
-- A host behind a zero-trust proxy, see that class, the service is not directly exposed.
+Judge on what the product serves, not on recognizing it. Beyond the shared false-positive
+traps, one class note, a product behind a zero-trust proxy, see the improper-authentication
+class, is not directly exposed even when its login page is recognizable.
 
 ## Evidence And PoC
 

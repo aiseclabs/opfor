@@ -142,6 +142,18 @@ def _load_clues(directory: Path) -> list[dict]:
     return clues
 
 
+def _load_playbook(directory: Path) -> dict[str, str]:
+    """The cross-cutting judgment prose keyed by file stem, read from `playbook/`, so the judge
+    takes the severity rubric and the methodology and the challenger takes the false-positive
+    traps. It is shared by every finding class rather than restated in each, and it is data a run
+    reads, not a constant in code, invariant 1. Absent, the prompts fall back to their static
+    text, so a missing tree is no crash."""
+    out: dict[str, str] = {}
+    for path, _meta, body in iter_md_docs(directory):
+        out[path.stem] = body
+    return out
+
+
 def _load_takeover(directory: Path) -> list[tuple[str, str]]:
     """The deterministic takeover signatures, a service name and its unclaimed-page text, read from
     the `signatures` frontmatter under `findings/`, so a dangling name pointing at an unclaimed
@@ -188,11 +200,19 @@ class SurfaceTriage(Triage):
         self._classes = []
         self._clues = []
         self._takeover = []
+        self._playbook: dict[str, str] = {}
         for directory in knowledge_dirs:
             directory = Path(directory)
             self._classes.extend(_load_classes(directory / "findings"))
             self._clues.extend(_load_clues(directory / "findings"))
             self._takeover.extend(_load_takeover(directory / "findings"))
+            self._playbook.update(_load_playbook(directory / "playbook"))
+        # The challenger's whole job is refuting a false positive, so the false-positive traps
+        # ride its system prompt, the shared catalogue rather than a per-finding restatement.
+        traps = self._playbook.get("false-positive-traps", "")
+        self._challenger_system = (
+            f"{CHALLENGER_SYSTEM}\n\n# False-positive traps to check\n\n{traps}\n"
+            if traps else CHALLENGER_SYSTEM)
         self._class_ids = frozenset(c["id"] for c in self._classes)
         self._class_impact = {c["id"]: c["impact"] for c in self._classes}
         self._renderer = SurfaceRenderer(self._clues, self._takeover, recipe_cves=recipe_cves)
@@ -246,13 +266,27 @@ class SurfaceTriage(Triage):
         return out
 
     def _system(self) -> str:
-        """The system prompt, the static instruction plus every finding class, each labelled with
-        its id so the model can name it as a finding's category. Every class is offered on every
-        run, never gated out by a keyword pre-filter, so the judge decides on the evidence and a
-        class is never silently withheld. Constant across chunks, so it rides the cached prompt."""
+        """The system prompt, the static instruction, the shared playbook, then every finding
+        class, each labelled with its id so the model can name it as a finding's category. Every
+        class is offered on every run, never gated out by a keyword pre-filter, so the judge
+        decides on the evidence and a class is never silently withheld. The playbook rides once,
+        the calibration every class shares rather than restated per class. Constant across chunks,
+        so it rides the cached prompt."""
         blocks = [f"## Class id: {c['id']}\n\n{c['body']}" for c in self._classes]
         knowledge = "\n\n---\n\n".join(blocks)
-        return f"{SYSTEM}\n\n# Knowledge, the classes of finding to judge against\n\n{knowledge}\n"
+        system = SYSTEM
+        guidance = self._playbook_prose()
+        if guidance:
+            system = f"{system}\n\n# Playbook, the judgment method shared by every class\n\n{guidance}\n"
+        return f"{system}\n\n# Knowledge, the classes of finding to judge against\n\n{knowledge}\n"
+
+    def _playbook_prose(self) -> str:
+        """The playbook the judge reads, in a fixed order so the cached prompt is stable, the
+        grading scale first, then the traps, then the orienting methodology. Empty when no
+        playbook tree is present."""
+        order = ("severity-rubric", "false-positive-traps", "methodology")
+        parts = [self._playbook[k] for k in order if k in self._playbook]
+        return "\n\n---\n\n".join(parts)
 
     def _judge_chunk(self, chunk: str, *, system: str | None = None) -> list[Finding]:
         result = self._provider.complete(
@@ -315,7 +349,7 @@ class SurfaceTriage(Triage):
 
     def _challenge(self, finding: Finding, chunk: str) -> tuple[bool, str]:
         result = self._challenger.complete(
-            system=CHALLENGER_SYSTEM,
+            system=self._challenger_system,
             messages=[Message(role="user", content=self._case(finding, chunk))],
             model=self._challenger_model,
             max_tokens=self._max_tokens,

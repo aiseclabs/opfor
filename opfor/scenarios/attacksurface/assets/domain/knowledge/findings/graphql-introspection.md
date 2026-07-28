@@ -21,8 +21,9 @@ operations in it.
 
 ## Grading
 
-Medium by default. Grade up when the schema exposes mutations or clearly sensitive query
-fields that should sit behind auth.
+Grade on the shared severity rubric. The class-specific lever is the schema, an introspection
+that exposes mutations or clearly sensitive query fields ranks above one that reveals only
+public read types.
 
 ## Evidence And PoC
 

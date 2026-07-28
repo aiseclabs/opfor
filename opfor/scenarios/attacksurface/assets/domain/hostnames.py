@@ -1,9 +1,9 @@
-"""Shared DNS-name primitives, the seam between asset classes.
+"""Shared DNS-name primitives, the seam between the domain class and the CLI.
 
-The registrable root of a host and the shape check for a host name are not any single
-class's alone. The domain class reads them to fold a subdomain to its root and to filter a
-certificate log, and the CLI reads `registrable_root` to authorize a subdomain by its root.
-So they live here, one shared place, rather than a class or the CLI reaching into another.
+The registrable root of a host and the shape check for a host name are not the domain
+capabilities' alone. The domain class reads them to fold a subdomain to its root and to filter
+a certificate log, and the CLI reads `registrable_root` to authorize a subdomain by its root.
+So they live here, one shared place, rather than a capability or the CLI reaching into another.
 """
 
 from __future__ import annotations

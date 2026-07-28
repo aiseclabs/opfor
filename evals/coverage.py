@@ -17,9 +17,7 @@ frontmatter, the deterministic payloads that class surfaces, so a concept is one
 per ref, so the judgment class and each of its detection payloads are scored apart even though they
 share a file.
 
-This report is attack-surface only, by decision. The onchain scenario identifies with a model and
-carries no deterministic fingerprint table, so there is no exact-match backtest to cover, and its
-knowledge is left out until a scenario-parameterized coverage report is worth building.
+This report covers the attack-surface knowledge tree, the one scenario that ships a knowledge tree.
 """
 
 from __future__ import annotations
@@ -30,8 +28,8 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from opfor.core.markdown_docs import iter_md_docs
-from opfor.scenarios.attacksurface.assets.domain import KNOWLEDGE, KnowledgePaths
-from opfor.scenarios.attacksurface.assets.domain.nuclei import NucleiTemplate, parse_template
+from opfor.scenarios.attacksurface import KNOWLEDGE, KnowledgePaths
+from opfor.scenarios.attacksurface.nuclei import NucleiTemplate, parse_template
 
 CORPUS = Path(__file__).resolve().parent / "corpus"
 

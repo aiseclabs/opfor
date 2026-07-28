@@ -4,7 +4,7 @@ import pytest
 
 from opfor.core import Budget, MockProvider, Scope, run
 from opfor.scenarios.attacksurface.lifecycle.triage import TriageError
-from opfor.scenarios.attacksurface.assets.domain.sources.observations import Resolution
+from opfor.scenarios.attacksurface.sources.observations import Resolution
 from tests.scenarios.attacksurface.fixtures import (
     ROOT,
     HostScope,
@@ -109,7 +109,7 @@ def test_graphql_without_operations_is_not_surfaced():
 def test_empty_body_yields_no_exposure_clue():
     # a host that serves an empty 200 for /metrics has no body to match, so the deterministic
     # clue must not fire, the clue asserts on content, not the path
-    from opfor.scenarios.attacksurface.assets.domain.types import Endpoint
+    from opfor.scenarios.attacksurface.types import Endpoint
 
     sc = _make()
     empty = Endpoint(url="https://cf.example.com/metrics", path="/metrics", status=200, body="")
@@ -124,7 +124,7 @@ def test_resolution_failure_suppresses_the_model_call():
     def none_resolve(name):
         return Resolution(resolvable=False)
 
-    _, sc, _ = _run_capturing(_seed(classes=("domain",)), resolve_fn=none_resolve)
+    _, sc, _ = _run_capturing(_seed(), resolve_fn=none_resolve)
     assert sc.triage._provider.calls == []
 
 

@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 
 from opfor.core import Scope
-from opfor.scenarios.attacksurface.assets.domain.sources.observations import Resolution
+from opfor.scenarios.attacksurface.sources.observations import Resolution
 
 from tests.scenarios.attacksurface.fixtures import (
     HostScope,
@@ -13,7 +13,7 @@ from tests.scenarios.attacksurface.fixtures import (
 
 
 def test_http_probe_tries_every_public_ip_retries_timeouts_and_raises_the_unexpected(monkeypatch):
-    from opfor.scenarios.attacksurface.assets.domain.sources import http as domains
+    from opfor.scenarios.attacksurface.sources import http as domains
 
     # the first public address refuses on both schemes, the second answers, so a multi-ip
     # name is alive rather than judged dead on the first unlucky address
@@ -98,7 +98,7 @@ def test_http_probe_denied_when_domain_out_of_scope():
 def test_fetch_url_tries_every_public_address_not_only_the_first(monkeypatch):
     # a host whose first address is dead but second is live must still be enriched, so the
     # fetch seam iterates all public addresses the way the alive probe does
-    from opfor.scenarios.attacksurface.assets.domain.sources import http as domains
+    from opfor.scenarios.attacksurface.sources import http as domains
     seen = []
 
     def connect(name, ip, scheme, path, **kw):
@@ -112,7 +112,7 @@ def test_fetch_url_tries_every_public_address_not_only_the_first(monkeypatch):
     assert result.status == 200 and "2.2.2.2" in seen
 
 def test_fetch_seams_are_loud_on_the_unexpected_and_name_why_no_address_answered(monkeypatch):
-    from opfor.scenarios.attacksurface.assets.domain.sources import http as domains
+    from opfor.scenarios.attacksurface.sources import http as domains
 
     # every fetch seam shares the alive probe's contract: only a transport error is caught and
     # continued past, an unexpected error is raised loud rather than swallowed as a null status.
@@ -144,7 +144,7 @@ def test_connect_closes_the_raw_socket_when_the_tls_handshake_fails(monkeypatch)
     import socket
     import ssl
 
-    from opfor.scenarios.attacksurface.assets.domain.sources import http as domains
+    from opfor.scenarios.attacksurface.sources import http as domains
 
     closed = {"n": 0}
 
@@ -165,7 +165,7 @@ def test_connect_closes_the_raw_socket_when_the_tls_handshake_fails(monkeypatch)
     assert closed["n"] == 1
 
 def test_read_capped_stops_at_the_wall_clock_deadline(monkeypatch):
-    from opfor.scenarios.attacksurface.assets.domain.sources import http as domains
+    from opfor.scenarios.attacksurface.sources import http as domains
     clock = {"t": 0.0}
     monkeypatch.setattr(domains.time, "monotonic", lambda: clock["t"])
 
@@ -179,7 +179,7 @@ def test_read_capped_stops_at_the_wall_clock_deadline(monkeypatch):
     assert 0 < len(body) < 1000
 
 def test_signal_headers_keeps_identity_drops_noise_and_masks_cookie_value():
-    from opfor.scenarios.attacksurface.assets.domain.sources import http as domains
+    from opfor.scenarios.attacksurface.sources import http as domains
 
     class _Resp:
         def getheaders(self):
@@ -199,7 +199,7 @@ def test_signal_headers_keeps_identity_drops_noise_and_masks_cookie_value():
     assert "secretvalue" not in hdrs["set-cookie"]
 
 def test_signal_headers_capture_security_headers_complete_past_the_identification_cap():
-    from opfor.scenarios.attacksurface.assets.domain.sources import http as domains
+    from opfor.scenarios.attacksurface.sources import http as domains
 
     # a wall of non-security headers beyond the identification cap, with the security family
     # arriving last, so a naive cap would drop them and triage could not tell absent from cut
@@ -219,7 +219,7 @@ def test_signal_headers_capture_security_headers_complete_past_the_identificatio
     assert captured["x-frame-options"] == "DENY"
 
 def test_signal_headers_keep_cookie_flags_but_drop_the_secret_value():
-    from opfor.scenarios.attacksurface.assets.domain.sources import http as domains
+    from opfor.scenarios.attacksurface.sources import http as domains
 
     class Resp:
         def getheaders(self):
@@ -233,7 +233,7 @@ def test_signal_headers_keep_cookie_flags_but_drop_the_secret_value():
     assert all("SECRETVALUE" not in v and "xyztoken" not in v for v in cookies)
 
 def test_graphql_introspection_raises_on_a_server_error(monkeypatch):
-    from opfor.scenarios.attacksurface.assets.domain.sources import http as domains
+    from opfor.scenarios.attacksurface.sources import http as domains
     monkeypatch.setattr(domains, "resolve_host", lambda n: Resolution(resolvable=True, addresses=("2.2.2.2",)))
     monkeypatch.setattr(domains, "_connect", lambda *a, **k: (500, "", "", "", "", ()))
     # a 5xx introspection is errored and unknown, never reported as safely disabled
@@ -241,7 +241,7 @@ def test_graphql_introspection_raises_on_a_server_error(monkeypatch):
         domains.graphql_introspect("h.example.com", "/graphql")
 
 def test_graphql_introspection_is_off_on_a_client_refusal(monkeypatch):
-    from opfor.scenarios.attacksurface.assets.domain.sources import http as domains
+    from opfor.scenarios.attacksurface.sources import http as domains
     monkeypatch.setattr(domains, "resolve_host", lambda n: Resolution(resolvable=True, addresses=("2.2.2.2",)))
     monkeypatch.setattr(domains, "_connect",
                         lambda *a, **k: (403, "", "", "introspection disabled", "", ()))

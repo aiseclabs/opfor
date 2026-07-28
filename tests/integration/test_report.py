@@ -12,7 +12,7 @@ import json
 from opfor.core import Fact, Node, World
 from opfor.core.phase import Phase
 from opfor.core.result import CLOSED, Finding, Report
-from opfor.scenarios.attacksurface.assets.domain.types import (
+from opfor.scenarios.attacksurface.types import (
     CVE,
     CVEScan,
     DomainData,

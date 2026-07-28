@@ -4,11 +4,11 @@ import json
 
 import pytest
 
-from opfor.scenarios.attacksurface.assets.domain.sources.observations import Resolution
+from opfor.scenarios.attacksurface.sources.observations import Resolution
 
 
 def test_hosts_from_file_normalizes_a_dns_export(tmp_path):
-    from opfor.scenarios.attacksurface.assets.domain.sources import hosts_from_file
+    from opfor.scenarios.attacksurface.sources import hosts_from_file
 
     export = tmp_path / "dns.txt"
     export.write_text(
@@ -26,8 +26,8 @@ def test_hosts_from_file_normalizes_a_dns_export(tmp_path):
 def test_virustotal_enumeration_flags_truncation_at_the_page_cap(monkeypatch):
     import urllib.request
 
-    from opfor.scenarios.attacksurface.assets.domain import sources as domains
-    from opfor.scenarios.attacksurface.assets.domain.sources import keys
+    from opfor.scenarios.attacksurface import sources as domains
+    from opfor.scenarios.attacksurface.sources import keys
 
     monkeypatch.setattr(keys, "virustotal_key", lambda: "vt")
 
@@ -66,8 +66,8 @@ def test_virustotal_enumeration_flags_truncation_at_the_page_cap(monkeypatch):
 def test_otx_passive_dns_parses_and_flags_the_cap(monkeypatch):
     import urllib.request
 
-    from opfor.scenarios.attacksurface.assets.domain import sources as domains
-    from opfor.scenarios.attacksurface.assets.domain.sources import keys
+    from opfor.scenarios.attacksurface import sources as domains
+    from opfor.scenarios.attacksurface.sources import keys
 
     # the parse keeps hosts under the domain and drops the apex and any other domain, apart
     # from the network so it is driven by a fixture
@@ -109,8 +109,8 @@ def test_certspotter_token_429_falls_back_to_an_anonymous_walk(monkeypatch):
     import urllib.error
     import urllib.request
 
-    from opfor.scenarios.attacksurface.assets.domain import sources as domains
-    from opfor.scenarios.attacksurface.assets.domain.sources import keys
+    from opfor.scenarios.attacksurface import sources as domains
+    from opfor.scenarios.attacksurface.sources import keys
 
     monkeypatch.setattr(keys, "certspotter_token", lambda: "spent-token")
 
@@ -141,8 +141,8 @@ def test_certspotter_token_error_that_is_not_429_is_raised(monkeypatch):
     import urllib.error
     import urllib.request
 
-    from opfor.scenarios.attacksurface.assets.domain import sources as domains
-    from opfor.scenarios.attacksurface.assets.domain.sources import keys
+    from opfor.scenarios.attacksurface import sources as domains
+    from opfor.scenarios.attacksurface.sources import keys
 
     monkeypatch.setattr(keys, "certspotter_token", lambda: "tok")
 
@@ -157,7 +157,7 @@ def test_certspotter_token_error_that_is_not_429_is_raised(monkeypatch):
 def test_subdomains_drops_dns_control_record_names(monkeypatch):
     # passive DNS returns control records (_dmarc, _domainkey, _acme-challenge); these are not
     # hosts and must not be admitted as probeable subdomains, a validation label unwraps to its host
-    from opfor.scenarios.attacksurface.assets.domain.sources import enumeration as domains
+    from opfor.scenarios.attacksurface.sources import enumeration as domains
 
     monkeypatch.setattr(domains, "certspotter_subdomains",
                         lambda d: {"api.example.com", "_dmarc.example.com",
@@ -172,7 +172,7 @@ def test_subdomains_drops_dns_control_record_names(monkeypatch):
 
 def test_subdomains_union_merges_the_keyless_windows(monkeypatch):
     # certificate logs and the archive have different windows, so the union is their merge
-    from opfor.scenarios.attacksurface.assets.domain.sources import enumeration as domains
+    from opfor.scenarios.attacksurface.sources import enumeration as domains
 
     monkeypatch.setattr(domains, "certspotter_subdomains", lambda d: {"cert-only.example.com"})
     monkeypatch.setattr(domains, "wayback_subdomains", lambda d: domains.Enumeration({"archived.example.com"}))
@@ -182,7 +182,7 @@ def test_subdomains_union_merges_the_keyless_windows(monkeypatch):
 
 def test_wayback_subdomains_extracts_hosts_under_the_domain(monkeypatch):
     import urllib.request
-    from opfor.scenarios.attacksurface.assets.domain.sources import enumeration as domains
+    from opfor.scenarios.attacksurface.sources import enumeration as domains
 
     rows = [["original"],
             ["https://api.example.com/v1"],
@@ -208,7 +208,7 @@ def test_wayback_subdomains_extracts_hosts_under_the_domain(monkeypatch):
 
 
 def test_subdomains_from_vt_reads_relationship_ids():
-    from opfor.scenarios.attacksurface.assets.domain.sources import subdomains_from_vt
+    from opfor.scenarios.attacksurface.sources import subdomains_from_vt
 
     page = {"data": [{"id": "api.example.com"}, {"id": "*.mail.example.com"},
                      {"id": "unrelated.test"}]}
@@ -216,7 +216,7 @@ def test_subdomains_from_vt_reads_relationship_ids():
     assert subdomains_from_vt(page, "example.com") == {"api.example.com", "*.mail.example.com"}
 
 def test_virustotal_is_skipped_without_a_key(monkeypatch):
-    from opfor.scenarios.attacksurface.assets.domain import sources as d
+    from opfor.scenarios.attacksurface import sources as d
 
     monkeypatch.delenv("OPFOR_VIRUSTOTAL_API_KEY", raising=False)
     # no key means the source contributes nothing and makes no network call
@@ -227,8 +227,8 @@ def test_certspotter_flags_truncation_when_the_page_budget_is_spent(monkeypatch)
     unread, so it reports the blind spot rather than passing as complete, invariant 5."""
     import urllib.request
 
-    from opfor.scenarios.attacksurface.assets.domain import sources as domains
-    from opfor.scenarios.attacksurface.assets.domain.sources import keys
+    from opfor.scenarios.attacksurface import sources as domains
+    from opfor.scenarios.attacksurface.sources import keys
 
     monkeypatch.setattr(keys, "certspotter_token", lambda: "")
 
@@ -257,8 +257,8 @@ def test_certspotter_flags_truncation_when_the_page_budget_is_spent(monkeypatch)
 def test_certspotter_does_not_flag_truncation_when_the_cursor_runs_dry(monkeypatch):
     import urllib.request
 
-    from opfor.scenarios.attacksurface.assets.domain import sources as domains
-    from opfor.scenarios.attacksurface.assets.domain.sources import keys
+    from opfor.scenarios.attacksurface import sources as domains
+    from opfor.scenarios.attacksurface.sources import keys
 
     monkeypatch.setattr(keys, "certspotter_token", lambda: "")
 
@@ -286,7 +286,7 @@ def test_certspotter_does_not_flag_truncation_when_the_cursor_runs_dry(monkeypat
 def test_certspotter_non_list_response_fails_loud(monkeypatch):
     import urllib.request
 
-    from opfor.scenarios.attacksurface.assets.domain.sources import enumeration
+    from opfor.scenarios.attacksurface.sources import enumeration
 
     class _Resp:
         def read(self, *_a):
@@ -305,7 +305,7 @@ def test_certspotter_non_list_response_fails_loud(monkeypatch):
         enumeration._certspotter_issuances("example.com", token=None, pages=1)
 
 def test_permutation_candidates_cross_pollinate_observed_labels_only():
-    from opfor.scenarios.attacksurface.assets.domain.capabilities.discovery import (
+    from opfor.scenarios.attacksurface.capabilities.discovery import (
         permutation_candidates)
 
     observed = ["api.example.com", "dev.eu.example.com"]
@@ -320,9 +320,9 @@ def test_permutation_candidates_cross_pollinate_observed_labels_only():
 
 def test_permute_subdomains_confirms_only_resolving_candidates_and_skips_a_wildcard_zone():
     from opfor.core import Done, Node, Task, World
-    from opfor.scenarios.attacksurface.assets.domain.capabilities.discovery import (
+    from opfor.scenarios.attacksurface.capabilities.discovery import (
         PermuteSubdomains)
-    from opfor.scenarios.attacksurface.assets.domain.types import DomainData
+    from opfor.scenarios.attacksurface.types import DomainData
 
     def seed():
         world = World()
@@ -363,9 +363,9 @@ def test_permute_subdomains_catches_a_wildcard_on_a_deeper_zone_not_only_the_ape
     # regression: an apex-only wildcard baseline missed *.eu.example.com, so every
     # label.eu.example.com resolved to the catch-all and was minted as a confirmed host
     from opfor.core import Done, Node, Task, World
-    from opfor.scenarios.attacksurface.assets.domain.capabilities.discovery import (
+    from opfor.scenarios.attacksurface.capabilities.discovery import (
         PermuteSubdomains)
-    from opfor.scenarios.attacksurface.assets.domain.types import DomainData
+    from opfor.scenarios.attacksurface.types import DomainData
 
     def seed():
         world = World()
@@ -393,7 +393,7 @@ def test_permute_subdomains_catches_a_wildcard_on_a_deeper_zone_not_only_the_ape
     assert any(f.kind == "coverage_gap" for f in out.facts)
 
 def test_path_permutations_derive_parents_and_version_twins_from_observed_only():
-    from opfor.scenarios.attacksurface.assets.domain.sources.parsers import path_permutations
+    from opfor.scenarios.attacksurface.sources.parsers import path_permutations
 
     got = path_permutations(["/api/v1/users", "/static/app.js"])
     # parent directories of an observed path, where a listing above a known file would show
@@ -406,8 +406,8 @@ def test_path_permutations_derive_parents_and_version_twins_from_observed_only()
 
 def test_permute_paths_capability_emits_derived_candidates_from_observed():
     from opfor.core import Done, Fact, Node, Task, World
-    from opfor.scenarios.attacksurface.assets.domain.capabilities.http import PermutePaths
-    from opfor.scenarios.attacksurface.assets.domain.types import Candidates, DomainData
+    from opfor.scenarios.attacksurface.capabilities.http import PermutePaths
+    from opfor.scenarios.attacksurface.types import Candidates, DomainData
 
     world = World()
     world.add(Node(id="domain:h.example.com", type="domain",
@@ -424,8 +424,8 @@ def test_permute_paths_capability_emits_derived_candidates_from_observed():
 
 def test_permute_rule_waits_for_passive_enumeration_then_runs_once():
     from opfor.core import Fact, Node, World
-    from opfor.scenarios.attacksurface.assets.domain.planner import _permute_rule
-    from opfor.scenarios.attacksurface.assets.domain.types import DomainData
+    from opfor.scenarios.attacksurface.planner import _permute_rule
+    from opfor.scenarios.attacksurface.types import DomainData
 
     world = World()
     world.add(Node(id="domain:example.com", type="domain",

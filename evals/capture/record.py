@@ -22,9 +22,9 @@ import urllib.request
 from pathlib import Path
 from urllib.parse import urlsplit
 
-from opfor.scenarios.attacksurface.assets.domain import PATHS
-from opfor.scenarios.attacksurface.assets.domain.fingerprint import load_products, product_probe_paths
-from opfor.scenarios.attacksurface.assets.domain.sources.http import _BODY_VERSION
+from opfor.scenarios.attacksurface import PATHS
+from opfor.scenarios.attacksurface.fingerprint import load_products, product_probe_paths
+from opfor.scenarios.attacksurface.sources.http import _BODY_VERSION
 
 _TITLE = re.compile(r"<title[^>]*>(.*?)</title>", re.I | re.S)
 _UA = "Mozilla/5.0 (compatible; opfor-eval-capture)"

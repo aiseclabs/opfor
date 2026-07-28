@@ -77,17 +77,6 @@ def test_prepare_run_without_a_seed_fails_loud(monkeypatch):
         prepare_run()
 
 
-def test_chain_and_contract_are_aliases_for_root_and_host(monkeypatch):
-    # the CLI stays scenario-agnostic, but onchain reads a root as a chain and a host as a contract,
-    # so --chain and --contract are aliases onto the same generic slots and must parse there
-    _clear(monkeypatch)
-    captured: dict = {}
-    monkeypatch.setattr("opfor.cli._run", lambda args: captured.update(vars(args)) or 0)
-    main(["run", "onchain", "--chain", "arbitrum", "--contract", "0xABC", "--contract", "0xDEF"])
-    assert captured["root"] == ["arbitrum"]
-    assert captured["host"] == ["0xABC", "0xDEF"]
-
-
 def test_run_rejects_a_scenario_with_no_seed_builder(monkeypatch):
     _clear(monkeypatch)
     # mock is a kernel fixture with no run seed, so the run command says so rather than crash

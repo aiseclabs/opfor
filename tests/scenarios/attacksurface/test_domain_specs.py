@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from opfor.scenarios.attacksurface.assets.domain.sources.observations import Response
+from opfor.scenarios.attacksurface.sources.observations import Response
 from opfor.core import Budget, Node, Scope, World, run
 
 from tests.scenarios.attacksurface.fixtures import (
@@ -21,7 +21,7 @@ def test_openapi_spec_is_expanded_into_its_operations():
     assert "GET /users" in hit[0].paths
 
 def test_paths_from_openapi_names_methods():
-    from opfor.scenarios.attacksurface.assets.domain.sources import paths_from_openapi
+    from opfor.scenarios.attacksurface.sources import paths_from_openapi
 
     doc = {"paths": {"/a": {"get": {}, "post": {}}, "/b": {"get": {}}}}
     assert set(paths_from_openapi(doc)) == {"GET,POST /a", "GET /b"}
@@ -29,7 +29,7 @@ def test_paths_from_openapi_names_methods():
     assert paths_from_openapi({"paths": "not a map"}) == []
 
 def test_info_from_openapi_reads_title_and_version():
-    from opfor.scenarios.attacksurface.assets.domain.sources import info_from_openapi
+    from opfor.scenarios.attacksurface.sources import info_from_openapi
 
     doc = {"openapi": "3.1.0", "info": {"title": "litellm api", "version": "1.90.0"}, "paths": {}}
     assert info_from_openapi(doc) == ("litellm api", "1.90.0")
@@ -38,7 +38,7 @@ def test_info_from_openapi_reads_title_and_version():
     assert info_from_openapi("not a doc") == ("", "")
 
 def test_openapi_paths_apply_the_declared_base_path():
-    from opfor.scenarios.attacksurface.assets.domain.sources.parsers import paths_from_openapi
+    from opfor.scenarios.attacksurface.sources.parsers import paths_from_openapi
     # Swagger 2 basePath and OpenAPI 3 servers url both move an operation off the host root,
     # so the real unauthenticated surface is probed rather than a 404 at /users
     swagger = {"basePath": "/api/v2", "paths": {"/users": {"get": {}}}}
@@ -47,7 +47,7 @@ def test_openapi_paths_apply_the_declared_base_path():
     assert any(p.endswith("/api/v3/orders") and "GET" in p for p in paths_from_openapi(oas3))
 
 def test_openapi_path_item_without_verbs_is_a_get_candidate_not_a_write():
-    from opfor.scenarios.attacksurface.assets.domain.sources.parsers import (
+    from opfor.scenarios.attacksurface.sources.parsers import (
         paths_from_openapi, split_operation)
     ops = paths_from_openapi({"paths": {"/ref-path": {"$ref": "#/components/x"}}})
     assert ops == ["GET /ref-path"]
@@ -55,7 +55,7 @@ def test_openapi_path_item_without_verbs_is_a_get_candidate_not_a_write():
     assert "GET" in methods and path == "/ref-path"
 
 def test_openapi_base_drops_a_protocol_relative_authority():
-    from opfor.scenarios.attacksurface.assets.domain.sources.parsers import _openapi_base
+    from opfor.scenarios.attacksurface.sources.parsers import _openapi_base
 
     # //evil.com/api must keep only its path, never turn the authority into the base path
     assert _openapi_base({"servers": [{"url": "//evil.com/api"}]}) == "/api"
@@ -64,10 +64,10 @@ def test_openapi_base_drops_a_protocol_relative_authority():
 
 def test_paths_from_openapi_caps_and_expand_spec_reports_the_drop():
     from opfor.core import Done, Task
-    from opfor.scenarios.attacksurface.assets.domain.capabilities.specs import ExpandSpec
-    from opfor.scenarios.attacksurface.assets.domain.sources.parsers import _MAX_SPEC_PATHS
-    from opfor.scenarios.attacksurface.assets.domain.sources import paths_from_openapi
-    from opfor.scenarios.attacksurface.assets.domain.types import Endpoint
+    from opfor.scenarios.attacksurface.capabilities.specs import ExpandSpec
+    from opfor.scenarios.attacksurface.sources.parsers import _MAX_SPEC_PATHS
+    from opfor.scenarios.attacksurface.sources import paths_from_openapi
+    from opfor.scenarios.attacksurface.types import Endpoint
 
     doc = {"paths": {f"/p{i}": {"get": {}} for i in range(_MAX_SPEC_PATHS + 300)}}
     parsed = paths_from_openapi(doc)
@@ -85,7 +85,7 @@ def test_paths_from_openapi_caps_and_expand_spec_reports_the_drop():
     assert gaps and gaps[0].scan == "spec_parse", "a capped spec parse must report a coverage gap"
 
 def test_split_operation_separates_methods_from_path():
-    from opfor.scenarios.attacksurface.assets.domain.sources import split_operation
+    from opfor.scenarios.attacksurface.sources import split_operation
 
     assert split_operation("GET,POST /widgets") == (("GET", "POST"), "/widgets")
     assert split_operation("DELETE,GET /jobs/{job_id}") == (("DELETE", "GET"), "/jobs/{job_id}")
@@ -95,8 +95,8 @@ def test_probe_spec_verifies_reads_defers_writes_and_skips_templated():
     """A declared operation is not a reachable one, so ProbeSpec fetches each concrete GET
     and leaves write and templated operations for an authorized confirmation."""
     from opfor.core import Fact, Node, Task, World
-    from opfor.scenarios.attacksurface.assets.domain.capabilities import ProbeSpec
-    from opfor.scenarios.attacksurface.assets.domain.types import (
+    from opfor.scenarios.attacksurface.capabilities import ProbeSpec
+    from opfor.scenarios.attacksurface.types import (
         APISpec, DomainData, Endpoint, Resolved,
     )
 
@@ -147,8 +147,8 @@ def test_probe_spec_flags_a_coverage_gap_when_the_baseline_could_not_be_establis
     # front, so a reachable operation is unfiltered and must be surfaced rather than presented as
     # a confirmed exposed operation, the same guard the endpoint probe applies
     from opfor.core import Fact, Node, Task, World
-    from opfor.scenarios.attacksurface.assets.domain.capabilities import ProbeSpec
-    from opfor.scenarios.attacksurface.assets.domain.types import (
+    from opfor.scenarios.attacksurface.capabilities import ProbeSpec
+    from opfor.scenarios.attacksurface.types import (
         APISpec, DomainData, Endpoint, Resolved,
     )
 
@@ -186,8 +186,8 @@ def test_spec_fetch_failure_still_closes_and_is_loud():
 
 def test_expand_spec_fails_loud_on_transport_failure_and_on_a_malformed_body():
     from opfor.core import Failed, Task
-    from opfor.scenarios.attacksurface.assets.domain.capabilities.specs import ExpandSpec
-    from opfor.scenarios.attacksurface.assets.domain.types import Endpoint
+    from opfor.scenarios.attacksurface.capabilities.specs import ExpandSpec
+    from opfor.scenarios.attacksurface.types import Endpoint
 
     world = World()
     world.add(Node(id="endpoint:h/openapi.json", type="endpoint",
@@ -208,7 +208,7 @@ def test_graphql_introspection_fact_reads_query_and_mutation():
     assert hit and "query:me" in hit[0].operations
 
 def test_operations_from_introspection_reads_query_and_mutation():
-    from opfor.scenarios.attacksurface.assets.domain.sources import operations_from_introspection
+    from opfor.scenarios.attacksurface.sources import operations_from_introspection
 
     data = {"__schema": {"queryType": {"fields": [{"name": "me"}]},
                          "mutationType": {"fields": [{"name": "login"}]}}}
@@ -217,8 +217,8 @@ def test_operations_from_introspection_reads_query_and_mutation():
 
 def test_graphql_capability_marks_an_errored_introspection_failed_not_disabled():
     from opfor.core import Failed, Task
-    from opfor.scenarios.attacksurface.assets.domain.capabilities.specs import GraphQLIntrospect
-    from opfor.scenarios.attacksurface.assets.domain.types import Endpoint
+    from opfor.scenarios.attacksurface.capabilities.specs import GraphQLIntrospect
+    from opfor.scenarios.attacksurface.types import Endpoint
 
     world = World()
     world.add(Node(id="endpoint:h/graphql", type="endpoint",

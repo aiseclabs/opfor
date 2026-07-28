@@ -33,11 +33,10 @@ gates every action by authorized scope, survives async waits, and keeps an audit
 | Triage | The verdict, the only place findings are minted | Rule-based or model-backed |
 | Kernel | The blackboard, phase spine, scope, ledger, budget | `opfor/core/` |
 
-The kernel is generic and names no host, contract, or person. A scenario is a plugin
-under `opfor/scenarios/<name>/` that supplies capabilities, a planner, a triage, a
-declared terminal phase, and one or more asset classes under `assets/<class>/`. Each
-asset class owns its capabilities, planner rules, and a `knowledge/` tree, so the
-knowledge root is `assets/<class>/knowledge/`, not the scenario package root.
+The kernel is generic and names no host, contract, or person. A scenario is a flat plugin
+package under `opfor/scenarios/<name>/` that supplies capabilities, a planner, a triage, a
+declared terminal phase, and a `knowledge/` tree, all at the package root. Its `build`
+composes them and constructs the `Scenario`.
 
 ## Install
 
@@ -60,35 +59,6 @@ A run maps the surface and judges it, then writes a structured `findings.json`, 
 subdomain with what it is and its service state, and a human `report.md`. For each finding it writes
 an accurate PoC, a hand-runnable request labeled unverified, since the run never sends it to the
 target. It stops at TRIAGE, there is no intrusive tier, so the engine touches a target only for recon.
-
-The `onchain` scenario maps a chain's on-chain surface to a ranked audit queue. It is recon-only,
-it reads public chain data and never sends a transaction. It aims at the long tail, the young,
-funded, unaudited contracts worth a manual look, not the established bluechips. A default run sweeps
-a chain's recently created pools inside an age band, pivots from each token to the fund contracts
-behind it by transfer-counterparty analysis, prices what each holds, matches risk signals, and
-judges which are worth an audit, dropping known infrastructure so the queue stays on the unknowns:
-
-```bash
-opfor run onchain --chain ethereum
-```
-
-`--chain` is an alias for the generic `--root` seed slot, and `--contract` an alias for `--host`,
-so the flags read naturally per scenario while the CLI stays scenario-agnostic. To audit specific
-contracts directly, name them, which skips the sweep and judges exactly those addresses and what
-they pivot to:
-
-```bash
-opfor run onchain --chain ethereum --contract 0xCONTRACT --contract 0xANOTHER
-```
-
-It runs on Ethereum, Polygon, and Arbitrum, the chains a free Etherscan V2 key covers in full,
-named with `--chain ethereum`, `--chain polygon`, or `--chain arbitrum`.
-
-The explorer reads, verified source and transfer history, use the Etherscan V2 multichain API and
-need a key in `OPFOR_ETHERSCAN_API_KEY`, see `.env.example`. The free key covers Ethereum, Polygon,
-and Arbitrum in full. Other chains read verified source on the free tier but gate the transfer and
-RPC modules the autonomous discovery relies on, so they need a paid plan, or a public node set with
-`OPFOR_<CHAIN>_RPC`. The tool does not auto-load `.env`, so `source .env` first.
 
 ## Develop
 

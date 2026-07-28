@@ -20,7 +20,6 @@ from typing import Callable
 
 from opfor.core import Scenario
 from opfor.scenarios import attacksurface
-from opfor.scenarios import onchain
 from opfor.scenarios.mock import MOCK
 
 # Each entry builds its scenario on demand. The mock is a prebuilt fixture with no provider,
@@ -30,7 +29,6 @@ from opfor.scenarios.mock import MOCK
 _BUILDERS: dict[str, Callable[[], Scenario]] = {
     MOCK.name: lambda: MOCK,
     attacksurface.NAME: attacksurface.build,
-    onchain.NAME: onchain.build,
 }
 
 # A run adapter turns a CLI run request into a scenario's seeded world, scope, and built
@@ -38,14 +36,12 @@ _BUILDERS: dict[str, Callable[[], Scenario]] = {
 # runnable from the CLI, the mock is a kernel fixture with no CLI seed, so it has none.
 _RUN_ADAPTERS: dict[str, Callable[..., tuple]] = {
     attacksurface.NAME: attacksurface.prepare_run,
-    onchain.NAME: onchain.prepare_run,
 }
 
 # A report adapter builds a scenario's structured report sections from the run's world, so the
 # generic report holds no scenario specifics. A scenario without one reports its findings only.
 _REPORT_ADAPTERS: dict[str, Callable[..., dict]] = {
     attacksurface.NAME: attacksurface.report_view,
-    onchain.NAME: onchain.report_view,
 }
 
 

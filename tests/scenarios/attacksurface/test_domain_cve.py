@@ -6,7 +6,7 @@ from tests.scenarios.attacksurface.fixtures import _run_capturing
 
 
 def test_nvd_cves_parses_id_score_severity_and_summary():
-    from opfor.scenarios.attacksurface.assets.domain import sources as domains
+    from opfor.scenarios.attacksurface import sources as domains
 
     reply = {
         "vulnerabilities": [
@@ -30,7 +30,7 @@ def test_nvd_cves_parses_id_score_severity_and_summary():
         "references": ["https://advisory.example/GHSA-1", "https://nvd.example/CVE-2021-39226"]}
 
 def test_nvd_stamps_the_total_match_count_so_a_truncated_page_is_visible():
-    from opfor.scenarios.attacksurface.assets.domain.sources import nvd as domains
+    from opfor.scenarios.attacksurface.sources import nvd as domains
 
     # the query matched more than the page held, so each record carries the true total, and a
     # reply that fit in one page carries no misleading total to trip a spurious gap
@@ -40,7 +40,7 @@ def test_nvd_stamps_the_total_match_count_so_a_truncated_page_is_visible():
 
 
 def test_nvd_cves_returns_nothing_for_an_unidentified_product():
-    from opfor.scenarios.attacksurface.assets.domain import sources as domains
+    from opfor.scenarios.attacksurface import sources as domains
 
     # no product means nothing to query, an empty list without a network call
     assert domains.nvd_cves("", "1.0") == []
@@ -48,7 +48,7 @@ def test_nvd_cves_returns_nothing_for_an_unidentified_product():
 def test_nvd_keyword_search_uses_the_product_alone_not_the_version(monkeypatch):
     """NVD keyword search matches the description text, where a version rarely appears, so
     the query is the product alone, or a version-bearing product would return nothing."""
-    from opfor.scenarios.attacksurface.assets.domain.sources import nvd as domains
+    from opfor.scenarios.attacksurface.sources import nvd as domains
 
     queries = []
     monkeypatch.setattr(domains, "_nvd_fetch", lambda q: queries.append(q) or [])
@@ -58,7 +58,7 @@ def test_nvd_keyword_search_uses_the_product_alone_not_the_version(monkeypatch):
 def test_nvd_falls_back_to_a_product_keyword_when_the_cpe_match_is_empty(monkeypatch):
     """A wrong vendor guess or a cve not tagged with the cpe yields an empty cpe match, so
     the query falls back to a product keyword rather than missing a real advisory."""
-    from opfor.scenarios.attacksurface.assets.domain.sources import nvd as domains
+    from opfor.scenarios.attacksurface.sources import nvd as domains
 
     queries = []
 
@@ -76,7 +76,7 @@ def test_nvd_falls_back_to_a_product_keyword_when_the_cpe_match_is_empty(monkeyp
     assert queries[1] == "keywordSearch=litellm"
 
 def test_nvd_cpe_match_with_results_does_not_fall_back(monkeypatch):
-    from opfor.scenarios.attacksurface.assets.domain.sources import nvd as domains
+    from opfor.scenarios.attacksurface.sources import nvd as domains
 
     queries = []
     monkeypatch.setattr(domains, "_nvd_fetch",
@@ -89,7 +89,7 @@ def test_nvd_cpe_match_with_results_does_not_fall_back(monkeypatch):
 def test_nvd_tags_the_match_basis_version_product_or_keyword(monkeypatch):
     """Each record carries how it was matched, so triage weighs a version match apart from a
     product-wide or a bare product-name match."""
-    from opfor.scenarios.attacksurface.assets.domain.sources import nvd as domains
+    from opfor.scenarios.attacksurface.sources import nvd as domains
 
     monkeypatch.setattr(domains, "_nvd_fetch", lambda q: [{"id": "CVE-1"}])
     # a cpe match with a version is tied to the affected-version range
@@ -100,7 +100,7 @@ def test_nvd_tags_the_match_basis_version_product_or_keyword(monkeypatch):
     assert domains.nvd_cves("grafana", "9.0.0")[0]["match"] == "keyword"
 
 def test_nvd_throttle_serializes_calls_to_stay_under_the_rate_limit(monkeypatch):
-    from opfor.scenarios.attacksurface.assets.domain.sources import nvd as domains
+    from opfor.scenarios.attacksurface.sources import nvd as domains
 
     clock = {"t": 100.0}
     slept = []
@@ -149,8 +149,8 @@ def test_cve_scan_records_a_coverage_gap_when_the_lookup_was_truncated():
     # the database matched more CVEs than the bounded page returned, so the kept list is a slice,
     # not the whole set, and the drop stays loud rather than reading as the complete picture
     from opfor.core import Fact, Node, Task, World
-    from opfor.scenarios.attacksurface.assets.domain.capabilities import CVELookup
-    from opfor.scenarios.attacksurface.assets.domain.types import DomainData, HostProfile
+    from opfor.scenarios.attacksurface.capabilities import CVELookup
+    from opfor.scenarios.attacksurface.types import DomainData, HostProfile
 
     world = World()
     world.add(Node(id="domain:h", type="domain", payload=DomainData(name="h", root="h", source="s")))
@@ -170,8 +170,8 @@ def test_cve_scan_records_a_coverage_gap_when_the_lookup_was_truncated():
 def test_cve_scan_records_no_gap_when_the_page_held_the_whole_set():
     # the database returned every CVE it matched, so there is no drop to record, only the scan
     from opfor.core import Fact, Node, Task, World
-    from opfor.scenarios.attacksurface.assets.domain.capabilities import CVELookup
-    from opfor.scenarios.attacksurface.assets.domain.types import DomainData, HostProfile
+    from opfor.scenarios.attacksurface.capabilities import CVELookup
+    from opfor.scenarios.attacksurface.types import DomainData, HostProfile
 
     world = World()
     world.add(Node(id="domain:h", type="domain", payload=DomainData(name="h", root="h", source="s")))
@@ -197,8 +197,8 @@ def test_profile_evidence_surfaces_the_spec_version_from_the_endpoint_body():
     """Host profiling reads a specification's declared version from the endpoint's own body head,
     before any separate parse runs, so a version-bearing spec is not missed."""
     from opfor.core import Node, Task, World
-    from opfor.scenarios.attacksurface.assets.domain.capabilities import ProfileHost
-    from opfor.scenarios.attacksurface.assets.domain.types import DomainData, Endpoint
+    from opfor.scenarios.attacksurface.capabilities import ProfileHost
+    from opfor.scenarios.attacksurface.types import DomainData, Endpoint
 
     captured = {}
 
@@ -224,7 +224,7 @@ def test_profile_evidence_surfaces_the_spec_version_from_the_endpoint_body():
 
 def test_cve_render_ranks_by_cvss_and_notes_truncation():
     from opfor.core import Fact
-    from opfor.scenarios.attacksurface.assets.domain.types import CVE, CVEScan, DomainData, HTTPProbe, Resolved
+    from opfor.scenarios.attacksurface.types import CVE, CVEScan, DomainData, HTTPProbe, Resolved
     from opfor.scenarios.attacksurface.render import SurfaceRenderer
 
     world = World()
@@ -246,7 +246,7 @@ def test_cve_render_ranks_by_cvss_and_notes_truncation():
 
 def test_cve_render_states_a_weak_match_basis_so_the_judge_weighs_it():
     from opfor.core import Fact
-    from opfor.scenarios.attacksurface.assets.domain.types import CVE, CVEScan, DomainData, HTTPProbe, Resolved
+    from opfor.scenarios.attacksurface.types import CVE, CVEScan, DomainData, HTTPProbe, Resolved
     from opfor.scenarios.attacksurface.render import SurfaceRenderer
 
     world = World()

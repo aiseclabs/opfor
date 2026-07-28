@@ -1,9 +1,8 @@
-"""The scenario seed type, the one payload shared across asset classes.
+"""The scenario seed type.
 
 The seed is an `Org`, an organization the operator names, such as a company. Every asset
-the run discovers under it is a class's own payload, defined in that class's `types`
-module, for example the domain node and its enrichments under the domain class. Only the
-seed lives here, since every class reads it.
+the run discovers under it is its own payload defined in `types`, for example the domain
+node and its enrichments. Only the seed lives here.
 """
 
 from __future__ import annotations
@@ -18,10 +17,8 @@ class Org:
     discover roots beyond them, it only expands each root into subdomains by passive evidence.
     `hosts` are known subdomains from an inventory such as a DNS export, the
     way to supply hosts a wildcard certificate hides from passive discovery, they enter the surface
-    as leaves and are enriched rather than re-enumerated. `classes` restricts which asset classes
-    run, empty means all of them."""
+    as leaves and are enriched rather than re-enumerated."""
 
     name: str
     domains: tuple[str, ...] = ()
     hosts: tuple[str, ...] = ()
-    classes: tuple[str, ...] = ()

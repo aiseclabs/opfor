@@ -48,7 +48,7 @@ def test_is_transient_classifies_transport_blips_not_real_errors():
 
 
 def test_web_transient_classifies_http_try_again_codes():
-    from opfor.scenarios.attacksurface.assets.domain.failures import _web_transient
+    from opfor.scenarios.attacksurface.failures import _web_transient
     # the HTTP retry-me statuses live in the web class, composed onto the kernel transport check
     assert _web_transient(_http(429)) and _web_transient(_http(503))
     assert not _web_transient(_http(404))

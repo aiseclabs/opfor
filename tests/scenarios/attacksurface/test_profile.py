@@ -6,8 +6,8 @@ from __future__ import annotations
 
 import re
 
-from opfor.scenarios.attacksurface.assets.domain.classifiers import classify_frameworks
-from opfor.scenarios.attacksurface.assets.domain.types import HTTPProbe
+from opfor.scenarios.attacksurface.classifiers import classify_frameworks
+from opfor.scenarios.attacksurface.types import HTTPProbe
 
 _FRAMEWORKS = {
     "Next.js": {"body": ['id="__next"'], "headers": ["x-powered-by: next.js"], "version": None},
@@ -34,8 +34,8 @@ def test_classify_frameworks_is_empty_for_no_response_or_no_match():
 
 def test_profile_host_records_product_and_frameworks_in_one_fact():
     from opfor.core import Fact, Node, Task, World
-    from opfor.scenarios.attacksurface.assets.domain.capabilities import ProfileHost
-    from opfor.scenarios.attacksurface.assets.domain.types import DomainData, Resolved
+    from opfor.scenarios.attacksurface.capabilities import ProfileHost
+    from opfor.scenarios.attacksurface.types import DomainData, Resolved
 
     world = World()
     world.add(Node(id="domain:h", type="domain",
@@ -57,8 +57,8 @@ def test_profile_host_records_a_coverage_gap_when_the_seam_finds_the_evidence_to
     # a live host the identify seam could not judge for lack of evidence is a visible blind spot,
     # its empty product is unknown rather than a confirmed bespoke negative, invariant 3 and 5
     from opfor.core import Fact, Node, Task, World
-    from opfor.scenarios.attacksurface.assets.domain.capabilities import ProfileHost
-    from opfor.scenarios.attacksurface.assets.domain.types import DomainData
+    from opfor.scenarios.attacksurface.capabilities import ProfileHost
+    from opfor.scenarios.attacksurface.types import DomainData
 
     world = World()
     world.add(Node(id="domain:h", type="domain",
@@ -78,8 +78,8 @@ def test_profile_host_records_no_gap_when_an_empty_product_is_a_conclusive_negat
     # the seam judged the evidence sufficient and named no product, a real bespoke negative, so
     # there is no blind spot to record, only the host_profile fact
     from opfor.core import Fact, Node, Task, World
-    from opfor.scenarios.attacksurface.assets.domain.capabilities import ProfileHost
-    from opfor.scenarios.attacksurface.assets.domain.types import DomainData
+    from opfor.scenarios.attacksurface.capabilities import ProfileHost
+    from opfor.scenarios.attacksurface.types import DomainData
 
     world = World()
     world.add(Node(id="domain:h", type="domain",
@@ -95,7 +95,7 @@ def test_profile_host_records_no_gap_when_an_empty_product_is_a_conclusive_negat
 def test_report_renders_product_and_tech_from_the_host_profile_fact():
     from opfor.core import Fact, Node, World
     from opfor.scenarios.attacksurface.render import SurfaceRenderer
-    from opfor.scenarios.attacksurface.assets.domain.types import DomainData, HostProfile, Resolved
+    from opfor.scenarios.attacksurface.types import DomainData, HostProfile, Resolved
 
     world = World()
     world.add(Node(id="domain:h", type="domain", payload=DomainData(name="h", root="h", source="passive")))
@@ -112,8 +112,8 @@ def test_report_renders_product_and_tech_from_the_host_profile_fact():
 def test_cve_lookup_reads_identity_from_the_host_profile_fact():
     # identity is derived by profiling and read here, so a CVE outage never discards it
     from opfor.core import Fact, Node, Task, World
-    from opfor.scenarios.attacksurface.assets.domain.capabilities import CVELookup
-    from opfor.scenarios.attacksurface.assets.domain.types import DomainData, HostProfile
+    from opfor.scenarios.attacksurface.capabilities import CVELookup
+    from opfor.scenarios.attacksurface.types import DomainData, HostProfile
 
     world = World()
     world.add(Node(id="domain:h", type="domain", payload=DomainData(name="h", root="h", source="hint")))

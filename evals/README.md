@@ -3,8 +3,8 @@
 An offline, deterministic surface, no Docker, network, or model. It holds two things: the
 fingerprint backtest, a CI gate that measures whether opfor identifies a product, and a
 knowledge-coverage report. Both keep their ground truth out of the pipeline, so a high score cannot
-come from the tool grading itself. The corpus and coverage are attack-surface only, since the
-onchain scenario identifies with a model and carries no deterministic table to replay.
+come from the tool grading itself. The corpus and coverage cover the deterministic fingerprint
+table only, the model-backed identify fallback carries no table to replay.
 
 ## Fingerprint backtest
 

@@ -33,14 +33,14 @@ def test_registrable_root_leaves_an_ip_literal_unchanged():
     assert registrable_root("192.168.1.1") == "192.168.1.1"
 
 def test_same_host_path_matches_a_mixed_case_host():
-    from opfor.scenarios.attacksurface.assets.domain.sources.parsers import same_host_path
+    from opfor.scenarios.attacksurface.sources.parsers import same_host_path
     # a mixed-case host name must still match its own absolute urls, else script and sitemap
     # extraction drop every same-host link
     assert same_host_path("https://Example.com/app.js", "Example.com") == "/app.js"
 
 def test_operator_hint_domain_is_lowercased_into_a_canonical_node():
     from opfor.core import Node, Task, World
-    from opfor.scenarios.attacksurface.assets.domain.capabilities.discovery import DiscoverDomains
+    from opfor.scenarios.attacksurface.capabilities.discovery import DiscoverDomains
     from opfor.scenarios.attacksurface.seed import Org
 
     world = World()

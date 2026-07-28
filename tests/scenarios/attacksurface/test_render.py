@@ -9,8 +9,8 @@ from opfor.core import Node, World
 
 def test_takeover_catalogue_is_expanded_and_a_new_signature_raises_its_clue():
     from opfor.core import Fact
-    from opfor.scenarios.attacksurface.assets.domain import KNOWLEDGE
-    from opfor.scenarios.attacksurface.assets.domain.types import DomainData, HTTPProbe as HTTPData
+    from opfor.scenarios.attacksurface import KNOWLEDGE
+    from opfor.scenarios.attacksurface.types import DomainData, HTTPProbe as HTTPData
     from opfor.scenarios.attacksurface.render import SurfaceRenderer
     from opfor.scenarios.attacksurface.lifecycle.triage import _load_takeover
 
@@ -34,7 +34,7 @@ def test_takeover_catalogue_is_expanded_and_a_new_signature_raises_its_clue():
 
 def test_render_lists_present_security_headers_as_set_and_omits_them_from_missing():
     from opfor.core import Fact
-    from opfor.scenarios.attacksurface.assets.domain.types import DomainData, HTTPProbe as HTTPData
+    from opfor.scenarios.attacksurface.types import DomainData, HTTPProbe as HTTPData
     from opfor.scenarios.attacksurface.render import SurfaceRenderer
 
     world = World()
@@ -51,8 +51,8 @@ def test_render_lists_present_security_headers_as_set_and_omits_them_from_missin
 
 
 def test_directory_listing_body_raises_the_exposure_clue():
-    from opfor.scenarios.attacksurface.assets.domain import KNOWLEDGE
-    from opfor.scenarios.attacksurface.assets.domain.types import Endpoint
+    from opfor.scenarios.attacksurface import KNOWLEDGE
+    from opfor.scenarios.attacksurface.types import Endpoint
     from opfor.scenarios.attacksurface.render import SurfaceRenderer
     from opfor.scenarios.attacksurface.lifecycle.triage import _load_clues
 
@@ -66,7 +66,7 @@ def test_directory_listing_body_raises_the_exposure_clue():
 
 def test_render_flags_a_cve_the_scenario_carries_a_reproduction_recipe_for():
     from opfor.core import Fact
-    from opfor.scenarios.attacksurface.assets.domain.types import CVE, CVEScan, DomainData, HTTPProbe as HTTPData
+    from opfor.scenarios.attacksurface.types import CVE, CVEScan, DomainData, HTTPProbe as HTTPData
     from opfor.scenarios.attacksurface.render import SurfaceRenderer
 
     # a version-matched scan carrying a severe CVE with no recipe and a lower one that has a recipe

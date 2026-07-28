@@ -11,9 +11,9 @@ structured `findings.json` and a human `report.md`.
 
 The engine underneath is generic. It names no host, product, or person, so the mission lives
 as scenario data, capabilities, and knowledge. A scenario changes by swapping those, never by
-editing the engine. `attacksurface` carries the mission, `mock` is the kernel's own fixture, and
-`onchain` is a second scenario on the same kernel, a recon-only sweep of a chain's contracts that
-proves the engine is generic without an engine change.
+editing the engine. `attacksurface` carries the mission, and `mock` is the kernel's own fixture,
+the smallest scenario that closes the loop and keeps the kernel honest to its own claim that a
+scenario is data, not an engine edit.
 
 The architecture is a blackboard, the world model held outside any model context, read and
 written by narrow capabilities, with a planner that proposes and a triage that judges, all
@@ -77,11 +77,10 @@ sequenced along a fixed lifecycle spine so a run either closes or says why it di
 
 ### Scenarios
 
-- A scenario is a package under `opfor/scenarios/<name>/` that builds a `Scenario`. It
-  supplies capabilities, a planner, a triage, a declared terminal phase, and one or more
-  asset classes under `assets/<class>/`. Each asset class owns its capabilities, planner
-  rules, and `knowledge/` tree, so a scenario's knowledge and data files live at
-  `assets/<class>/knowledge/`, not at the scenario package root.
+- A scenario is a flat package under `opfor/scenarios/<name>/` that builds a `Scenario`. It
+  supplies capabilities, a planner, a triage, a declared terminal phase, and a `knowledge/`
+  tree, all as modules and content directories at the package root. Its `build` composes them
+  and constructs the `Scenario` directly, the one place that wires the scenario's seams.
 - `scenarios/registry.py` is the one place that lists scenarios. `mock` is the reference,
   the smallest run that closes the loop, and the kernel's own fixture.
 - `attacksurface` is the mission scenario. It maps the mission onto the spine. MAP discovers the
@@ -93,21 +92,14 @@ sequenced along a fixed lifecycle spine so a run either closes or says why it di
   method, every candidate url, the headers, and a PASS or FAIL success check mirroring triage's
   matcher evaluator, labeled unverified rather than a live receipt. Its terminal is TRIAGE, there is
   no intrusive tier, the engine never sends a request to a target beyond recon.
-- `onchain` is a second CLI-runnable scenario, recon-only. From a chain it sweeps the active DEX
-  pools, pivots from each token or pool to the fund-management contracts behind it, identifies the
-  role, reads the funds, enumerates the exposed interfaces, and matches risk signals, then TRIAGE
-  judges which contracts are worth a manual audit. Its terminal is TRIAGE, there is no intrusive
-  tier and no transaction is ever sent, reading public chain data is passive. It exists to keep the
-  kernel honest to its own claim that a scenario is data, not an engine edit.
 - Knowledge markdown and data files such as wordlists or fingerprint tables are read by the
   planner and triage, never by a capability.
 
 ## Adding Things
 
-- Add a scenario: a new package under `opfor/scenarios/`, with an asset class under
-  `assets/<class>/` carrying its node and fact payload types, capabilities, planner rules,
-  and `knowledge/` tree, plus a triage, a declared terminal phase, and a registry entry. The
-  kernel does not change.
+- Add a scenario: a new flat package under `opfor/scenarios/`, carrying its node and fact
+  payload types, capabilities, planner rules, and `knowledge/` tree, plus a triage, a declared
+  terminal phase, and a registry entry. The kernel does not change.
 - Add a technique to an existing scenario: extend a knowledge markdown or a data file, or
   add a thin capability. Do not move attack knowledge into engine or capability logic.
 - Add or update tests when behavior changes, especially for failure handling, scope, and

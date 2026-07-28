@@ -109,15 +109,13 @@ def main(argv: list[str] | None = None) -> int:
     run = sub.add_parser("run", help="run a scenario against a seed")
     run.add_argument("scenario", help="the scenario to run")
     run.add_argument("--name", help="the target name, defaults to OPFOR_TARGET or the first root")
-    # A seed root and a seed host are the generic slots. Each scenario reads them in its own terms,
-    # attacksurface as a root domain and a subdomain host, onchain as a chain and a contract address,
-    # so the alias names read naturally per scenario while the CLI stays scenario-agnostic.
-    run.add_argument("--root", "--chain", dest="root", action="append", metavar="ROOT",
-                     help="a seed root, a root domain for attacksurface or a chain for onchain, repeatable")
+    # A seed root and a seed host are the generic slots the CLI stays scenario-agnostic over. The
+    # scenario reads them in its own terms, attacksurface as a root domain and a subdomain host.
+    run.add_argument("--root", dest="root", action="append", metavar="ROOT",
+                     help="a seed root, a root domain for attacksurface, repeatable")
     run.add_argument("--roots", help="a file of seed roots, defaults to OPFOR_ROOTS_FILE")
-    run.add_argument("--host", "--contract", dest="host", action="append", metavar="HOST",
-                     help="a seed host, a subdomain for attacksurface or a contract address for onchain, "
-                          "repeatable")
+    run.add_argument("--host", dest="host", action="append", metavar="HOST",
+                     help="a seed host, a subdomain for attacksurface, repeatable")
     run.add_argument("--hosts", help="a file of seed hosts, defaults to OPFOR_HOSTS_FILE")
     run.add_argument("--tier", default="recon", help="the scope tier ceiling, default recon")
     run.add_argument("--authorize", action="store_true", help="record the intrusive-tier authorization")

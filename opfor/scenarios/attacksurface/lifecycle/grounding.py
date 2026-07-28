@@ -28,7 +28,7 @@ from urllib.parse import parse_qsl, urlencode, urljoin, urlsplit
 
 from opfor.core import Finding, World, iter_md_docs
 from opfor.core import Grounding
-from opfor.scenarios.attacksurface.assets.domain.nuclei import Matcher
+from opfor.scenarios.attacksurface.nuclei import Matcher
 
 # The read-only methods, so the generated script warns loudly when a recipe carries a
 # state-changing verb the operator would send by hand.

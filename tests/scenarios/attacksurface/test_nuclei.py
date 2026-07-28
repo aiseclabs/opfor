@@ -7,8 +7,8 @@ unsupported cases prove a template opfor cannot yet drive is reported loud, neve
 
 from __future__ import annotations
 
-from opfor.scenarios.attacksurface.assets.domain import PATHS
-from opfor.scenarios.attacksurface.assets.domain.nuclei import (
+from opfor.scenarios.attacksurface import PATHS
+from opfor.scenarios.attacksurface.nuclei import (
     NucleiTemplate,
     UnsupportedTemplate,
     concrete_paths,

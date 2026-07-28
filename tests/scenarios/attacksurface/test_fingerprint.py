@@ -11,9 +11,9 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from opfor.scenarios.attacksurface.assets.domain import KNOWLEDGE
-from opfor.scenarios.attacksurface.assets.domain.fingerprint import fingerprint, load_products
-from opfor.scenarios.attacksurface.assets.domain.fingerprint import Fingerprint
+from opfor.scenarios.attacksurface import KNOWLEDGE
+from opfor.scenarios.attacksurface.fingerprint import fingerprint, load_products
+from opfor.scenarios.attacksurface.fingerprint import Fingerprint
 
 _TABLE = load_products(KNOWLEDGE / "fingerprints" / "products")
 

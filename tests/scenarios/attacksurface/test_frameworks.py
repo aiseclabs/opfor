@@ -10,12 +10,12 @@ from __future__ import annotations
 
 import re
 
-from opfor.scenarios.attacksurface.assets.domain import KNOWLEDGE
-from opfor.scenarios.attacksurface.assets.domain.classifiers import (
+from opfor.scenarios.attacksurface import KNOWLEDGE
+from opfor.scenarios.attacksurface.classifiers import (
     classify_frameworks,
     load_frameworks,
 )
-from opfor.scenarios.attacksurface.assets.domain.types import HTTPProbe
+from opfor.scenarios.attacksurface.types import HTTPProbe
 
 _FRAMEWORKS = load_frameworks(KNOWLEDGE / "fingerprints" / "frameworks")
 

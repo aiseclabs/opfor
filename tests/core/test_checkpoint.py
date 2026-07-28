@@ -18,7 +18,7 @@ from opfor.scenarios.registry import get_scenario
 
 
 def test_checkpoint_round_trips_a_world_with_nested_dataclass_payloads():
-    from opfor.scenarios.attacksurface.assets.domain.types import (
+    from opfor.scenarios.attacksurface.types import (
         CVE, CVEScan, Endpoint, SpecAudit, SpecOperation)
 
     scenario = get_scenario("attacksurface")

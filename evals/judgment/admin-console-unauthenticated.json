@@ -1,0 +1,8 @@
+{
+  "note": "an internal operations console reachable with no credential, leaking its environment and metrics, the canonical missing-authentication surface, selecting the admin-console and metrics-debug guides",
+  "surface": "## host ops.example.com\n\nhttps://ops.example.com/  200  title: Ops Dashboard\n  a control panel reachable with no credential, the navigation lists user management and settings\n\nhttps://ops.example.com/actuator/env  200  content-type: application/json\n  body: {\"activeProfiles\":[\"prod\"],\"propertySources\":[{\"name\":\"systemEnvironment\",\"properties\":{\"DB_PASSWORD\":{\"value\":\"redacted\"}}}]}\n\nhttps://ops.example.com/metrics  200  content-type: text/plain\n  body: # HELP go_gc_duration_seconds A summary of the GC invocation durations.\n        # TYPE go_gc_duration_seconds summary\n",
+  "expect": {
+    "positive": ["class:missing-authentication", "guide:surfaces/admin-console", "guide:surfaces/metrics-debug"],
+    "negative": ["guide:protocols/graphql", "guide:surfaces/search-analytics"]
+  }
+}

@@ -33,9 +33,17 @@ from opfor.core.markdown_docs import iter_md_docs
 from opfor.scenarios.attacksurface.assets.domain import KNOWLEDGE, KnowledgePaths
 
 CORPUS = Path(__file__).resolve().parent / "corpus"
+JUDGMENT_CORPUS = Path(__file__).resolve().parent / "judgment"
 
 DETECTION = "detection"
 JUDGMENT = "judgment"
+
+
+def _corpora(corpus: Path | None) -> list[Path]:
+    """The case roots a scan reads. A given root is read alone, for test isolation, and the default
+    reads both the detection cassettes under `corpus/` and the judgment fixtures under `judgment/`,
+    so one scan crosses every case against the knowledge inventory."""
+    return [corpus] if corpus is not None else [CORPUS, JUDGMENT_CORPUS]
 
 _NON_SLUG = re.compile(r"[^a-z0-9]+")
 
@@ -120,23 +128,27 @@ class CoverageProblem:
     detail: str = ""
 
 
-def _case_labels(corpus: Path) -> list[tuple[str, bool, str]]:
-    """Every (ref, is_positive, source) a backtest case declares in its `expect` block. The labels
-    live only in the case metadata and never reach the pipeline, so a passing score cannot come
-    from the tool grading itself, invariant 4."""
+def _case_labels(corpus: Path | None = None) -> list[tuple[str, bool, str]]:
+    """Every (ref, is_positive, source) a backtest case declares in its `expect` block, across the
+    detection cassettes and the judgment fixtures. The labels live only in the case metadata and
+    never reach the pipeline, so a passing score cannot come from the tool grading itself,
+    invariant 4."""
     rows: list[tuple[str, bool, str]] = []
-    for path in sorted(corpus.rglob("*.json")):
-        expect = (json.loads(path.read_text(encoding="utf-8")).get("expect") or {})
-        name = path.relative_to(corpus).as_posix()
-        for ref in expect.get("positive") or []:
-            rows.append((ref, True, name))
-        for ref in expect.get("negative") or []:
-            rows.append((ref, False, name))
+    for root in _corpora(corpus):
+        if not root.is_dir():
+            continue
+        for path in sorted(root.rglob("*.json")):
+            expect = (json.loads(path.read_text(encoding="utf-8")).get("expect") or {})
+            name = path.relative_to(root).as_posix()
+            for ref in expect.get("positive") or []:
+                rows.append((ref, True, name))
+            for ref in expect.get("negative") or []:
+                rows.append((ref, False, name))
     return rows
 
 
 def coverage_matrix(items: dict[str, KnowledgeItem] | None = None,
-                    corpus: Path = CORPUS) -> dict[str, Coverage]:
+                    corpus: Path | None = None) -> dict[str, Coverage]:
     """Cross the knowledge inventory against the backtest cases, so every claim carries a count of
     the positive and negative cases that exercise it, and an unexercised claim reads as zero."""
     items = scan_knowledge() if items is None else items
@@ -153,7 +165,7 @@ def coverage_matrix(items: dict[str, KnowledgeItem] | None = None,
 
 
 def coverage_problems(items: dict[str, KnowledgeItem] | None = None,
-                      corpus: Path = CORPUS) -> list[CoverageProblem]:
+                      corpus: Path | None = None) -> list[CoverageProblem]:
     """The gate-facing gaps, in stable order: every detection claim needs a positive and a negative
     case, every judgment class needs a case, and every case label must resolve to a known claim."""
     items = scan_knowledge() if items is None else items
@@ -178,14 +190,19 @@ def coverage_problems(items: dict[str, KnowledgeItem] | None = None,
     return problems
 
 
-def gate(items: dict[str, KnowledgeItem] | None = None, corpus: Path = CORPUS) -> list[str]:
-    """The coverage failures that block a run. Only an unresolved reference gates, a case labels a
-    knowledge ref no file defines, for example one orphaned by a renamed knowledge file. That is
-    always a real defect, so it fails loud regardless of how full the corpus is, invariant 5. The
-    missing-positive, missing-negative, and missing-case gaps are reported, not gated, until the
-    case corpus is filled in."""
+_GATING = frozenset({"unresolved-reference", "missing-case"})
+
+
+def gate(items: dict[str, KnowledgeItem] | None = None, corpus: Path | None = None) -> list[str]:
+    """The coverage failures that block a run. Two kinds gate. An unresolved reference, a case that
+    labels a knowledge ref no file defines, for example one orphaned by a renamed knowledge file, is
+    always a real defect, invariant 5. A missing case, a judgment class or guide no case labels, now
+    gates too, since the judgment fixtures under `judgment/` were filled to cover every judgment ref,
+    so a new class or guide that ships without a case fails the run rather than reading as covered.
+    The missing-positive and missing-negative detection gaps stay reported, not gated, until a real
+    cassette exists for the product, since those cannot be authored without a recorded capture."""
     return [f"{p.ref}: {p.detail}" for p in coverage_problems(items, corpus)
-            if p.kind == "unresolved-reference"]
+            if p.kind in _GATING]
 
 
 def format_inventory(items: dict[str, KnowledgeItem] | None = None) -> str:
@@ -208,7 +225,7 @@ def format_inventory(items: dict[str, KnowledgeItem] | None = None) -> str:
     return "\n".join(lines)
 
 
-def format_matrix(items: dict[str, KnowledgeItem] | None = None, corpus: Path = CORPUS) -> str:
+def format_matrix(items: dict[str, KnowledgeItem] | None = None, corpus: Path | None = None) -> str:
     """The coverage table: each claim, its positive and negative case counts, and an UNCOVERED flag,
     followed by the gate-facing gaps. So an untested knowledge claim is visible, not silent."""
     items = scan_knowledge() if items is None else items

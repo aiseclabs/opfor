@@ -71,9 +71,26 @@ def test_coverage_matrix_counts_cases_per_claim_and_flags_gaps():
 
     problems = coverage_problems()
     kinds = {p.kind for p in problems}
-    assert "missing-positive" in kinds and "missing-negative" in kinds and "missing-case" in kinds
-    # every judgment class with no case is reported, so an unexercised class is not silent
+    # detection precision and recall gaps stay visible on the real corpus, the products, clues, and
+    # signatures with no cassette yet
+    assert "missing-positive" in kinds and "missing-negative" in kinds
+    # Part 4 filled a labeled fixture for every judgment class and guide, so none is a missing-case
+    # gap now, and both judgment namespaces read as covered
+    assert not any(p.kind == "missing-case" for p in problems)
+    assert cov["class:improper-authentication"].covered
+    assert cov["guide:protocols/graphql"].covered
+
+
+def test_missing_case_is_flagged_and_gated_for_an_unlabeled_judgment_class(tmp_path):
+    from evals.coverage import coverage_problems, gate
+
+    # scored against an isolated empty corpus every judgment class and guide is uncovered, so the
+    # missing-case kind is emitted and, since Part 4 made it gate, the gate fails and names one
+    problems = coverage_problems(corpus=tmp_path)
     assert any(p.kind == "missing-case" and p.ref == "class:improper-authentication" for p in problems)
+    assert any(p.kind == "missing-case" and p.ref == "guide:surfaces/admin-console" for p in problems)
+    fails = gate(corpus=tmp_path)
+    assert fails and any("class:improper-authentication" in f for f in fails)
 
 
 def test_coverage_flags_a_case_label_that_names_no_knowledge(tmp_path):
@@ -119,3 +136,39 @@ def test_the_seed_corpus_passes_the_gate():
     assert fails == [], f"backtest gate failed: {fails}"
     assert result["recall"] == 1.0 and result["version_accuracy"] == 1.0
     assert not result["negative_fires"] and not result["misidentified"]
+
+
+def test_judgment_fixtures_select_their_labeled_guides():
+    from evals import judgment
+
+    cases = judgment.run()
+    result = judgment.score(cases)
+    fails = judgment.gate(result)
+    assert fails == [], f"judgment selection gate failed: {fails}"
+    # every guide labeled positive rides its own surface and no guide rides one it must not, the
+    # same recall and precision the fingerprint backtest asserts for product detection
+    assert result["recall"] == 1.0 and not result["wrong_fires"]
+    assert result["graded"] >= 5
+
+
+def test_judgment_gate_blocks_an_empty_corpus(tmp_path):
+    from evals import judgment
+
+    # an empty corpus grades no fixture and scores a vacuous 100%, so the gate must fail for want of
+    # a real sample rather than pass as clean, invariant 5
+    result = judgment.score(judgment.run(root=tmp_path))
+    fails = judgment.gate(result)
+    assert fails and any("empty" in f for f in fails)
+
+
+def test_a_guide_riding_a_surface_it_must_not_is_a_wrong_fire(tmp_path):
+    from evals import judgment
+
+    # a surface carrying a graphql marker while labeling that guide negative is a precision failure,
+    # the mirror of the fingerprint negative, and the gate must catch it
+    (tmp_path / "bad.json").write_text(
+        '{"surface": "POST /graphql returned a populated \\"__schema\\" with a queryType",'
+        ' "expect": {"positive": [], "negative": ["guide:protocols/graphql"]}}', encoding="utf-8")
+    result = judgment.score(judgment.run(root=tmp_path))
+    fails = judgment.gate(result)
+    assert result["wrong_fires"] and fails

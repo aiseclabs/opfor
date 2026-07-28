@@ -14,13 +14,13 @@ import json
 
 from opfor.core import Budget, MockProvider, Node, Scope, World, run
 from opfor.scenarios.attacksurface import build
-from opfor.scenarios.attacksurface.sources.observations import (
+from opfor.scenarios.attacksurface.assets.domain.sources.observations import (
     Liveness,
     Resolution,
     Response,
 )
-from opfor.scenarios.attacksurface.hostnames import HostScope
-from opfor.scenarios.attacksurface.seed import Org
+from opfor.scenarios.attacksurface.assets.domain.hostnames import HostScope
+from opfor.scenarios.attacksurface.assets.domain.seed import Org
 
 ROOT = "example.com"
 
@@ -186,10 +186,11 @@ def _scenario():
     return _make()
 
 
-def _seed(*, domains=(ROOT,), hosts=()):
+def _seed(*, domains=(ROOT,), hosts=(), classes=()):
     world = World()
     world.add(Node(id="org:ExampleCorp", type="org",
-                   payload=Org(name="ExampleCorp", domains=tuple(domains), hosts=tuple(hosts))))
+                   payload=Org(name="ExampleCorp", domains=tuple(domains), hosts=tuple(hosts),
+                               classes=tuple(classes))))
     return world
 
 

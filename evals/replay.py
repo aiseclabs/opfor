@@ -16,15 +16,15 @@ from pathlib import Path
 from opfor.core import Budget, MockProvider, Node, Scope, World
 from opfor.core.engine import run as engine_run
 from opfor.scenarios.attacksurface import build
-from opfor.scenarios.attacksurface.hostnames import HostScope
-from opfor.scenarios.attacksurface.seed import Org
-from opfor.scenarios.attacksurface import PATHS
-from opfor.scenarios.attacksurface.sources.observations import (
+from opfor.scenarios.attacksurface.assets.domain.hostnames import HostScope
+from opfor.scenarios.attacksurface.assets.domain.seed import Org
+from opfor.scenarios.attacksurface.assets.domain import PATHS
+from opfor.scenarios.attacksurface.assets.domain.sources.observations import (
     Liveness,
     Resolution,
     Response,
 )
-from opfor.scenarios.attacksurface.fingerprint import fingerprint, load_products
+from opfor.scenarios.attacksurface.assets.domain.fingerprint import fingerprint, load_products
 
 _TABLE = load_products(PATHS.products)
 

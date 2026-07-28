@@ -77,6 +77,30 @@ def test_prepare_run_without_a_seed_fails_loud(monkeypatch):
         prepare_run()
 
 
+def test_chain_and_contract_parse_into_their_own_slots(monkeypatch):
+    # the attack-surface scenario carries a domain class and a chain class, so --chain and
+    # --contract parse into their own dests, distinct from the domain class's --root and --host,
+    # and the shell dispatches the run to the class the filled slots select
+    _clear(monkeypatch)
+    captured: dict = {}
+    monkeypatch.setattr("opfor.cli._run", lambda args: captured.update(vars(args)) or 0)
+    main(["run", "attacksurface", "--chain", "arbitrum", "--contract", "0xABC", "--contract", "0xDEF"])
+    assert captured["chain"] == ["arbitrum"]
+    assert captured["contract"] == ["0xABC", "0xDEF"]
+    assert captured["root"] is None
+    assert captured["host"] is None
+
+
+def test_chain_seed_dispatches_to_the_chain_asset_class(monkeypatch):
+    # a chain seed routes the run to the chain class, which seeds a survey node and the named
+    # contract, so a domain org node is never minted for a chain run
+    _clear(monkeypatch)
+    name, world, scope, _ = prepare_run(chains=("arbitrum",), contracts=("0xabc",))
+    assert world.node("survey:arbitrum") is not None
+    assert world.node("contract:arbitrum:0xabc") is not None
+    assert scope.max_tier == "recon"
+
+
 def test_run_rejects_a_scenario_with_no_seed_builder(monkeypatch):
     _clear(monkeypatch)
     # mock is a kernel fixture with no run seed, so the run command says so rather than crash

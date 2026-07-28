@@ -6,7 +6,7 @@ from tests.scenarios.attacksurface.fixtures import (
 )
 
 def test_javascript_and_url_parsing():
-    from opfor.scenarios.attacksurface.sources import (
+    from opfor.scenarios.attacksurface.assets.domain.sources import (
         paths_in_javascript,
         same_host_path,
         script_sources,
@@ -38,14 +38,14 @@ def test_cross_host_javascript_path_is_probed_on_the_sibling_host():
     assert world.node("endpoint:api.example.com/v2/balance") is not None
 
 def test_urls_in_javascript_extracts_an_explicit_port():
-    from opfor.scenarios.attacksurface.sources.javascript import urls_in_javascript
+    from opfor.scenarios.attacksurface.assets.domain.sources.javascript import urls_in_javascript
     body = 'const api = "https://api.host.com:8443/v1/users";'
     assert "https://api.host.com:8443/v1/users" in urls_in_javascript(body)
 
 def test_javascript_extraction_dedups_and_caps_a_hostile_bundle():
     # a bundle packing far more distinct quoted paths than the cap must be read out in bounded
     # time and bounded length, not grow an unbounded list on a quadratic membership scan
-    from opfor.scenarios.attacksurface.sources.javascript import (
+    from opfor.scenarios.attacksurface.assets.domain.sources.javascript import (
         _MAX_JS_STRINGS,
         paths_in_javascript,
         urls_in_javascript,
@@ -71,7 +71,7 @@ def test_robots_disallow_paths_become_candidates():
     assert world.node("endpoint:example.com/secret-panel") is not None
 
 def test_robots_and_sitemap_parsing():
-    from opfor.scenarios.attacksurface.sources import robots_entries, sitemap_paths
+    from opfor.scenarios.attacksurface.assets.domain.sources import robots_entries, sitemap_paths
 
     paths, sitemaps = robots_entries("User-agent: *\nDisallow: /admin\nAllow: /public\nSitemap: https://h/sm.xml")
     assert paths == ["/admin", "/public"]

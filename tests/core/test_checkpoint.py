@@ -11,14 +11,14 @@ from __future__ import annotations
 from opfor.core import (Budget, Checkpoint, Fact, Node, Phase, Scope, World, checkpoint, restore,
                         resume_async, run)
 from opfor.core.runstate import RunState
-from opfor.scenarios.attacksurface.hostnames import HostScope
+from opfor.scenarios.attacksurface.assets.domain.hostnames import HostScope
 from opfor.core.ledger import Ledger
 from opfor.core.result import CLOSED, SUSPENDED
 from opfor.scenarios.registry import get_scenario
 
 
 def test_checkpoint_round_trips_a_world_with_nested_dataclass_payloads():
-    from opfor.scenarios.attacksurface.types import (
+    from opfor.scenarios.attacksurface.assets.domain.types import (
         CVE, CVEScan, Endpoint, SpecAudit, SpecOperation)
 
     scenario = get_scenario("attacksurface")

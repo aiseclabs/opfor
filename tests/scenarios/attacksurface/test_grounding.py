@@ -16,10 +16,10 @@ def test_grounding_attaches_a_poc_request_only_for_an_observed_safe_read():
     """Strict grounding: a finding is marked reproducible only when its safe-read proof of
     concept names a GET the surface actually recorded, never a request the model invented."""
     from opfor.core import Fact
-    from opfor.scenarios.attacksurface.types import (
+    from opfor.scenarios.attacksurface.assets.domain.types import (
         DomainData, Endpoint, SpecAudit, SpecOperation)
     from opfor.core.result import Finding
-    from opfor.scenarios.attacksurface.lifecycle.grounding import FindingGrounder
+    from opfor.scenarios.attacksurface.assets.domain.grounding import FindingGrounder
 
     world = World()
     world.add(Node(id="domain:api.example.com", type="domain",
@@ -93,11 +93,11 @@ def test_a_versioned_cve_finding_grounds_on_the_recipe_across_every_candidate_pa
     recipe: every candidate path becomes a url, the recipe's headers and matchers ride into the
     request, and the generated script decides PASS or FAIL by the recipe's own fire condition."""
     from opfor.core import Fact
-    from opfor.scenarios.attacksurface.types import (
+    from opfor.scenarios.attacksurface.assets.domain.types import (
         CVE, CVEScan, DomainData, HTTPProbe)
-    from opfor.scenarios.attacksurface.nuclei import Matcher
+    from opfor.scenarios.attacksurface.assets.domain.nuclei import Matcher
     from opfor.core.result import Finding
-    from opfor.scenarios.attacksurface.lifecycle.grounding import (
+    from opfor.scenarios.attacksurface.assets.domain.grounding import (
         FindingGrounder, ReproductionRecipe)
 
     world = World()
@@ -137,9 +137,9 @@ def test_triage_judge_mints_findings_and_mutates_no_world_node():
     only writes the poc field and a poc_request in the finding's data, it materializes nothing,
     and the scenario wires it as the post-triage step."""
     from opfor.core import Fact
-    from opfor.scenarios.attacksurface.types import DomainData, Endpoint, Resolved
-    from opfor.scenarios.attacksurface.lifecycle.grounding import FindingGrounder
-    from opfor.scenarios.attacksurface.lifecycle.triage import SurfaceTriage
+    from opfor.scenarios.attacksurface.assets.domain.types import DomainData, Endpoint, Resolved
+    from opfor.scenarios.attacksurface.assets.domain.grounding import FindingGrounder
+    from opfor.scenarios.attacksurface.assets.domain.triage import SurfaceTriage
 
     world = World()
     world.add(Node(id="domain:api.example.com", type="domain",

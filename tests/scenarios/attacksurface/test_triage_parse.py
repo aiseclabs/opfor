@@ -6,7 +6,7 @@ from __future__ import annotations
 import json
 
 from opfor.core import MockProvider
-from opfor.scenarios.attacksurface.lifecycle.triage import _finding_from_dict
+from opfor.scenarios.attacksurface.assets.domain.triage import _finding_from_dict
 
 from tests.scenarios.attacksurface.fixtures import _run_capturing
 
@@ -70,7 +70,7 @@ def test_malformed_findings_are_dropped_loudly_with_a_degraded_marker():
     import json
 
     from opfor.core import MockProvider
-    from opfor.scenarios.attacksurface.lifecycle.triage import SurfaceTriage
+    from opfor.scenarios.attacksurface.assets.domain.triage import SurfaceTriage
 
     reply = json.dumps({"findings": [
         {"category": "unauthenticated-interface", "title": "ok", "severity": "HIGH",
@@ -92,7 +92,7 @@ def test_a_finding_whose_location_is_not_in_the_report_is_dropped():
     import json
 
     from opfor.core import MockProvider
-    from opfor.scenarios.attacksurface.lifecycle.triage import SurfaceTriage
+    from opfor.scenarios.attacksurface.assets.domain.triage import SurfaceTriage
 
     reply = json.dumps({"findings": [
         {"category": "unauthenticated-interface", "title": "real", "severity": "HIGH",
@@ -110,7 +110,7 @@ def test_a_finding_whose_location_is_not_in_the_report_is_dropped():
 
 
 def test_confidence_is_coerced_to_a_float_or_none():
-    from opfor.scenarios.attacksurface.lifecycle.triage import _confidence
+    from opfor.scenarios.attacksurface.assets.domain.triage import _confidence
     # a string, a null, or an out-of-range value never lands raw in the structured axes
     assert _confidence("high") is None
     assert _confidence(None) is None
@@ -120,7 +120,7 @@ def test_confidence_is_coerced_to_a_float_or_none():
 
 def test_dedup_merges_same_class_and_location_taking_max_severity_and_union_evidence():
     from opfor.core.result import Finding
-    from opfor.scenarios.attacksurface.lifecycle.triage import SurfaceTriage
+    from opfor.scenarios.attacksurface.assets.domain.triage import SurfaceTriage
     a = Finding(id="finding:known-vulnerability:h", title="known vulns", severity="MEDIUM",
                 where="h", evidence="CVE-1 affects the running version")
     b = Finding(id="finding:known-vulnerability:h", title="known vulns", severity="HIGH",
@@ -134,7 +134,7 @@ def test_dedup_merges_same_class_and_location_taking_max_severity_and_union_evid
 
 def test_dedup_collapses_title_and_scheme_variance_but_keeps_distinct_paths():
     from opfor.core.result import Finding
-    from opfor.scenarios.attacksurface.lifecycle.triage import SurfaceTriage
+    from opfor.scenarios.attacksurface.assets.domain.triage import SurfaceTriage
     # same class + location worded two ways, plus a scheme/slash variant, collapse to one
     v1 = Finding(id="finding:unauthenticated-interface:https://h/a",
                  title="open endpoint", severity="LOW", where="https://h/a")

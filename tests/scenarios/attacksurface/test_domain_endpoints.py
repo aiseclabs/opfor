@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from opfor.core import Node, World
 
-from opfor.scenarios.attacksurface.sources.observations import Liveness, Response
+from opfor.scenarios.attacksurface.assets.domain.sources.observations import Liveness, Response
 from tests.scenarios.attacksurface.fixtures import (
     ROOT,
     _fetch,
@@ -25,10 +25,10 @@ def test_exposure_clues_and_judgment_classes_are_loaded():
     # The blind fixed-path probe list is gone, a leak is reached only when evidence surfaces its
     # path, but the deterministic clues that direct the model and the judgment classes it reaches
     # for still ship in the finding units.
-    from opfor.scenarios.attacksurface import KNOWLEDGE
-    from opfor.scenarios.attacksurface.lifecycle.triage import _load_classes, _load_clues
+    from opfor.scenarios.attacksurface.assets import domain as domain_class
+    from opfor.scenarios.attacksurface.assets.domain.triage import _load_classes, _load_clues
 
-    knowledge = KNOWLEDGE
+    knowledge = domain_class.KNOWLEDGE
     clue_ids = {c["id"] for c in _load_clues(knowledge / "findings")}
     assert {"prometheus-metrics", "apache-server-status", "exposed-actuator-env"} <= clue_ids
     class_ids = {c["id"] for c in _load_classes(knowledge / "findings")}
@@ -86,8 +86,8 @@ def test_endpoint_probe_records_a_coverage_gap_on_a_transport_failure_not_only_a
 
 def test_endpoint_probe_reports_truncation_when_the_candidate_cap_is_hit():
     from opfor.core import Done, Task
-    from opfor.scenarios.attacksurface.capabilities.http import ProbeEndpoints
-    from opfor.scenarios.attacksurface.types import DomainData
+    from opfor.scenarios.attacksurface.assets.domain.capabilities.http import ProbeEndpoints
+    from opfor.scenarios.attacksurface.assets.domain.types import DomainData
 
     world = World()
     world.add(Node(id="domain:h", type="domain", payload=DomainData(name="h", root="h", source="s")))
@@ -105,8 +105,8 @@ def test_endpoint_probe_reports_truncation_when_the_candidate_cap_is_hit():
 
 def test_endpoint_probe_flags_when_the_baseline_cannot_be_established():
     from opfor.core import Done, Task
-    from opfor.scenarios.attacksurface.capabilities.http import ProbeEndpoints
-    from opfor.scenarios.attacksurface.types import DomainData
+    from opfor.scenarios.attacksurface.assets.domain.capabilities.http import ProbeEndpoints
+    from opfor.scenarios.attacksurface.assets.domain.types import DomainData
 
     world = World()
     world.add(Node(id="domain:h", type="domain", payload=DomainData(name="h", root="h", source="s")))
@@ -125,7 +125,7 @@ def test_endpoint_probe_flags_when_the_baseline_cannot_be_established():
     assert gaps and any("baseline" in r for r in gaps[0].reasons)
 
 def test_distinct_treats_a_differing_redirect_location_as_a_real_endpoint():
-    from opfor.scenarios.attacksurface.responses import _distinct
+    from opfor.scenarios.attacksurface.assets.domain.responses import _distinct
     # a host that answers a blanket 302 to /login for unknown paths still hides a real /admin
     # that redirects to its own dashboard, so a differing location is distinct
     baseline = Response(status=302, location="https://h/login")
@@ -135,7 +135,7 @@ def test_distinct_treats_a_differing_redirect_location_as_a_real_endpoint():
     assert _distinct(other, baseline) is True
 
 def test_distinct_ignores_a_path_echoing_login_redirect_query():
-    from opfor.scenarios.attacksurface.responses import _distinct
+    from opfor.scenarios.attacksurface.assets.domain.responses import _distinct
     # a login wall that echoes the requested path in ?next= gives every path a different raw
     # location, but it is one catch-all, so not distinct
     baseline = Response(status=302, location="https://h/login?next=/x")
@@ -145,7 +145,7 @@ def test_distinct_ignores_a_path_echoing_login_redirect_query():
     assert _distinct(Response(status=302, location="https://h/admin/dashboard"), baseline) is True
 
 def test_norm_url_keeps_the_query_so_a_query_bearing_poc_does_not_false_match():
-    from opfor.scenarios.attacksurface.lifecycle.grounding import _norm_url
+    from opfor.scenarios.attacksurface.assets.domain.grounding import _norm_url
     # a PoC that names a query parameter must not normalize onto the query-less observed GET,
     # which would ground the finding in a materially different request
     assert _norm_url("https://h/api/data?debug=1") != _norm_url("https://h/api/data")
@@ -174,8 +174,8 @@ def test_http_domain_records_a_gap_when_unreachable_but_not_when_refused():
     # the run could not reach the host, while a refused connection is a real negative, so the
     # gap is recorded for the first and not the second, invariant 3 and 5.
     from opfor.core import Done, Fact, Task
-    from opfor.scenarios.attacksurface.capabilities.http import ProbeDomainHTTP
-    from opfor.scenarios.attacksurface.types import DomainData, Resolved
+    from opfor.scenarios.attacksurface.assets.domain.capabilities.http import ProbeDomainHTTP
+    from opfor.scenarios.attacksurface.assets.domain.types import DomainData, Resolved
 
     world = World()
     world.add(Node(id="domain:h", type="domain", payload=DomainData(name="h", root="h", source="s")))
@@ -196,8 +196,8 @@ def test_http_domain_records_a_gap_when_unreachable_but_not_when_refused():
 
 def test_resolve_error_records_an_errored_fact_and_a_gap_not_a_bare_failed():
     from opfor.core import Done, Task
-    from opfor.scenarios.attacksurface.capabilities.dns import ResolveDomain
-    from opfor.scenarios.attacksurface.types import DomainData
+    from opfor.scenarios.attacksurface.assets.domain.capabilities.dns import ResolveDomain
+    from opfor.scenarios.attacksurface.assets.domain.types import DomainData
 
     world = World()
     world.add(Node(id="domain:h", type="domain", payload=DomainData(name="h", root="h", source="s")))
@@ -215,9 +215,9 @@ def test_resolve_error_records_an_errored_fact_and_a_gap_not_a_bare_failed():
 
 def test_harvest_crash_still_records_harvested_and_a_gap(monkeypatch):
     from opfor.core import Done, Fact, Task
-    from opfor.scenarios.attacksurface.capabilities import http as cap_http
-    from opfor.scenarios.attacksurface.capabilities.http import HarvestPaths
-    from opfor.scenarios.attacksurface.types import DomainData, Resolved
+    from opfor.scenarios.attacksurface.assets.domain.capabilities import http as cap_http
+    from opfor.scenarios.attacksurface.assets.domain.capabilities.http import HarvestPaths
+    from opfor.scenarios.attacksurface.assets.domain.types import DomainData, Resolved
 
     world = World()
     world.add(Node(id="domain:h", type="domain", payload=DomainData(name="h", root="h", source="s")))
@@ -242,8 +242,8 @@ def test_harvest_crash_still_records_harvested_and_a_gap(monkeypatch):
 
 def test_harvest_records_a_gap_when_the_home_document_is_unreachable():
     from opfor.core import Done, Fact, Task
-    from opfor.scenarios.attacksurface.capabilities.http import HarvestPaths
-    from opfor.scenarios.attacksurface.types import DomainData, Resolved
+    from opfor.scenarios.attacksurface.assets.domain.capabilities.http import HarvestPaths
+    from opfor.scenarios.attacksurface.assets.domain.types import DomainData, Resolved
 
     world = World()
     world.add(Node(id="domain:h", type="domain", payload=DomainData(name="h", root="h", source="s")))
@@ -263,8 +263,8 @@ def test_harvest_records_a_gap_when_the_home_document_is_unreachable():
 
 def test_harvest_records_a_gap_when_the_home_read_raises_an_unexpected_error():
     from opfor.core import Done, Fact, Task
-    from opfor.scenarios.attacksurface.capabilities.http import HarvestPaths
-    from opfor.scenarios.attacksurface.types import DomainData, Resolved
+    from opfor.scenarios.attacksurface.assets.domain.capabilities.http import HarvestPaths
+    from opfor.scenarios.attacksurface.assets.domain.types import DomainData, Resolved
 
     world = World()
     world.add(Node(id="domain:h", type="domain", payload=DomainData(name="h", root="h", source="s")))

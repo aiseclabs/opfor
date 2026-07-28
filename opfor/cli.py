@@ -56,7 +56,8 @@ def _run(args) -> int:
         name, world, scope, scenario = adapter(
             name=args.name, roots=tuple(args.root or []), roots_file=args.roots or "",
             hosts=tuple(args.host or []), hosts_file=args.hosts or "", tier=args.tier,
-            authorized=args.authorize)
+            authorized=args.authorize, chains=tuple(args.chain or []),
+            contracts=tuple(args.contract or []))
     except (KeyError, ValueError) as exc:
         raise SystemExit(str(exc))
 
@@ -109,14 +110,20 @@ def main(argv: list[str] | None = None) -> int:
     run = sub.add_parser("run", help="run a scenario against a seed")
     run.add_argument("scenario", help="the scenario to run")
     run.add_argument("--name", help="the target name, defaults to OPFOR_TARGET or the first root")
-    # A seed root and a seed host are the generic slots the CLI stays scenario-agnostic over. The
-    # scenario reads them in its own terms, attacksurface as a root domain and a subdomain host.
+    # A seed root and a seed host are the generic slots each scenario reads in its own terms. The
+    # attack-surface scenario carries two asset classes and selects one by which slot a run fills,
+    # a root domain and a subdomain host run the domain class, a chain and a contract address run
+    # the chain class, so the flag names read naturally while the CLI stays scenario-agnostic.
     run.add_argument("--root", dest="root", action="append", metavar="ROOT",
-                     help="a seed root, a root domain for attacksurface, repeatable")
+                     help="a seed root domain for the domain asset class, repeatable")
     run.add_argument("--roots", help="a file of seed roots, defaults to OPFOR_ROOTS_FILE")
     run.add_argument("--host", dest="host", action="append", metavar="HOST",
-                     help="a seed host, a subdomain for attacksurface, repeatable")
+                     help="a seed subdomain host for the domain asset class, repeatable")
     run.add_argument("--hosts", help="a file of seed hosts, defaults to OPFOR_HOSTS_FILE")
+    run.add_argument("--chain", dest="chain", action="append", metavar="CHAIN",
+                     help="a seed chain for the chain asset class, for example ethereum, repeatable")
+    run.add_argument("--contract", dest="contract", action="append", metavar="ADDRESS",
+                     help="a seed contract address for the chain asset class, repeatable")
     run.add_argument("--tier", default="recon", help="the scope tier ceiling, default recon")
     run.add_argument("--authorize", action="store_true", help="record the intrusive-tier authorization")
     run.add_argument("--resume", action="store_true",

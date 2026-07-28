@@ -12,7 +12,7 @@ import json
 from opfor.core import Fact, Node, World
 from opfor.core.phase import Phase
 from opfor.core.result import CLOSED, Finding, Report
-from opfor.scenarios.attacksurface.types import (
+from opfor.scenarios.attacksurface.assets.domain.types import (
     CVE,
     CVEScan,
     DomainData,
@@ -21,7 +21,7 @@ from opfor.scenarios.attacksurface.types import (
     HTTPProbe,
     Resolved,
 )
-from opfor.scenarios.attacksurface.report import host_records, report_view
+from opfor.scenarios.attacksurface.assets.domain.report import host_records, report_view
 
 
 def _world() -> World:

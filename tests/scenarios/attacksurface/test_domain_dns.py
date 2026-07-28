@@ -6,7 +6,7 @@ import json
 def test_resolve_host_keeps_cname_and_asks_both_address_families(monkeypatch):
     import urllib.request
 
-    from opfor.scenarios.attacksurface import sources as domains
+    from opfor.scenarios.attacksurface.assets.domain import sources as domains
 
     asked = []
 
@@ -40,7 +40,7 @@ def test_resolve_host_keeps_cname_and_asks_both_address_families(monkeypatch):
 def test_resolve_host_treats_a_servfail_as_a_resolver_error_not_a_no_address(monkeypatch):
     import urllib.request
 
-    from opfor.scenarios.attacksurface.sources import http as domains
+    from opfor.scenarios.attacksurface.assets.domain.sources import http as domains
 
     class _Resp:
         def __init__(self, payload):
@@ -73,7 +73,7 @@ def test_resolve_host_treats_a_servfail_as_a_resolver_error_not_a_no_address(mon
 def test_resolve_host_does_not_launder_a_mixed_rcode_into_a_no_address(monkeypatch):
     import urllib.request
 
-    from opfor.scenarios.attacksurface.sources import http as domains
+    from opfor.scenarios.attacksurface.assets.domain.sources import http as domains
 
     class _Resp:
         def __init__(self, payload):

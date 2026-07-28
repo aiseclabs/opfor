@@ -25,7 +25,9 @@ from opfor.scenarios.mock import MOCK
 # Each entry builds its scenario on demand. The mock is a prebuilt fixture with no provider,
 # so its builder returns the constant. The attack-surface scenario builds a provider and
 # reads its knowledge tree from the environment, so it is built fresh on each call, keeping
-# registry import cheap and side-effect free while never freezing an environment read.
+# registry import cheap and side-effect free while never freezing an environment read. The
+# attack-surface scenario carries two asset classes, domain and chain, dispatched at run time
+# by flag, so its one registry entry covers both, see its `build` and `prepare_run`.
 _BUILDERS: dict[str, Callable[[], Scenario]] = {
     MOCK.name: lambda: MOCK,
     attacksurface.NAME: attacksurface.build,

@@ -3,7 +3,7 @@ from __future__ import annotations
 from opfor.core import Budget, Node, Phase, Scope, World, run
 from opfor.core.result import CLOSED
 
-from opfor.scenarios.attacksurface.sources.observations import Resolution
+from opfor.scenarios.attacksurface.assets.domain.sources.observations import Resolution
 from tests.scenarios.attacksurface.fixtures import (
     HostScope,
     ROOT,
@@ -36,7 +36,7 @@ def test_wildcard_certificate_is_reported_as_a_blind_spot():
 def test_truncated_enumeration_is_reported_as_a_blind_spot():
     # a passive source that stopped at its page cap left subdomains unfetched, the run must
     # say so rather than present the bounded set as the complete surface
-    from opfor.scenarios.attacksurface.sources import Enumeration
+    from opfor.scenarios.attacksurface.assets.domain.sources import Enumeration
 
     def enum_truncated(root):
         found = Enumeration({"api.example.com"})
@@ -61,9 +61,9 @@ def test_inventory_hosts_enter_the_surface_as_enriched_leaves():
 
 def test_wildcard_base_node_is_flagged():
     from opfor.core import Node, World
-    from opfor.scenarios.attacksurface.capabilities import EnumerateSubdomains
-    from opfor.scenarios.attacksurface.types import DomainData
-    from opfor.scenarios.attacksurface.seed import Org
+    from opfor.scenarios.attacksurface.assets.domain.capabilities import EnumerateSubdomains
+    from opfor.scenarios.attacksurface.assets.domain.types import DomainData
+    from opfor.scenarios.attacksurface.assets.domain.seed import Org
 
     world = World()
     world.add(Node(id="org:x", type="org", payload=Org(name="X", domains=("example.com",))))
@@ -83,7 +83,7 @@ def test_total_resolution_failure_reports_incomplete_not_dangling():
         return Resolution(resolvable=False)
 
     scenario = _make(resolve_fn=none_resolve)
-    world = _seed()
+    world = _seed(classes=("domain",))
     report = run(scenario, world, scope=Scope(max_tier="recon", matcher=HostScope(hosts=(ROOT,))), budget=Budget(500))
     kinds = {f.data.get("kind") for f in report.findings}
     assert "incomplete" in kinds
@@ -92,9 +92,9 @@ def test_total_resolution_failure_reports_incomplete_not_dangling():
 
 def test_subdomain_enumeration_partial_failure_surfaces_a_coverage_gap():
     from opfor.core import Done, Task
-    from opfor.scenarios.attacksurface.capabilities.discovery import EnumerateSubdomains
-    from opfor.scenarios.attacksurface.sources.enumeration import Enumeration
-    from opfor.scenarios.attacksurface.types import DomainData
+    from opfor.scenarios.attacksurface.assets.domain.capabilities.discovery import EnumerateSubdomains
+    from opfor.scenarios.attacksurface.assets.domain.sources.enumeration import Enumeration
+    from opfor.scenarios.attacksurface.assets.domain.types import DomainData
 
     world = World()
     world.add(Node(id="domain:example.com", type="domain",

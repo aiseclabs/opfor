@@ -10,6 +10,6 @@ a cassette from a live container.
 
 The identify seam here is the deterministic fingerprint only, no model, so the backtest measures the
 shipped table against recorded reality rather than a hand-typed string, and a marker or version that
-regresses is caught before release. The corpus and coverage cover the deterministic fingerprint
-table only, the model-backed identify fallback carries no table to replay.
+regresses is caught before release. The corpus and coverage are the domain asset class only, the
+chain class identifies with a model and carries no deterministic fingerprint table to replay.
 """

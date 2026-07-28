@@ -398,6 +398,15 @@ def test_chain_class_is_reachable_through_the_attacksurface_scenario():
     assert scenario.terminal == Phase.TRIAGE
 
 
+def test_the_seed_node_payload_registers_so_a_resumed_run_can_rebuild_it():
+    # the package defines a `seed` function that shadows the `seed` submodule as an attribute, so
+    # the payload introspection must reach the submodule directly or the survey node's payload is
+    # silently dropped and a checkpoint cannot reconstruct the seed on resume
+    from opfor.scenarios.attacksurface.assets import chain
+
+    assert "Survey" in chain._payloads()
+
+
 def test_prepare_run_defaults_to_ethereum_and_recon_only():
     target, world, scope, scenario = onchain.prepare_run()
     assert scope.max_tier == "recon"

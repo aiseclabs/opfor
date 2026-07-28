@@ -92,8 +92,13 @@ def _payloads() -> dict[str, type]:
     type is registered by defining it, not by editing a hand list. A durable checkpoint rebuilds the
     world's typed payloads from this map."""
     from dataclasses import is_dataclass
-    from opfor.scenarios.attacksurface.assets.chain import seed as chain_seed
-    from opfor.scenarios.attacksurface.assets.chain import types as contract_types
+    from importlib import import_module
+
+    # Import the submodule through import_module, since this package defines a `seed` function
+    # that shadows the `seed` submodule as a package attribute, so a plain `from . import seed`
+    # would bind the function and drop the seed node's payload.
+    chain_seed = import_module("opfor.scenarios.attacksurface.assets.chain.seed")
+    contract_types = import_module("opfor.scenarios.attacksurface.assets.chain.types")
 
     registry: dict[str, type] = {}
     for module in (chain_seed, contract_types):

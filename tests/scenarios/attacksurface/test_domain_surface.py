@@ -20,6 +20,14 @@ def test_run_closes():
     assert report.status == CLOSED
     assert report.reached == Phase.TRIAGE
 
+def test_the_seed_node_payload_registers_so_a_resumed_run_can_rebuild_it():
+    # the package defines a `seed` function that shadows the `seed` submodule as an attribute, so
+    # the payload introspection must reach the submodule directly or the org node's payload is
+    # silently dropped and a checkpoint cannot reconstruct the seed on resume
+    from opfor.scenarios.attacksurface.assets import domain
+
+    assert "Org" in domain._payloads()
+
 def test_expands_the_domain_asset_class_from_the_org():
     world = _seed()
     _run(world)

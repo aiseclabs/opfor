@@ -32,7 +32,7 @@ SCENARIO = "attacksurface"
 KNOWLEDGE = Path(__file__).resolve().parent / "knowledge"
 DETECTIONS = KNOWLEDGE / "detections" / "contract-signals"
 
-from opfor.scenarios.attacksurface.assets.base import ClassBundle
+from opfor.scenarios.attacksurface.assets.contract import ClassBundle
 from opfor.scenarios.attacksurface.assets.chain import planner
 from opfor.scenarios.attacksurface.assets.chain.chains import load_chain_policy, load_vendored_markers
 from opfor.scenarios.attacksurface.assets.chain.capabilities import (
@@ -79,7 +79,6 @@ def assemble(*, sweep_fn, pivot_fn, source_fn, identify_fn, funds_fn, resolve_fn
         FingerprintSource(markers),
     )
     return ClassBundle(
-        name=planner.CLASS,
         capabilities=capabilities,
         map_rules=tuple(planner.map_rules()),
         enrich_rules=tuple(planner.enrich_rules()),

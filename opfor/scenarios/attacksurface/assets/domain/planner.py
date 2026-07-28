@@ -19,11 +19,17 @@ from dataclasses import dataclass
 from urllib.parse import urlparse
 
 from opfor.core import Task, World, each
-from opfor.scenarios.attacksurface.assets.base import class_enabled
+from opfor.scenarios.attacksurface.assets.domain.seed import Org
 
 # The asset class this planner belongs to, the single source of the class name the enable gate and
 # the bundle share, so the class does not self-reference by a repeated string literal.
 CLASS = "domain"
+
+
+def class_enabled(org: Org, name: str) -> bool:
+    """Whether an asset class runs, given the org's optional class restriction. An empty
+    restriction means every class runs, so a bare seed maps the whole surface."""
+    return not org.classes or name in org.classes
 
 # Static-asset denoise, the suffixes and prefixes the endpoint probe treats as assets rather than
 # interfaces, so a hashed bundle does not bury the real routes. This is mechanical probe config, not

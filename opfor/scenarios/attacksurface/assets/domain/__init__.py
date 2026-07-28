@@ -13,7 +13,7 @@ from pathlib import Path
 
 from opfor.core import Node, Phase, Provider, RuleSet, Scenario, World, make_provider
 from opfor.core import default_model, role_model, triage_mode
-from opfor.scenarios.attacksurface.assets.base import ClassBundle
+from opfor.scenarios.attacksurface.assets.contract import ClassBundle
 from opfor.scenarios.attacksurface.assets.domain.grounding import (
     FindingGrounder,
     ReproductionRecipe,
@@ -170,7 +170,6 @@ def assemble(*, enumerate_fn, resolve_fn, probe_fn, fetch_fn, fetch_doc_fn,
     if extra_paths:
         config = replace(config, probe_paths=config.probe_paths + extra_paths)
     return ClassBundle(
-        name=planner.CLASS,
         capabilities=tuple(capabilities),
         map_rules=tuple(planner.map_rules()),
         enrich_rules=tuple(planner.enrich_rules(

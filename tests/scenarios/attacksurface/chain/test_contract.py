@@ -327,6 +327,28 @@ def test_adversarial_is_recall_safe_when_a_role_call_fails():
     assert len(triage.judge(world)) == 1  # a role error never drops a finding
 
 
+def test_the_playbook_rides_the_judge_and_challenger_prompts():
+    from opfor.scenarios.attacksurface.assets.chain import PLAYBOOK
+    from opfor.scenarios.attacksurface.assets.chain.triage import AuditTriage
+
+    triage = AuditTriage(KNOWLEDGE, playbook_dirs=[PLAYBOOK], provider=MockProvider(), model="m")
+    system = triage._system()
+    # the shared method rides the judge prompt once, under its own header
+    assert "Playbook, the judgment method shared by every class" in system
+    assert "Severity Rubric" in system
+    assert "five questions" in system.lower()
+    # the traps ride the challenger, its whole job being to refute a false positive
+    assert "False-Positive Traps" in triage._challenger_system
+
+
+def test_absent_a_playbook_the_prompts_fall_back():
+    from opfor.scenarios.attacksurface.assets.chain.triage import CHALLENGER_SYSTEM, AuditTriage
+
+    triage = AuditTriage(KNOWLEDGE, provider=MockProvider(), model="m")
+    assert "Playbook, the judgment method" not in triage._system()
+    assert triage._challenger_system == CHALLENGER_SYSTEM
+
+
 def test_adversarial_mode_wires_the_roles_from_the_env(monkeypatch):
     monkeypatch.setenv("OPFOR_TRIAGE_MODE", "adversarial")
     sc = onchain.build(provider=MockProvider(), model="m", identify_fn=_fake_identify)

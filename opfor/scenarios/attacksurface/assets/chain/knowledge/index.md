@@ -1,7 +1,8 @@
 # Chain-Class Knowledge
 
-The attack-surface chain class reads its judgment and detection knowledge from this tree. The tree
-holds two kinds of unit, told apart by who decides, a model or a capability:
+The attack-surface chain class reads its judgment and detection knowledge from this tree, and the
+shared judgment method from the sibling `playbook/` directory beside it. The tree holds two kinds of
+unit, told apart by who decides, a model or a capability:
 
 - Judgment, model-read. The prose the triage model reads to weigh whether a swept contract is worth
   a manual audit and how urgently, and the role fingerprints the identify seam reads as a guide. The
@@ -35,6 +36,12 @@ The tree:
   DEX-layer roles the pivot reaches past. `known-infrastructure.yaml` the audited bluechip addresses
   triage and the report drop from the audit queue rather than flag, keeping the queue on the unknown
   long tail.
+
+The cross-cutting judgment method every audit class shares lives beside this tree in `playbook/`,
+factored out so it is written once rather than restated per class. It is the severity rubric, the
+false-positive traps, and the run methodology with its five questions, read into the model at run
+time. It is a sibling of `knowledge/`, not a child, since it is the shared method rather than a
+scored claim, mirroring the codejury domain layout and the attacksurface domain class.
 
 This is the only index in the tree. Each subdirectory carries its files directly with no
 per-directory index, matching the codejury convention of a single knowledge index.

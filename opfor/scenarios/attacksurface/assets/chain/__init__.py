@@ -31,6 +31,9 @@ SCENARIO = "attacksurface"
 
 KNOWLEDGE = Path(__file__).resolve().parent / "knowledge"
 DETECTIONS = KNOWLEDGE / "detections" / "contract-signals"
+# The playbook is the shared judgment method, a sibling of the knowledge tree rather than a child,
+# mirroring the codejury domain layout and the attacksurface domain class.
+PLAYBOOK = Path(__file__).resolve().parent / "playbook"
 
 from opfor.scenarios.attacksurface.assets.base import ClassBundle
 from opfor.scenarios.attacksurface.assets.chain import planner
@@ -165,8 +168,8 @@ def build(
         content_root=Path(__file__).resolve().parent,
         capabilities=bundle.capabilities,
         planner=RuleSet(rules),
-        triage=AuditTriage(bundle.knowledge_dir, provider=provider, model=model,
-                           known_infrastructure=known, challenger=challenger,
+        triage=AuditTriage(bundle.knowledge_dir, playbook_dirs=[PLAYBOOK], provider=provider,
+                           model=model, known_infrastructure=known, challenger=challenger,
                            challenger_model=challenger_model, judge=judge, judge_model=judge_model),
         terminal=Phase.TRIAGE,
         payloads=_payloads(),

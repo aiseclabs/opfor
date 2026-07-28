@@ -1,8 +1,8 @@
 # External Fund Path
 
 A function any caller can reach that moves funds in or out, a withdraw, redeem, claim, unstake, or
-swap with no access guard on its signature. It is the second of the plan's five questions, can a
-plain user reach a fund path, and with funds present it is the difference between a contract worth
+swap with no access guard on its signature. It is the second of the methodology's five questions, can
+a plain user reach a fund path, and with funds present it is the difference between a contract worth
 an audit and inert code.
 
 How it moves the priority. A contract that holds funds and exposes an unguarded fund path is at

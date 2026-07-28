@@ -1,7 +1,7 @@
 # Complex Fund Accounting
 
 Bookkeeping a miscalculation would move real balances through, share price and conversion, reward
-debt and accumulated-per-share, or LP valuation. It is the third and fifth of the plan's five
+debt and accumulated-per-share, or LP valuation. It is the third and fifth of the methodology's five
 questions together, is the logic complex, and would an error here touch real assets.
 
 How it moves the priority. On a contract that holds funds and exposes a user-reachable fund path,

@@ -13,7 +13,7 @@ from pathlib import Path
 
 from opfor.core import Node, Phase, Provider, RuleSet, Scenario, World, make_provider
 from opfor.core import default_model, role_model, triage_mode
-from opfor.scenarios.attacksurface.assets.contract import ClassBundle
+from opfor.scenarios.attacksurface.assets.base import ClassBundle
 from opfor.scenarios.attacksurface.assets.domain.grounding import (
     FindingGrounder,
     ReproductionRecipe,

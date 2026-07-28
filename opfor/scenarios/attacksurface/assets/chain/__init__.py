@@ -32,7 +32,7 @@ SCENARIO = "attacksurface"
 KNOWLEDGE = Path(__file__).resolve().parent / "knowledge"
 DETECTIONS = KNOWLEDGE / "detections" / "contract-signals"
 
-from opfor.scenarios.attacksurface.assets.contract import ClassBundle
+from opfor.scenarios.attacksurface.assets.base import ClassBundle
 from opfor.scenarios.attacksurface.assets.chain import planner
 from opfor.scenarios.attacksurface.assets.chain.chains import load_chain_policy, load_vendored_markers
 from opfor.scenarios.attacksurface.assets.chain.capabilities import (

@@ -1,4 +1,4 @@
-"""Domain-class sources facade, re-exporting the dns, http, enumeration, nvd, seeds, parsers,
+"""Domain-class sources facade, re-exporting the dns, http, enumeration, nvd, osv, seeds, parsers,
 javascript, and observations modules. These are the external-data adapters and low-level parsers a
 capability acts through. Identification logic that reads the knowledge tables, the service
 fingerprint and the framework and provider classifiers, lives one level up in
@@ -6,7 +6,7 @@ fingerprint and the framework and provider classifiers, lives one level up in
 
 Resolution, the shared network constants, and address filtering live in `dns`, HTTP transport in
 `http`, passive subdomain and path enumeration in `enumeration`, the NVD CVE lookup in `nvd`, the
-operator seed-file loaders in `seeds`, body and document parsers in `parsers`, JavaScript
+ecosystem CVE lookup in `osv`, the operator seed-file loaders in `seeds`, body and document parsers in `parsers`, JavaScript
 extraction in `javascript`, and the typed source observations in `observations`. The per-source
 API keys live in `keys`, read there by the adapters that use them. This module gathers the public
 names in one place so a caller keeps a single import. It re-exports public names only, a caller
@@ -36,6 +36,10 @@ from opfor.scenarios.attacksurface.assets.domain.sources.enumeration import (
 from opfor.scenarios.attacksurface.assets.domain.sources.nvd import (
     cves_from_nvd,
     nvd_cves,
+)
+from opfor.scenarios.attacksurface.assets.domain.sources.osv import (
+    cves_from_osv,
+    osv_cves,
 )
 from opfor.scenarios.attacksurface.assets.domain.sources.seeds import (
     hosts_from_file,
@@ -73,6 +77,7 @@ __all__ = [
     "Response",
     "certspotter_subdomains",
     "cves_from_nvd",
+    "cves_from_osv",
     "fetch_document",
     "fetch_url",
     "graphql_introspect",
@@ -82,6 +87,7 @@ __all__ = [
     "info_from_openapi",
     "nvd_cves",
     "operations_from_introspection",
+    "osv_cves",
     "otx_subdomains",
     "paths_from_openapi",
     "paths_in_javascript",

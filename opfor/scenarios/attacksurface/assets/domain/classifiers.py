@@ -14,6 +14,7 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 from opfor.core import iter_md_docs
+from opfor.scenarios.attacksurface.assets.domain.types import Framework
 from opfor.scenarios.attacksurface.assets.domain.sources.parsers import info_from_openapi
 from opfor.scenarios.attacksurface.assets.domain.sources.http import _BODY_HEAD, _BODY_VERSION
 
@@ -28,7 +29,8 @@ _BODY_EVIDENCE = 2048
 def load_frameworks(directory: Path) -> dict:
     """The front-end framework signatures, one `guides/frameworks/<name>.md` unit each. The
     unit's title is the framework name, and its frontmatter carries the lowercased body and header
-    markers and an optional compiled version pattern. A malformed version regex fails the run loudly
+    markers, an optional compiled version pattern, and an optional npm package name the CVE lookup
+    queries the ecosystem advisory database with. A malformed version regex fails the run loudly
     here, invariant 5."""
     out: dict = {}
     for path, meta, body in iter_md_docs(Path(directory)):
@@ -43,6 +45,7 @@ def load_frameworks(directory: Path) -> dict:
             "body": [str(m).lower() for m in (meta.get("body") or [])],
             "headers": [str(m).lower() for m in (meta.get("headers") or [])],
             "version": version,
+            "npm": str(meta.get("npm") or "").strip(),
         }
     return out
 
@@ -110,10 +113,11 @@ def _spec_info(world, node, endpoint) -> tuple[str, str]:
         return "", ""
 
 
-def classify_frameworks(http, table) -> list[str]:
+def classify_frameworks(http, table) -> list[Framework]:
     """The front-end frameworks a live host's response reveals, each with a version when the
-    framework publishes one plainly. Deterministic from the body and headers already gathered, a
-    host may reveal more than one, and one that matches nothing is simply untagged."""
+    framework publishes one plainly and the npm package name its signature carries. Deterministic
+    from the body and headers already gathered, a host may reveal more than one, and one that
+    matches nothing is simply untagged."""
     if http is None:
         return []
     body = http.body or ""
@@ -122,7 +126,7 @@ def classify_frameworks(http, table) -> list[str]:
     # The version pattern keeps the original-case body, it compiles with re.IGNORECASE itself.
     body_markers = body.lower()
     header_text = "\n".join(f"{name.lower()}: {value.lower()}" for name, value in http.headers)
-    found: list[str] = []
+    found: list[Framework] = []
     for name, sig in table.items():
         if not (any(m in body_markers for m in sig["body"]) or any(m in header_text for m in sig["headers"])):
             continue
@@ -132,5 +136,17 @@ def classify_frameworks(http, table) -> list[str]:
             match = pattern.search(body)
             if match:
                 version = match.group(1)
-        found.append(f"{name} {version}".strip())
+        npm = sig.get("npm", "")
+        if not version and npm:
+            version = _script_version(body_markers, npm)
+        found.append(Framework(name=name, version=version, npm=npm))
     return found
+
+
+def _script_version(body: str, package: str) -> str:
+    """A framework's version read from a versioned asset url in the body, the `package@x.y.z` a CDN
+    such as unpkg or jsDelivr puts in the path. It reads a version only where it sits glued to the
+    exact package name, never a bare number elsewhere, so a build id or a cache-busting query is not
+    misread as a version, the evidence-driven rule against guessing a version."""
+    match = re.search(re.escape(package.lower()) + r"@(\d+\.\d+\.\d+)", body)
+    return match.group(1) if match else ""

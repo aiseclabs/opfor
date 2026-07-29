@@ -11,34 +11,51 @@ class CVELookup(Capability):
     """ENRICH: look up a live host's known vulnerabilities from its profiled identity.
 
     It reads the product, version, and CPE the profiling capability already derived from the
-    host_profile fact, and the injected CVE seam looks that version up in a public database. It
-    holds no model and no knowledge, it reads the identity fact, calls the seam, and records the
-    raw result. Reading identity here rather than deriving it means a CVE-lookup failure never
-    discards a successful identification, that fact already stands. An empty CVE list is a clean
-    negative, a seam error is a loud Failed, and which CVE matters and how severe is triage's
-    judgment. It queries public sources, never the target, so it is osint.
+    host_profile fact, and the injected seam looks that version up in a public database. It holds no
+    model and no knowledge, it reads the identity fact, calls the seam, and records the raw result.
+    An identified product routes to the NVD seam by its cpe, and a host with no product but a
+    front-end framework routes to the OSV seam by that framework's npm package, so a bespoke app
+    built on a catalogued framework is still checked. Reading identity here rather than deriving it
+    means a CVE-lookup failure never discards a successful identification, that fact already stands.
+    An empty CVE list is a clean negative, a seam error is a loud Failed, and which CVE matters and
+    how severe is triage's judgment. It queries public sources, never the target, so it is osint.
     """
 
     name = "cve_scan"
     phase = Phase.ENRICH
     osint = True
 
-    def __init__(self, cve_fn) -> None:
+    def __init__(self, cve_fn, osv_fn=None) -> None:
         self._cve = cve_fn
+        self._osv = osv_fn
 
     def run(self, task: Task, world: World) -> Outcome:
         profile = world.latest("host_profile", task.node)
-        product = version = cpe = ""
+        subject = version = cpe = ""
+        lookup = None
         if profile is not None:
-            product = profile.payload.product
+            subject = profile.payload.product
             version = profile.payload.version
             cpe = profile.payload.cpe
+            if subject:
+                lookup = lambda: self._cve(subject, version, cpe)
+            elif self._osv is not None:
+                # No product was identified, so a bespoke app built on a catalogued framework is
+                # still checked: the first framework carrying an npm package becomes the lookup
+                # subject, routed to the ecosystem advisory database by that package name. The
+                # frameworks load in file order, so a meta-framework that also matches its base
+                # library's markers, such as Next.js over React, is listed first and owns the
+                # subject. This reads a fact, it holds no knowledge.
+                framework = next((f for f in profile.payload.frameworks if f.npm), None)
+                if framework is not None:
+                    subject, version = framework.name, framework.version
+                    lookup = lambda: self._osv(framework.npm, framework.version)
         cves: tuple[CVE, ...] = ()
         match = ""
         available = 0
-        if product:
+        if lookup is not None:
             try:
-                raw = self._cve(product, version, cpe)
+                raw = lookup()
             except Exception as exc:
                 return net_failed("cve lookup", exc)
             # The match basis and the total count are one fact about the whole lookup, so the
@@ -50,7 +67,7 @@ class CVELookup(Capability):
                     severity=str(c.get("severity", "")), summary=str(c.get("summary", "")),
                     references=tuple(str(u) for u in c.get("references", ())))
                 for c in raw if c.get("id"))
-        payload = CVEScan(product=product, version=version, cpe=cpe, match=match, cves=cves)
+        payload = CVEScan(product=subject, version=version, cpe=cpe, match=match, cves=cves)
         facts = [Fact(kind="cve_scan", about=task.node, payload=payload)]
         if available > len(cves):
             # The database matched more CVEs than the bounded page returned, so the kept list is a
@@ -58,8 +75,8 @@ class CVELookup(Capability):
             # not read as the host's complete vulnerability picture, invariant 5.
             name = world.node(task.node).payload.name
             gap = _coverage_gap("cve_scan", name, len(cves), [
-                f"NVD matched {available} CVEs for {product}, only {len(cves)} were retrieved, "
-                f"the remaining {available - len(cves)} were not evaluated"])
+                f"the database matched {available} CVEs for {subject}, only {len(cves)} were "
+                f"retrieved, the remaining {available - len(cves)} were not evaluated"])
             if gap is not None:
                 facts.append(Fact(kind="coverage_gap", about=task.node, payload=gap))
         return Done(facts=tuple(facts))

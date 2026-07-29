@@ -76,7 +76,8 @@ def host_records(world: World, findings) -> list[dict]:
             if profile.payload.cpe:
                 identity["cpe"] = profile.payload.cpe
             if profile.payload.frameworks:
-                identity["frameworks"] = list(profile.payload.frameworks)
+                identity["frameworks"] = [f"{f.name} {f.version}".strip()
+                                          for f in profile.payload.frameworks]
             if identity:
                 record["identity"] = identity
         if scan is not None and scan.payload.cves:

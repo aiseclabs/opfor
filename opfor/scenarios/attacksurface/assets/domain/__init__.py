@@ -100,11 +100,11 @@ PATHS = KnowledgePaths.under(KNOWLEDGE)
 
 def assemble(*, enumerate_fn, resolve_fn, probe_fn, fetch_fn, fetch_doc_fn,
              introspect_fn, wayback_fn,
-             identify_fn=None, cve_fn=None) -> ClassBundle:
+             identify_fn=None, cve_fn=None, osv_fn=None) -> ClassBundle:
     """The domain class's contribution. The seams are the passive and active sources, injected so
     a test drives the class with fixtures. The run maps exactly the operator's seed roots and
     expands each to its subdomains, no root discovery beyond the seed. The CVE lookup rides only
-    when its lookup seam is wired."""
+    when its NVD lookup seam is wired, and routes a framework to the OSV seam beside it."""
     # The per-product knowledge units are loaded once here, so their own paths are read both as the
     # probe's version endpoints and as the identify seam's markers below.
     fingerprints = load_products(PATHS.products)
@@ -144,7 +144,7 @@ def assemble(*, enumerate_fn, resolve_fn, probe_fn, fetch_fn, fetch_doc_fn,
     capabilities.append(ProfileHost(identify_fn, framework_fn,
                                     version_paths=product_probe_paths(fingerprints)))
     if cve_fn is not None:
-        capabilities.append(CVELookup(cve_fn))
+        capabilities.append(CVELookup(cve_fn, osv_fn))
     # The plan config is loaded here, at assemble time, not at planner import, so the content root
     # stays swappable and importing the class triggers no file IO. The probe set is composed from
     # the owners of each path rather than one global guessed list: the products' own identification
@@ -220,6 +220,7 @@ def build(
     wayback_fn=domain_src.wayback_paths,
     identify_fn=None,
     cve_fn=domain_src.nvd_cves,
+    osv_fn=domain_src.osv_cves,
     provider: Provider | None = None,
     model: str | None = None,
     challenger: Provider | None = None,
@@ -235,8 +236,9 @@ def build(
 
     # The CVE scan identifies a host's product with the model, then looks the version up. The
     # identify seam is model-backed, wired from the same provider by default, so the capability
-    # holds no model, and a test injects its own fake. The lookup seam is the NVD source. Both
-    # together turn the scan on, see the class assemble.
+    # holds no model, and a test injects its own fake. The lookup seams are the NVD source for an
+    # identified product and the OSV source for a front-end framework. Both together turn the scan
+    # on, see the class assemble.
     if identify_fn is None:
         def identify_fn(evidence):
             return identify.identify_service(provider, model, evidence)
@@ -246,7 +248,7 @@ def build(
 
     bundle = assemble(enumerate_fn=enumerate_fn, resolve_fn=resolve_fn, probe_fn=probe_fn,
                       fetch_fn=fetch_fn, fetch_doc_fn=fetch_doc_fn, introspect_fn=introspect_fn,
-                      wayback_fn=wayback_fn, identify_fn=identify_fn, cve_fn=cve_fn)
+                      wayback_fn=wayback_fn, identify_fn=identify_fn, cve_fn=cve_fn, osv_fn=osv_fn)
     knowledge_dirs = [bundle.knowledge_dir] if bundle.knowledge_dir else []
     rules = {Phase.MAP: list(bundle.map_rules), Phase.ENRICH: list(bundle.enrich_rules)}
 

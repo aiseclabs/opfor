@@ -98,7 +98,8 @@ class SurfaceRenderer:
         profile = world.latest("host_profile", node.id)
         profile_data = profile.payload if profile is not None else None
         if profile_data is not None and profile_data.frameworks:
-            bits.append("tech: " + ", ".join(profile_data.frameworks))
+            bits.append("tech: " + ", ".join(
+                f"{f.name} {f.version}".strip() for f in profile_data.frameworks))
         line = ", ".join(bits)
         clue = self._takeover_clue(http_data)
         if clue:

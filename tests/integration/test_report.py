@@ -17,6 +17,7 @@ from opfor.scenarios.attacksurface.assets.domain.types import (
     CVEScan,
     DomainData,
     Endpoint,
+    Framework,
     HostProfile,
     HTTPProbe,
     Resolved,
@@ -33,7 +34,8 @@ def _world() -> World:
     world.absorb([Fact(kind="http", about="domain:api.example.com",
                        payload=HTTPProbe(alive=True, status=200, url="https://api.example.com/"))])
     world.absorb([Fact(kind="host_profile", about="domain:api.example.com",
-                       payload=HostProfile(product="Grafana", version="8.3.0", frameworks=("angular",)))])
+                       payload=HostProfile(product="Grafana", version="8.3.0",
+                                           frameworks=(Framework(name="angular"),)))])
     world.absorb([Fact(kind="cve_scan", about="domain:api.example.com",
                        payload=CVEScan(product="Grafana", version="8.3.0", match="version",
                                        cves=(CVE(id="CVE-2021-43798", cvss=7.5, severity="HIGH"),)))])

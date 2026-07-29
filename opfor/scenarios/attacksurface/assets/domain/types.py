@@ -158,20 +158,36 @@ class CoverageGap:
 
 
 @dataclass(frozen=True, kw_only=True)
+class Framework:
+    """A front-end framework a host reveals. `name` is what it is, `version` is read only where the
+    framework publishes it plainly, else empty. `npm` is the npm package its core publishes under,
+    the key the CVE lookup queries the ecosystem advisory database with, set for a framework whose
+    known vulnerabilities are catalogued there, else empty. A framework carrying an npm name becomes
+    the CVE-lookup subject when no product is identified, so a bespoke app built on a catalogued
+    framework is still checked for known vulnerabilities, see the CVE lookup. One without an npm name
+    is a context tag only, what the host is built on, never a lookup key."""
+
+    name: str
+    version: str = ""
+    npm: str = ""
+
+
+@dataclass(frozen=True, kw_only=True)
 class HostProfile:
     """What a live host is, the single record answering the host's role: the open-source product
     and version behind it and the front-end frameworks it reveals. Each field is a raw
     identification signal, whether the host is an exposed product or a bespoke application is
     triage's judgment. `product`, `version`, and `cpe` are empty when nothing identifiable was
     found, a real negative. `frameworks` are the front-end frameworks detected, each with a version
-    when published plainly. The vulnerability lookup reads product and version from here, so
-    identity survives even when that lookup fails or is not wired, and the report renders this
-    record rather than recomputing."""
+    when published plainly and an npm name when the ecosystem database catalogues it. The
+    vulnerability lookup reads product and version from here, and falls back to an npm-carrying
+    framework when no product was named, so identity survives even when that lookup fails or is not
+    wired, and the report renders this record rather than recomputing."""
 
     product: str = ""
     version: str = ""
     cpe: str = ""
-    frameworks: tuple[str, ...] = ()
+    frameworks: tuple[Framework, ...] = ()
 
 
 @dataclass(frozen=True, kw_only=True)

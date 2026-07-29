@@ -7,7 +7,7 @@
     ],
     "negative": [
       "protocol:graphql",
-      "protocol:oauth-oidc"
+      "protocol:oauth"
     ]
   }
 }

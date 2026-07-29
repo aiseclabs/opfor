@@ -6,7 +6,7 @@
       "class:information-exposure"
     ],
     "negative": [
-      "protocol:oauth-oidc"
+      "protocol:oauth"
     ]
   }
 }

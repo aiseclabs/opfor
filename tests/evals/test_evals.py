@@ -42,9 +42,9 @@ def test_knowledge_inventory_enumerates_every_claim_by_ref_and_kind():
     # reported deterministically from a version match rather than judged, see the domain `cve` module.
     assert by_ns["class"] == 4
     assert by_ns["clue"] >= 7 and by_ns["signature"] >= 20
-    # the protocols are orientation the triage selects and reads, three interface primers,
+    # the protocols are orientation the triage selects and reads, four interface primers,
     # enumerated so a protocol with no case is a visible gap rather than a silent one
-    assert by_ns["protocol"] == 3
+    assert by_ns["protocol"] == 4
     assert items["protocol:graphql"].kind == JUDGMENT
     assert "protocols" in items["protocol:graphql"].path.parts
     # a finding class is judgment, its embedded detection payloads are detection, so the two

@@ -63,20 +63,21 @@ KNOWLEDGE = Path(__file__).resolve().parent / "knowledge"
 class KnowledgePaths:
     """The fixed layout of the domain class's knowledge tree, resolved to absolute paths, so the
     tree's shape lives in one contract rather than scattered `root / "vulnerabilities"` conventions
-    that drift as the tree grows. The tree follows two branches of judgment. When a host is
-    identified as a product, `products` carries its markers, version endpoints, and CPE, and a named
-    CVE hit is judged against `vulnerabilities` as a known-vulnerability finding. When a host is not
-    identified, a bespoke or internal service, the model reasons from the generic weakness classes in
-    `vulnerabilities` and the generic interface patterns in `protocols` instead. `frameworks` holds
-    the front-end framework tags a host may also carry. A file under `vulnerabilities` carries both
-    the model-read judgment prose and, in its frontmatter, the deterministic payloads that class
-    surfaces, so a concept is one file. `protocols` holds the orienting interface primers triage
-    selects by their detection markers and reads into the judge, so the model gets the right
-    surface-specific orientation only when that surface is present. `playbook` holds the
-    cross-cutting judgment method every finding class shares, the severity rubric and the
-    false-positive traps triage reads into the judge. It is a sibling of `knowledge`, not a child,
-    since it is the shared method rather than a backtested claim, mirroring the codejury domain
-    layout where `playbook/` sits beside `knowledge/` under the class content root."""
+    that drift as the tree grows. The tree holds two buckets under `knowledge`, mirroring the codejury
+    layout. `guides` is orientation, what a host is: `products` carries a product's markers, version
+    endpoints, and CPE, `frameworks` the front-end framework tags a host may also carry, and
+    `protocols` the interface primers triage selects by their detection markers and reads into the
+    judge, so the model gets surface-specific orientation only when that surface is present. Nothing
+    under `guides` mints a finding, it only names what the host runs. `vulnerabilities` is the finding
+    classes the triage model judges, one file per class, carrying both the model-read judgment prose
+    and, in its frontmatter, the deterministic payloads that class surfaces, so a concept is one file.
+    The two buckets meet as a flow, `guides/products` identifies a host and a named CVE hit is then
+    judged against the `vulnerabilities` known-vulnerability class, while an unidentified host is
+    judged from the generic weakness classes there instead. `playbook` holds the cross-cutting
+    judgment method every finding class shares, the severity rubric and the false-positive traps
+    triage reads into the judge. It is a sibling of `knowledge`, not a child, since it is the shared
+    method rather than a backtested claim, mirroring the codejury domain layout where `playbook/` sits
+    beside `knowledge/` under the class content root."""
 
     root: Path
     products: Path
@@ -87,9 +88,10 @@ class KnowledgePaths:
 
     @classmethod
     def under(cls, root: Path) -> "KnowledgePaths":
-        return cls(root=root, products=root / "products",
-                   frameworks=root / "frameworks", vulnerabilities=root / "vulnerabilities",
-                   protocols=root / "protocols", playbook=root.parent / "playbook")
+        guides = root / "guides"
+        return cls(root=root, products=guides / "products",
+                   frameworks=guides / "frameworks", vulnerabilities=root / "vulnerabilities",
+                   protocols=guides / "protocols", playbook=root.parent / "playbook")
 
 
 PATHS = KnowledgePaths.under(KNOWLEDGE)

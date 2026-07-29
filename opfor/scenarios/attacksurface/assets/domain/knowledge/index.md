@@ -31,23 +31,29 @@ name narrows the judgment to a known CVE.
 
 ## The Tree
 
+Two buckets sit under `knowledge/`, mirroring the codejury layout: `guides/` is what a host is, and
+`vulnerabilities/` is what may be wrong with it. Nothing under `guides/` mints a finding, only
+`vulnerabilities/` classes do.
+
+- `guides/` orientation, the knowledge that names what a host runs. It is deterministic detection,
+  read to recognize a host rather than to judge it, and it never mints a finding on its own.
+  - `guides/products/` the open-source products the enrich step identifies by markers, each with a
+    version pattern and a `cpe` that drives the CVE lookup. This feeds the product branch, a named
+    product carries a named CVE the `known-vulnerability` class then judges.
+  - `guides/frameworks/` the front-end frameworks detected as context tags, with no version lookup
+    and no CVE branch, a weaker signal the judge reads as orientation.
+  - `guides/protocols/` the orienting interface primers the triage selects and reads into the judge.
+    Each carries a `detect.markers` list, the lowercase substrings that say its protocol is present,
+    and a body of notes, what the interface is, how it reads on recon, which finding classes it
+    feeds, and its own traps. The triage selects the primers whose markers appear, once over the
+    whole surface, so the judge gets surface-specific orientation only when that surface is present
+    and the prompt stays cache-stable. A protocol primer sharpens how the generic classes are judged
+    rather than adding a class.
 - `vulnerabilities/` one file per finding class the triage model may mint, the generic-branch
   weakness classes plus `known-vulnerability` for the product branch. The body is the judgment
   prose. The frontmatter carries the class mechanics and, for a class that surfaces its own
   deterministic evidence, that evidence too, the clues or the takeover signatures. So a concept is
   one file, its judgment and detection read together, though coverage scores them apart by kind.
-- `products/` the open-source products the enrich step identifies by markers, each with a version
-  pattern and a `cpe` that drives the CVE lookup. This is deterministic identification knowledge,
-  read to name what a host runs rather than to mint a finding, and it feeds the product branch.
-- `frameworks/` the front-end frameworks detected as context tags, with no version lookup and no CVE
-  branch, a weaker signal the judge reads as orientation.
-- `protocols/` the orienting interface primers the triage selects and reads into the judge. Each
-  carries a `detect.markers` list, the lowercase substrings that say its protocol is present, and a
-  body of notes, what the interface is, how it reads on recon, which finding classes it feeds, and
-  its own traps. The triage selects the primers whose markers appear, once over the whole surface, so
-  the judge gets surface-specific orientation only when that surface is present and the prompt stays
-  cache-stable. A protocol primer is judgment orientation, not a finding class, it sharpens how the
-  generic classes are judged rather than adding a class.
 - `playbook/` a sibling of this tree, not a child. The cross-cutting judgment method every finding
   class shares, factored out so it is written once rather than restated per class. It is not itself a
   scored claim, it is the severity rubric, the false-positive traps, and the run methodology the

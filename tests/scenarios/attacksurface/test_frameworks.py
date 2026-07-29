@@ -10,14 +10,14 @@ from __future__ import annotations
 
 import re
 
-from opfor.scenarios.attacksurface.assets.domain import KNOWLEDGE
+from opfor.scenarios.attacksurface.assets.domain import PATHS
 from opfor.scenarios.attacksurface.assets.domain.classifiers import (
     classify_frameworks,
     load_frameworks,
 )
 from opfor.scenarios.attacksurface.assets.domain.types import HTTPProbe
 
-_FRAMEWORKS = load_frameworks(KNOWLEDGE / "frameworks")
+_FRAMEWORKS = load_frameworks(PATHS.frameworks)
 
 
 def _classify(*, server="", headers=(), body=""):

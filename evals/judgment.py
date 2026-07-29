@@ -28,7 +28,7 @@ from opfor.scenarios.attacksurface.assets.domain.triage import _load_protocols
 CORPUS = Path(__file__).resolve().parent / "judgment"
 
 # The triage's marker-selected primers are the protocol tree, so a selected primer maps to a
-# `protocol:` ref, the same namespace the coverage inventory gives the protocols/ files.
+# `protocol:` ref, the same namespace the coverage inventory gives the guides/protocols/ files.
 _PROTOCOLS = _load_protocols(PATHS.protocols)
 
 

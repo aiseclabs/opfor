@@ -11,11 +11,11 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from opfor.scenarios.attacksurface.assets.domain import KNOWLEDGE
+from opfor.scenarios.attacksurface.assets.domain import PATHS
 from opfor.scenarios.attacksurface.assets.domain.fingerprint import fingerprint, load_products
 from opfor.scenarios.attacksurface.assets.domain.fingerprint import Fingerprint
 
-_TABLE = load_products(KNOWLEDGE / "products")
+_TABLE = load_products(PATHS.products)
 
 
 def test_shipped_table_loads():

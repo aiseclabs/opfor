@@ -155,7 +155,7 @@ def _load_playbook(directory: Path) -> dict[str, str]:
 
 
 def _load_protocols(directory: Path) -> list[dict]:
-    """The orienting protocol primers, one per interface protocol, read from `protocols/`. Each
+    """The orienting protocol primers, one per interface protocol, read from `guides/protocols/`. Each
     carries a `detect.markers` list, the lowercase substrings that say its protocol is present on the
     rendered surface, and a body of judgment notes. Triage selects the primers whose markers appear
     and reads their bodies into the judge, so the model gets surface-specific orientation only when

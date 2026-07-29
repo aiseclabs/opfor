@@ -1,0 +1,8 @@
+target: oauth-login-gate
+kind: surface
+expect:
+  positive:
+  - class:improper-authentication
+  - protocol:oauth
+  negative:
+  - protocol:graphql

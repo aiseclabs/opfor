@@ -1,0 +1,7 @@
+target: admin-console-unauthenticated
+kind: surface
+expect:
+  positive:
+  - class:missing-authentication
+  negative:
+  - protocol:graphql

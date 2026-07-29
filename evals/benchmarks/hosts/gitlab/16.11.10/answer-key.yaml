@@ -1,0 +1,10 @@
+target: gitlab-16.11.10
+kind: host
+identity:
+  product: GitLab
+  version: ''
+cves: []
+expect:
+  positive:
+  - product:gitlab
+  negative: []

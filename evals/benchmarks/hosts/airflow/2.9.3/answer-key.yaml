@@ -1,0 +1,10 @@
+target: airflow-2.9.3
+kind: host
+identity:
+  product: Apache Airflow
+  version: ''
+cves: []
+expect:
+  positive:
+  - product:airflow
+  negative: []

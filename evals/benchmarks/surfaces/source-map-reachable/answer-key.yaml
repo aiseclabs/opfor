@@ -1,0 +1,8 @@
+target: source-map-reachable
+kind: surface
+expect:
+  positive:
+  - class:source-exposure
+  negative:
+  - protocol:graphql
+  - protocol:oauth

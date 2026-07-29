@@ -1,0 +1,7 @@
+name: identify-live
+description: >
+  The live model-identify backtest, the off-table hosts whose product is not in the fingerprint
+  table, so the composed identify seam falls through to the live model. This is the runbook tier,
+  run by hand with a real provider and folded by strict majority, see BACKTEST.md.
+tags:
+  - unknown

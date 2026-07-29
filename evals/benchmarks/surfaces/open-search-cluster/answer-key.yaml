@@ -1,0 +1,7 @@
+target: open-search-cluster
+kind: surface
+expect:
+  positive:
+  - class:information-exposure
+  negative:
+  - protocol:oauth

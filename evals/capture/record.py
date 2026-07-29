@@ -1,15 +1,20 @@
-"""Capture a fingerprint backtest cassette from a running product instance.
+"""Capture a benchmark cassette from a running product instance.
 
 Run on a machine with Docker, against a container from `docker-compose.yml`. It probes the
 instance exactly as opfor would, the root over no-redirect HTTP and each interface path the
 scenario probes, and records the responses in the same shape opfor's seams return, so the
-offline backtest replays them faithfully. Only responses that answered with a status are kept,
-a path that 404s is the replay default, so a cassette stays small.
+offline gate replays them faithfully. Only responses that answered with a status are kept, a path
+that 404s is the replay default, so a cassette stays small.
 
     python -m evals.capture.record --product Grafana --version 10.4.0 --url http://localhost:3104
 
+A benchmark is split in two: the `cassette.json` holds only the recorded evidence the engine
+replays, and a scaffolded `answer-key.yaml` beside it holds the ground truth the engine never reads,
+invariant 4. The scaffold carries the captured product and version, the operator fills the expected
+CVEs and the coverage labels by hand. An existing answer key is never overwritten.
+
 It reaches a live container, so it needs network and Docker, and is never run in CI. The offline
-backtest that consumes the cassette needs neither.
+gate that consumes the cassette needs neither.
 """
 
 from __future__ import annotations
@@ -59,7 +64,9 @@ def _paths() -> list[str]:
     return list(product_probe_paths(load_products(PATHS.products)))
 
 
-def capture(product: str, version: str, url: str) -> dict:
+def capture(url: str) -> dict:
+    """The recorded evidence, only the responses the engine replays, no labels. The ground truth
+    lives in the answer key beside it, invariant 4."""
     base = url.rstrip("/")
     host = urlsplit(url).hostname or "captured.host"
     root_raw = _get(base + "/") or {}
@@ -77,12 +84,25 @@ def capture(product: str, version: str, url: str) -> dict:
         fetch[path] = {"status": r["status"], "url": base + path, "content_type": r["content_type"],
                        "server": r["server"], "title": r["title"], "body": r["body"],
                        "location": r["location"], "reason": ""}
-    # `version` is what the scan is expected to extract, blank for a product that exposes none
-    # unauthenticated, which makes the cassette a recall-only case. `instance_version` is the real
-    # version of the captured instance, always recorded, so the file's identity is never ambiguous.
-    return {"product": product, "version": version, "instance_version": version, "host": host,
+    return {"host": host,
             "resolved": {"resolvable": True, "addresses": ["127.0.0.1"], "cnames": []},
             "root": root, "fetch": fetch, "docs": {}}
+
+
+def _answer_key_scaffold(product: str, version: str, target: str) -> str:
+    """A starter answer key carrying the captured identity, the operator fills the CVEs and the
+    coverage labels. Product and version are the ground truth the capture observed, the rest is
+    hand-authored, so the golden stays out of band."""
+    return (f"target: {target}\n"
+            f"kind: host\n"
+            f"identity:\n"
+            f"  product: {product}\n"
+            f"  version: {version!r}\n"
+            f"cves: []\n"
+            f"expect:\n"
+            f"  positive:\n"
+            f"  - product:{(product.split()[-1] if product else target).lower()}\n"
+            f"  negative: []\n")
 
 
 def main(argv=None) -> int:
@@ -91,29 +111,37 @@ def main(argv=None) -> int:
                         help="the product display name stored in the cassette, which must match "
                              "what the fingerprint identifies, e.g. \"Apache Airflow\"")
     parser.add_argument("--slug", default="",
-                        help="the corpus directory, default the product lowercased. Name it when "
-                             "the display name is not the slug, e.g. --product \"Apache Airflow\" "
-                             "--slug airflow")
+                        help="the benchmark directory under benchmarks/hosts, default the product "
+                             "lowercased. Name it when the display name is not the slug, e.g. "
+                             "--product \"Apache Airflow\" --slug airflow")
     parser.add_argument("--version", required=True,
                         help="the version the scan is expected to extract, empty for a product that "
                              "exposes none unauthenticated, which then needs an explicit --out")
     parser.add_argument("--url", required=True, help="base URL of the running instance, e.g. http://localhost:3104")
-    parser.add_argument("--out", default="", help="output path, default evals/corpus/<slug>/<version>.json")
+    parser.add_argument("--out", default="",
+                        help="output directory, default benchmarks/hosts/<slug>/<version>")
     args = parser.parse_args(argv)
 
     if not args.version and not args.out:
-        parser.error("a version-less capture records no scored version, so name the cassette with --out")
-    cassette = capture(args.product, args.version, args.url)
+        parser.error("a version-less capture needs an explicit --out to name the benchmark directory")
+    cassette = capture(args.url)
     slug = args.slug or args.product.lower()
-    out = Path(args.out) if args.out else (
-        Path(__file__).resolve().parent.parent / "corpus" / slug / f"{args.version}.json")
-    # A version-less capture carries no scored version, so its real instance version comes from the
-    # cassette name, keeping the file's identity unambiguous even when nothing is scored.
-    cassette["instance_version"] = args.version or out.stem
-    out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(json.dumps(cassette, indent=2) + "\n", encoding="utf-8")
+    version = args.version or "unversioned"
+    out_dir = Path(args.out) if args.out else (
+        Path(__file__).resolve().parent.parent / "benchmarks" / "hosts" / slug / version)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    cassette_path = out_dir / "cassette.json"
+    cassette_path.write_text(json.dumps(cassette, indent=2) + "\n", encoding="utf-8")
+    key_path = out_dir / "answer-key.yaml"
+    wrote_key = not key_path.exists()
+    if wrote_key:
+        target = f"{slug}-{args.version}" if args.version else slug
+        key_path.write_text(_answer_key_scaffold(args.product, args.version, target), encoding="utf-8")
     kept = len(cassette["fetch"])
-    print(f"wrote {out} (root status {cassette['root']['status']}, {kept} answered interface paths)")
+    print(f"wrote {cassette_path} (root status {cassette['root']['status']}, "
+          f"{kept} answered interface paths)")
+    print(f"{'scaffolded' if wrote_key else 'kept existing'} {key_path}, "
+          f"fill its cves and expect blocks by hand")
     return 0
 
 

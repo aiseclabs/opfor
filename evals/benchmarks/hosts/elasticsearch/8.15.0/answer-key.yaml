@@ -1,0 +1,10 @@
+target: elasticsearch-8.15.0
+kind: host
+identity:
+  product: Elasticsearch
+  version: 8.15.0
+cves: []
+expect:
+  positive:
+  - product:elasticsearch
+  negative: []

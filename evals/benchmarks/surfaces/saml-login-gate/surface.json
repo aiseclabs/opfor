@@ -1,0 +1,4 @@
+{
+  "note": "a portal that bounces every unauthenticated request to an ADFS identity provider with a SAMLRequest, an enterprise single sign-on gate that appears present, the improper-authentication look-alike a run must weigh rather than mint blind, selecting the saml protocol primer and never the consumer oauth one",
+  "surface": "## sso.example.com\nhost sso.example.com, source crt, HTTP 302, redirect to https://sts.example.com/adfs/ls/?SAMLRequest=fVLBUsMwDP2VjO9tkjbdipd2VnpggMKywYEL4zhq45HYwXbK9vekLYVy4Kgn6elJetYP\nan auto-submitting form posts a SAMLRequest to the identity provider, every unauthenticated path bounces to the same ADFS sign-on before any application content is served"
+}

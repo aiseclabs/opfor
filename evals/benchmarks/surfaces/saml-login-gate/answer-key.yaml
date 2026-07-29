@@ -1,0 +1,9 @@
+target: saml-login-gate
+kind: surface
+expect:
+  positive:
+  - class:improper-authentication
+  - protocol:saml
+  negative:
+  - protocol:oauth
+  - protocol:graphql

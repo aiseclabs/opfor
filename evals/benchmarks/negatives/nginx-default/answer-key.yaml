@@ -1,0 +1,9 @@
+target: nginx-default
+kind: negative
+identity:
+  product: ''
+  version: ''
+cves: []
+expect:
+  positive: []
+  negative: []

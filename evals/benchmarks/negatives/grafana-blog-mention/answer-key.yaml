@@ -1,0 +1,10 @@
+target: grafana-blog-mention
+kind: negative
+identity:
+  product: ''
+  version: ''
+cves: []
+expect:
+  positive: []
+  negative:
+  - product:grafana

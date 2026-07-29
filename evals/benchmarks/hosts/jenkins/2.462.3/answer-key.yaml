@@ -1,0 +1,10 @@
+target: jenkins-2.462.3
+kind: host
+identity:
+  product: Jenkins
+  version: 2.462.3
+cves: []
+expect:
+  positive:
+  - product:jenkins
+  negative: []

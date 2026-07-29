@@ -1,0 +1,4 @@
+{
+  "note": "a production build shipped its JavaScript source maps, reachable and carrying sourcesContent, so the original client source is readable straight from the browser, the canonical source-exposure surface. It names no interface protocol, so no protocol primer should ride it.",
+  "surface": "## host app.example.com\n\nhost app.example.com, source hint, HTTP 200, title 'Operations Console', server nginx\n  tech: React 18.2.0\n  source map reachable: /static/js/main.4f2a9c.js.map, 214 original source files named, original source embedded, sourcesContent present\n"
+}

@@ -1,63 +1,81 @@
-# Offline evals
+# Evals
 
-An offline, deterministic surface, no Docker, network, or model. It holds two things: the
-fingerprint backtest, a CI gate that measures whether opfor identifies a product, and a
-knowledge-coverage report. Both keep their ground truth out of the pipeline, so a high score cannot
-come from the tool grading itself. The corpus and coverage are attack-surface only, since the
-onchain scenario identifies with a model and carries no deterministic table to replay.
+Two tiers over recorded benchmarks, plus a knowledge-coverage report. Every tier keeps the ground
+truth out of the pipeline, in an out-of-band `answer-key.yaml` the engine never reads, so a high
+score cannot come from the tool grading itself, invariant 4. The corpus covers the attack-surface
+domain class only, since the onchain scenario identifies with a model and carries no deterministic
+table to replay.
 
-## Fingerprint backtest
+## A Benchmark
 
-Measures opfor's deterministic product fingerprint against **real product output**, so a marker or
-a version regex that regresses is caught. It does not test the classifier with hand-typed strings,
-it replays what a real scan drew from a real instance.
+A benchmark is a directory of two files, evidence beside its golden.
 
-### How it works
+```
+benchmarks/
+  hosts/<product>/<version>/     # an identified host, the table names it
+    cassette.json                #   recorded HTTP responses the engine replays
+    answer-key.yaml              #   identity, expected CVEs, coverage labels, the golden
+  negatives/<name>/              # a page that must identify and fire nothing
+  surfaces/<name>/               # one rendered surface, for protocol selection and class coverage
+    surface.json
+    answer-key.yaml
+  unknown/<name>/                # an off-table host, the model must identify it, see BACKTEST.md
+```
 
-- `capture/` records a **cassette** from a running product instance: the HTTP responses opfor's
-  probe draws, in the same shape opfor's seams return. Run it on a machine with Docker.
-- `corpus/<product>/<version>.json` holds one cassette per pinned instance, named by its
-  `instance_version`, the real version running. Its `version` field is what the scan is expected
-  to **extract**: the same version when the service exposes it unauthenticated, or blank when it
-  does not, which makes that cassette a recall-only case that gates identification but not version
-  accuracy. `corpus/negatives/` holds pages that must identify nothing, including one that merely
-  mentions a product in prose, guarding against loose markers.
-- `replay.py` replays a cassette through opfor's **real probe pipeline** (fidelity by full-response
-  replay), so the redirect handling, the paths probed, the evidence building, and the fingerprint
-  all run against recorded reality. The identify seam is the deterministic table only, no model.
-- `fingerprint.py` scores three axes and gates on a regression: **recall** (each version identified),
-  **version accuracy** (extracted version matches), **precision** (no wrong or negative fire).
-- Ground truth lives only in the cassette labels, never fed into the pipeline, so a high score
-  cannot come from the tool grading itself.
+The `cassette.json` holds only the evidence, `host`, `resolved`, `root`, `fetch`, `docs`. The
+`answer-key.yaml` beside it states what the run must conclude: the `identity` the host runs, the
+`cves` the CVE chain must mint, and the `expect` labels the coverage matrix and the protocol scorer
+read. It never reaches the engine.
 
-### Run the backtest (offline, deterministic, no Docker, no model, no network)
+## Tier A, the Offline Gate
 
-    python -m evals fingerprint
+    python -m evals offline
 
-Fails with a nonzero exit on any regression, so it is a CI gate. `run` stays as a hidden alias.
+Drives opfor's real engine over every recorded cassette with no model and no network, and grades
+four capabilities at a hard 100% floor: identify what a host runs, extract its version, mint the
+known vulnerabilities that version carries, and select the protocols a surface makes ride. The
+identify seam is forced to the deterministic fingerprint table and triage is a stub, so a result is
+what a real scan concludes deterministically. A regression on any axis exits nonzero, and an empty
+suite fails loud rather than scoring a vacuous 100%, invariant 5. This is the CI gate. `fingerprint`,
+`judgment`, and `run` are aliases for it.
 
-### Knowledge coverage (report)
+## Tier B, the Live Backtest
 
-    python -m evals coverage
+    python -m evals identify --runs 5
 
-Enumerates every knowledge claim as a namespaced ref and reports which a case exercises, so a claim
-no case exercises is a visible gap. It is a report, not a gate for the thin gaps, but it fails loud
-on an unresolved label, a case naming a knowledge ref no file defines, since that is a stale label
-rather than a thin corpus. Pass `--strict` to fail on any uncovered claim.
+The runbook that grades the model-identify capability, the fallback that names anything not in the
+14-product table. It calls a live model, so it is run on demand, never in CI. Each `unknown/` host
+runs N times and the runs fold by strict majority, the bar a floor rather than 100%. See
+`BACKTEST.md` for the runbook, the fold, and how to record an unknown host. The corpus ships empty
+today, a known reported gap, so the tier has machinery but no recorded host yet.
 
-### Refresh the corpus (needs Docker, on-demand)
+## Knowledge Coverage, a Report
+
+    python -m evals coverage [--strict]
+
+Enumerates every knowledge claim the domain class ships, namespaced `product:`, `framework:`,
+`class:`, `clue:`, `signature:`, `protocol:`, and reports which benchmark exercises each, reading
+the labels from each `answer-key.yaml`. It fails loud only on a label naming a ref no file defines,
+a stale label rather than a thin corpus, or a judgment class or protocol no benchmark exercises. The
+thinner detection gaps are reported, not gated. `--strict` fails on any uncovered claim.
+
+## Compare and Gate a Baseline
+
+    python -m evals compare before.json after.json
+    python -m evals gate result.json [--baseline baseline.json]
+
+`compare` names what moved between two baselines, newly found, newly missed, a new false positive,
+and the rate that changed. `gate` blocks a regression, an errored run, a new false positive, or an
+expectation newly missed against a baseline. Both read the `Result`-shaped JSON the live tier emits.
+
+## Refresh a Cassette, Needs Docker, On Demand
 
     docker compose -f evals/capture/grafana/docker-compose.yml up -d
     python -m evals.capture.record --product Grafana --version 10.4.0 --url http://localhost:3104
     docker compose -f evals/capture/grafana/docker-compose.yml down
 
 Compose files are grouped by stack under `evals/capture/<stack>/docker-compose.yml`, a stack being
-the vendor or project whose products come up together. Most stacks hold one product, so the
-directory reads as the product, `grafana`, `gitlab`, `jenkins`. Some hold more than one because the
-products cannot run apart: `elastic` brings up Elasticsearch and Kibana together, since Kibana needs
-an Elasticsearch to talk to, and `apache` holds the Apache-project instances such as Airflow. Each
-capture writes `corpus/<slug>/<version>.json`, the slug defaulting to the product lowercased, so a
-display name such as `Apache Airflow` is captured under the `airflow` slug while its cassette keeps
-the full product name the fingerprint identifies. Add a product by placing its instance in the
-matching stack directory, a new directory when it has no stack yet, with a compose file of pinned
-versions, then capturing each.
+the vendor or project whose products come up together. A capture writes the evidence to
+`benchmarks/hosts/<slug>/<version>/cassette.json` and scaffolds an `answer-key.yaml` beside it
+carrying the captured identity, the operator fills the expected CVEs and the coverage labels by hand.
+An existing answer key is never overwritten.

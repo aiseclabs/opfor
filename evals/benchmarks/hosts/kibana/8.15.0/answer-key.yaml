@@ -1,0 +1,10 @@
+target: kibana-8.15.0
+kind: host
+identity:
+  product: Kibana
+  version: 8.15.0
+cves: []
+expect:
+  positive:
+  - product:kibana
+  negative: []

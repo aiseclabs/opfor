@@ -1,0 +1,4 @@
+{
+  "note": "a portal that 302-redirects every unauthenticated request to an authorization server carrying a client_id and a response_type, an OAuth gate that appears present, the canonical improper-authentication look-alike a run must weigh rather than mint blind, selecting the oauth protocol primer",
+  "surface": "## host portal.example.com\n\nhttps://portal.example.com/  302  location: https://auth.example.com/authorize?client_id=portal&response_type=code&redirect_uri=https://portal.example.com/callback\n  the portal redirects every request to the authorization server, no content is served without a token\n"
+}

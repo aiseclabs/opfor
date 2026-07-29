@@ -24,26 +24,19 @@ its knowledge is left out until a class-parameterized coverage report is worth b
 
 from __future__ import annotations
 
-import json
 import re
 from dataclasses import dataclass
 from pathlib import Path
 
+import yaml
+
 from opfor.core.markdown_docs import iter_md_docs
 from opfor.scenarios.attacksurface.assets.domain import KNOWLEDGE, KnowledgePaths
 
-CORPUS = Path(__file__).resolve().parent / "corpus"
-JUDGMENT_CORPUS = Path(__file__).resolve().parent / "judgment"
+BENCHMARKS = Path(__file__).resolve().parent / "benchmarks"
 
 DETECTION = "detection"
 JUDGMENT = "judgment"
-
-
-def _corpora(corpus: Path | None) -> list[Path]:
-    """The case roots a scan reads. A given root is read alone, for test isolation, and the default
-    reads both the detection cassettes under `corpus/` and the judgment fixtures under `judgment/`,
-    so one scan crosses every case against the knowledge inventory."""
-    return [corpus] if corpus is not None else [CORPUS, JUDGMENT_CORPUS]
 
 _NON_SLUG = re.compile(r"[^a-z0-9]+")
 
@@ -128,21 +121,22 @@ class CoverageProblem:
 
 
 def _case_labels(corpus: Path | None = None) -> list[tuple[str, bool, str]]:
-    """Every (ref, is_positive, source) a backtest case declares in its `expect` block, across the
-    detection cassettes and the judgment fixtures. The labels live only in the case metadata and
-    never reach the pipeline, so a passing score cannot come from the tool grading itself,
-    invariant 4."""
+    """Every (ref, is_positive, source) a benchmark declares in its answer key's `expect` block. A
+    given root is read alone for test isolation, the default reads the whole `benchmarks/` tree. The
+    labels live only in the out-of-band answer key and never reach the pipeline, so a passing score
+    cannot come from the tool grading itself, invariant 4."""
+    root = corpus if corpus is not None else BENCHMARKS
     rows: list[tuple[str, bool, str]] = []
-    for root in _corpora(corpus):
-        if not root.is_dir():
-            continue
-        for path in sorted(root.rglob("*.json")):
-            expect = (json.loads(path.read_text(encoding="utf-8")).get("expect") or {})
-            name = path.relative_to(root).as_posix()
-            for ref in expect.get("positive") or []:
-                rows.append((ref, True, name))
-            for ref in expect.get("negative") or []:
-                rows.append((ref, False, name))
+    if not root.is_dir():
+        return rows
+    for path in sorted(root.rglob("answer-key.yaml")):
+        data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        expect = (data.get("expect") or {}) if isinstance(data, dict) else {}
+        name = path.relative_to(root).as_posix()
+        for ref in expect.get("positive") or []:
+            rows.append((ref, True, name))
+        for ref in expect.get("negative") or []:
+            rows.append((ref, False, name))
     return rows
 
 

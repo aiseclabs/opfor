@@ -1,0 +1,8 @@
+target: api-docs-and-graphql
+kind: surface
+expect:
+  positive:
+  - class:information-exposure
+  - protocol:openapi
+  - protocol:graphql
+  negative: []

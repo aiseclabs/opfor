@@ -1,0 +1,701 @@
+{
+  "host": "localhost",
+  "resolved": {
+    "resolvable": true,
+    "addresses": [
+      "127.0.0.1"
+    ],
+    "cnames": []
+  },
+  "root": {
+    "alive": true,
+    "status": 302,
+    "url": "http://localhost:3104/",
+    "server": "",
+    "title": "",
+    "body": "<a href=\"/login\">found</a>.\n\n",
+    "location": "/login",
+    "headers": [
+      [
+        "Cache-Control",
+        "no-store"
+      ],
+      [
+        "Content-Type",
+        "text/html; charset=utf-8"
+      ],
+      [
+        "Location",
+        "/login"
+      ],
+      [
+        "X-Content-Type-Options",
+        "nosniff"
+      ],
+      [
+        "X-Frame-Options",
+        "deny"
+      ],
+      [
+        "X-Xss-Protection",
+        "1; mode=block"
+      ],
+      [
+        "Date",
+        "Tue, 21 Jul 2026 06:47:28 GMT"
+      ],
+      [
+        "Content-Length",
+        "29"
+      ],
+      [
+        "Connection",
+        "close"
+      ]
+    ],
+    "reason": ""
+  },
+  "fetch": {
+    "/robots.txt": {
+      "status": 200,
+      "url": "http://localhost:3104/robots.txt",
+      "content_type": "text/plain; charset=utf-8",
+      "server": "",
+      "title": "",
+      "body": "user-agent: *\ndisallow: /\n",
+      "location": "",
+      "reason": ""
+    },
+    "/sitemap.xml": {
+      "status": 302,
+      "url": "http://localhost:3104/sitemap.xml",
+      "content_type": "text/html; charset=utf-8",
+      "server": "",
+      "title": "",
+      "body": "<a href=\"/login\">found</a>.\n\n",
+      "location": "/login",
+      "reason": ""
+    },
+    "/.well-known/security.txt": {
+      "status": 302,
+      "url": "http://localhost:3104/.well-known/security.txt",
+      "content_type": "text/html; charset=utf-8",
+      "server": "",
+      "title": "",
+      "body": "<a href=\"/login\">found</a>.\n\n",
+      "location": "/login",
+      "reason": ""
+    },
+    "/.git/config": {
+      "status": 302,
+      "url": "http://localhost:3104/.git/config",
+      "content_type": "text/html; charset=utf-8",
+      "server": "",
+      "title": "",
+      "body": "<a href=\"/login\">found</a>.\n\n",
+      "location": "/login",
+      "reason": ""
+    },
+    "/.git/HEAD": {
+      "status": 302,
+      "url": "http://localhost:3104/.git/HEAD",
+      "content_type": "text/html; charset=utf-8",
+      "server": "",
+      "title": "",
+      "body": "<a href=\"/login\">found</a>.\n\n",
+      "location": "/login",
+      "reason": ""
+    },
+    "/.env": {
+      "status": 302,
+      "url": "http://localhost:3104/.env",
+      "content_type": "text/html; charset=utf-8",
+      "server": "",
+      "title": "",
+      "body": "<a href=\"/login\">found</a>.\n\n",
+      "location": "/login",
+      "reason": ""
+    },
+    "/.svn/entries": {
+      "status": 302,
+      "url": "http://localhost:3104/.svn/entries",
+      "content_type": "text/html; charset=utf-8",
+      "server": "",
+      "title": "",
+      "body": "<a href=\"/login\">found</a>.\n\n",
+      "location": "/login",
+      "reason": ""
+    },
+    "/.DS_Store": {
+      "status": 302,
+      "url": "http://localhost:3104/.DS_Store",
+      "content_type": "text/html; charset=utf-8",
+      "server": "",
+      "title": "",
+      "body": "<a href=\"/login\">found</a>.\n\n",
+      "location": "/login",
+      "reason": ""
+    },
+    "/config.json": {
+      "status": 302,
+      "url": "http://localhost:3104/config.json",
+      "content_type": "text/html; charset=utf-8",
+      "server": "",
+      "title": "",
+      "body": "<a href=\"/login\">found</a>.\n\n",
+      "location": "/login",
+      "reason": ""
+    },
+    "/config.php": {
+      "status": 302,
+      "url": "http://localhost:3104/config.php",
+      "content_type": "text/html; charset=utf-8",
+      "server": "",
+      "title": "",
+      "body": "<a href=\"/login\">found</a>.\n\n",
+      "location": "/login",
+      "reason": ""
+    },
+    "/phpinfo.php": {
+      "status": 302,
+      "url": "http://localhost:3104/phpinfo.php",
+      "content_type": "text/html; charset=utf-8",
+      "server": "",
+      "title": "",
+      "body": "<a href=\"/login\">found</a>.\n\n",
+      "location": "/login",
+      "reason": ""
+    },
+    "/server-status": {
+      "status": 302,
+      "url": "http://localhost:3104/server-status",
+      "content_type": "text/html; charset=utf-8",
+      "server": "",
+      "title": "",
+      "body": "<a href=\"/login\">found</a>.\n\n",
+      "location": "/login",
+      "reason": ""
+    },
+    "/server-info": {
+      "status": 302,
+      "url": "http://localhost:3104/server-info",
+      "content_type": "text/html; charset=utf-8",
+      "server": "",
+      "title": "",
+      "body": "<a href=\"/login\">found</a>.\n\n",
+      "location": "/login",
+      "reason": ""
+    },
+    "/actuator": {
+      "status": 302,
+      "url": "http://localhost:3104/actuator",
+      "content_type": "text/html; charset=utf-8",
+      "server": "",
+      "title": "",
+      "body": "<a href=\"/login\">found</a>.\n\n",
+      "location": "/login",
+      "reason": ""
+    },
+    "/actuator/health": {
+      "status": 302,
+      "url": "http://localhost:3104/actuator/health",
+      "content_type": "text/html; charset=utf-8",
+      "server": "",
+      "title": "",
+      "body": "<a href=\"/login\">found</a>.\n\n",
+      "location": "/login",
+      "reason": ""
+    },
+    "/actuator/env": {
+      "status": 302,
+      "url": "http://localhost:3104/actuator/env",
+      "content_type": "text/html; charset=utf-8",
+      "server": "",
+      "title": "",
+      "body": "<a href=\"/login\">found</a>.\n\n",
+      "location": "/login",
+      "reason": ""
+    },
+    "/actuator/info": {
+      "status": 302,
+      "url": "http://localhost:3104/actuator/info",
+      "content_type": "text/html; charset=utf-8",
+      "server": "",
+      "title": "",
+      "body": "<a href=\"/login\">found</a>.\n\n",
+      "location": "/login",
+      "reason": ""
+    },
+    "/metrics": {
+      "status": 200,
+      "url": "http://localhost:3104/metrics",
+      "content_type": "text/plain; version=0.0.4; charset=utf-8",
+      "server": "",
+      "title": "",
+      "body": "# help deprecated_flags_inuse_total the number of deprecated flags currently set.\n# type deprecated_flags_inuse_total counter\ndeprecated_flags_inuse_total 0\n# help go_cgo_go_to_c_calls_calls_total count of calls made from go to c by the current process.\n# type go_cgo_go_to_c_calls_calls_total counter\ngo_cgo_go_to_c_calls_calls_total 23806\n# help go_cpu_classes_gc_mark_assist_cpu_seconds_total estimated total cpu time goroutines spent performing gc tasks to assist the gc and prevent it from falling behind the application. this metric is an overestimate, and not directly comparable to system cpu time measurements. compare only with other /cpu/classes metrics.\n# type go_cpu_classes_gc_mark_assist_cpu_seconds_total counter\ngo_cpu_classes_gc_mark_assist_cpu_seconds_total 0.000530374\n# help go_cpu_classes_gc_mark_dedicated_cpu_seconds_total estimated total cpu time spent performing gc tasks on processors (as defined by gomaxprocs) dedicated to those tasks. this metric is an overestimate, and not directly comparable to system cpu time measurements. compare only with other /cpu/classes metrics.\n# type go_cpu_classes_gc_mark_dedicated_cpu_seconds_total counter\ngo_cpu_classes_gc_mark_dedicated_cpu_seconds_total 0.034298756\n# help go_cpu_classes_gc_mark_idle_cpu_seconds_total estimated total cpu time spent performing gc tasks on spare cpu resources that the go scheduler could not otherwise find a use for. this should be subtracted from the total gc cpu time to obtain a measure of compulsory gc cpu time. this metric is an overestimate, and not directly comparable to system cpu time measurements. compare only with other /cpu/classes metrics.\n# type go_cpu_classes_gc_mark_idle_cpu_seconds_total counter\ngo_cpu_classes_gc_mark_idle_cpu_seconds_total 0.034745126\n# help go_cpu_classes_gc_pause_cpu_seconds_total estimated total cpu time spent with the application paused by the gc. even if only one thread is running during the pause, this is computed as gomaxprocs times the pause latency because nothing else can be executing. this is the exact sum of samples in /gc/pause:seconds if each sample is multiplied by gomaxprocs at the time it is taken. this metric is an overestimate, and not directly comparable to system cpu time measurements. compare only with other /cpu/classes metrics.\n# type go_cpu_classes_gc_pause_cpu_seconds_total counter\ngo_cpu_classes_gc_pause_cpu_seconds_total 0.00178082\n# help go_cpu_classes_gc_total_cpu_seconds_total estimated total cpu time spent performing gc tasks. this metric is an overestimate, and not directly comparable to system cpu time measurements. compare only with other /cpu/classes metrics. sum of all metrics in /cpu/classes/gc.\n# type go_cpu_classes_gc_total_cpu_seconds_total counter\ngo_cpu_classes_gc_total_cpu_seconds_total 0.071355076\n# help go_cpu_classes_idle_cpu_seconds_total estimated total available cpu time not spent executing any go or go runtime code. in other words, the part of /cpu/classes/total:cpu-seconds that was unused. this metric is an overestimate, and not directly comparable to system cpu time measurements. compare only with other /cpu/classes metrics.\n# type go_cpu_classes_idle_cpu_seconds_total counter\ngo_cpu_classes_idle_cpu_seconds_total 492.591214842\n# help go_cpu_classes_scavenge_assist_cpu_seconds_total estimated total cpu time spent returning unused memory to the underlying platform in response eagerly in response to memory pressure. this metric is an overestimate, and not directly comparable to system cpu time measurements. compare only with other /cpu/classes metrics.\n# type go_cpu_classes_scavenge_assist_cpu_seconds_total counter\ngo_cpu_classes_scavenge_assist_cpu_seconds_total 6e-08\n# help go_cpu_classes_scavenge_background_cpu_seconds_total estimated total cpu time spent performing background tasks to return unused memory to the underlying platform. this metric is an overestimate, and not directly comparable to system cpu time measurements. compare only with other /cpu/classes metrics.\n# type go_cpu_classes_scavenge_background_cpu_seconds_total counter\ngo_cpu_classes_scave",
+      "location": "",
+      "reason": ""
+    },
+    "/version": {
+      "status": 302,
+      "url": "http://localhost:3104/version",
+      "content_type": "text/html; charset=utf-8",
+      "server": "",
+      "title": "",
+      "body": "<a href=\"/login\">found</a>.\n\n",
+      "location": "/login",
+      "reason": ""
+    },
+    "/api/version": {
+      "status": 401,
+      "url": "http://localhost:3104/api/version",
+      "content_type": "application/json; charset=UTF-8",
+      "server": "",
+      "title": "",
+      "body": "{\"extra\":null,\"message\":\"unauthorized\",\"messageid\":\"auth.unauthorized\",\"statuscode\":401,\"traceid\":\"\"}\n",
+      "location": "",
+      "reason": ""
+    },
+    "/api/health": {
+      "status": 200,
+      "url": "http://localhost:3104/api/health",
+      "content_type": "application/json; charset=UTF-8",
+      "server": "",
+      "title": "",
+      "body": "{\n  \"commit\": \"03f502a94d17f7dc4e6c34acdf8428aedd986e4c\",\n  \"database\": \"ok\",\n  \"version\": \"10.4.0\"\n}",
+      "location": "",
+      "reason": ""
+    },
+    "/.well-known/openid-configuration": {
+      "status": 302,
+      "url": "http://localhost:3104/.well-known/openid-configuration",
+      "content_type": "text/html; charset=utf-8",
+      "server": "",
+      "title": "",
+      "body": "<a href=\"/login\">found</a>.\n\n",
+      "location": "/login",
+      "reason": ""
+    },
+    "/nacos/": {
+      "status": 302,
+      "url": "http://localhost:3104/nacos/",
+      "content_type": "text/html; charset=utf-8",
+      "server": "",
+      "title": "",
+      "body": "<a href=\"/login\">found</a>.\n\n",
+      "location": "/login",
+      "reason": ""
+    },
+    "/v1/agent/self": {
+      "status": 302,
+      "url": "http://localhost:3104/v1/agent/self",
+      "content_type": "text/html; charset=utf-8",
+      "server": "",
+      "title": "",
+      "body": "<a href=\"/login\">found</a>.\n\n",
+      "location": "/login",
+      "reason": ""
+    },
+    "/wp-json/": {
+      "status": 302,
+      "url": "http://localhost:3104/wp-json/",
+      "content_type": "text/html; charset=utf-8",
+      "server": "",
+      "title": "",
+      "body": "<a href=\"/login\">found</a>.\n\n",
+      "location": "/login",
+      "reason": ""
+    },
+    "/manager/html": {
+      "status": 302,
+      "url": "http://localhost:3104/manager/html",
+      "content_type": "text/html; charset=utf-8",
+      "server": "",
+      "title": "",
+      "body": "<a href=\"/login\">found</a>.\n\n",
+      "location": "/login",
+      "reason": ""
+    },
+    "/debug/pprof/": {
+      "status": 302,
+      "url": "http://localhost:3104/debug/pprof/",
+      "content_type": "text/html; charset=utf-8",
+      "server": "",
+      "title": "",
+      "body": "<a href=\"/login\">found</a>.\n\n",
+      "location": "/login",
+      "reason": ""
+    },
+    "/_cluster/health": {
+      "status": 302,
+      "url": "http://localhost:3104/_cluster/health",
+      "content_type": "text/html; charset=utf-8",
+      "server": "",
+      "title": "",
+      "body": "<a href=\"/login\">found</a>.\n\n",
+      "location": "/login",
+      "reason": ""
+    },
+    "/swagger.json": {
+      "status": 302,
+      "url": "http://localhost:3104/swagger.json",
+      "content_type": "text/html; charset=utf-8",
+      "server": "",
+      "title": "",
+      "body": "<a href=\"/login\">found</a>.\n\n",
+      "location": "/login",
+      "reason": ""
+    },
+    "/swagger-ui.html": {
+      "status": 302,
+      "url": "http://localhost:3104/swagger-ui.html",
+      "content_type": "text/html; charset=utf-8",
+      "server": "",
+      "title": "",
+      "body": "<a href=\"/login\">found</a>.\n\n",
+      "location": "/login",
+      "reason": ""
+    },
+    "/openapi.json": {
+      "status": 302,
+      "url": "http://localhost:3104/openapi.json",
+      "content_type": "text/html; charset=utf-8",
+      "server": "",
+      "title": "",
+      "body": "<a href=\"/login\">found</a>.\n\n",
+      "location": "/login",
+      "reason": ""
+    },
+    "/api-docs": {
+      "status": 401,
+      "url": "http://localhost:3104/api-docs",
+      "content_type": "application/json; charset=UTF-8",
+      "server": "",
+      "title": "",
+      "body": "{\"extra\":null,\"message\":\"unauthorized\",\"messageid\":\"auth.unauthorized\",\"statuscode\":401,\"traceid\":\"\"}\n",
+      "location": "",
+      "reason": ""
+    },
+    "/v2/api-docs": {
+      "status": 302,
+      "url": "http://localhost:3104/v2/api-docs",
+      "content_type": "text/html; charset=utf-8",
+      "server": "",
+      "title": "",
+      "body": "<a href=\"/login\">found</a>.\n\n",
+      "location": "/login",
+      "reason": ""
+    },
+    "/graphql": {
+      "status": 302,
+      "url": "http://localhost:3104/graphql",
+      "content_type": "text/html; charset=utf-8",
+      "server": "",
+      "title": "",
+      "body": "<a href=\"/login\">found</a>.\n\n",
+      "location": "/login",
+      "reason": ""
+    },
+    "/api": {
+      "status": 401,
+      "url": "http://localhost:3104/api",
+      "content_type": "application/json; charset=UTF-8",
+      "server": "",
+      "title": "",
+      "body": "{\"extra\":null,\"message\":\"unauthorized\",\"messageid\":\"auth.unauthorized\",\"statuscode\":401,\"traceid\":\"\"}\n",
+      "location": "",
+      "reason": ""
+    },
+    "/admin": {
+      "status": 302,
+      "url": "http://localhost:3104/admin",
+      "content_type": "text/html; charset=utf-8",
+      "server": "",
+      "title": "",
+      "body": "<a href=\"/\">found</a>.\n\n",
+      "location": "/",
+      "reason": ""
+    },
+    "/login": {
+      "status": 200,
+      "url": "http://localhost:3104/login",
+      "content_type": "text/html; charset=UTF-8",
+      "server": "",
+      "title": "Grafana",
+      "body": "<!doctype html>\n<html lang=\"en-us\">\n  <head>\n    \n    <meta charset=\"utf-8\" />\n    <meta http-equiv=\"x-ua-compatible\" content=\"ie=edge,chrome=1\" />\n    <meta name=\"viewport\" content=\"width=device-width\" />\n    <meta name=\"theme-color\" content=\"#000\" />\n\n    <title>grafana</title>\n\n    <base href=\"/\" />\n\n    <link rel=\"icon\" type=\"image/png\" href=\"public/img/fav32.png\" />\n    <link rel=\"apple-touch-icon\" sizes=\"180x180\" href=\"public/img/apple-touch-icon.png\" />\n    <link rel=\"mask-icon\" href=\"public/img/grafana_mask_icon.svg\" color=\"#f05a28\" />\n\n    \n    \n    <link rel=\"stylesheet\" href=\"public/build/grafana.dark.8c716fbcf630eae84ced.css\" />\n    \n\n    <script nonce=\"\">\n      performance.mark('frontend_boot_css_time_seconds');\n    </script>\n\n    <meta name=\"apple-mobile-web-app-capable\" content=\"yes\" />\n    <meta name=\"apple-mobile-web-app-status-bar-style\" content=\"black\" />\n    <meta name=\"msapplication-tilecolor\" content=\"#2b5797\" />\n    <meta name=\"msapplication-config\" content=\"public/img/browserconfig.xml\" />\n  </head>\n\n  <body class=\"theme-dark app-grafana\">\n    <style>\n      .preloader {\n        height: 100%;\n        flex-direction: column;\n        display: flex;\n        justify-content: center;\n        align-items: center;\n      }\n\n      .preloader__enter {\n        opacity: 0;\n        animation-name: preloader-fade-in;\n        animation-iteration-count: 1;\n        animation-duration: 0.9s;\n        animation-delay: 0.5s;\n        animation-fill-mode: forwards;\n      }\n\n      .preloader__bounce {\n        text-align: center;\n        animation-name: preloader-bounce;\n        animation-duration: 0.9s;\n        animation-iteration-count: infinite;\n      }\n\n      .preloader__logo {\n        display: inline-block;\n        animation-name: preloader-squash;\n        animation-duration: 0.9s;\n        animation-iteration-count: infinite;\n        width: 60px;\n        height: 60px;\n        background-repeat: no-repeat;\n        background-size: contain;\n        background-image: url('public/img/grafana_icon.svg');\n      }\n\n      .preloader__text {\n        margin-top: 16px;\n        font-weight: 500;\n        font-size: 14px;\n        font-family: sans-serif;\n        opacity: 0;\n        animation-name: preloader-fade-in;\n        animation-duration: 0.9s;\n        animation-delay: 0.5s;\n        animation-fill-mode: forwards;\n      }\n\n      .theme-light .preloader__text {\n        color: #52545c;\n      }\n\n      .theme-dark .preloader__text {\n        color: #d8d9da;\n      }\n\n      @keyframes preloader-fade-in {\n        0% {\n          opacity: 0;\n           \n          animation-timing-function: cubic-bezier(0, 0, 0.5, 1);\n        }\n        100% {\n          opacity: 1;\n        }\n      }\n\n      @keyframes preloader-bounce {\n        from,\n        to {\n          transform: translatey(0px);\n          animation-timing-function: cubic-bezier(0.3, 0, 0.1, 1);\n        }\n        50% {\n          transform: translatey(-50px);\n          animation-timing-function: cubic-bezier(0.9, 0, 0.7, 1);\n        }\n      }\n\n      @keyframes preloader-squash {\n        0% {\n          transform: scalex(1.3) scaley(0.8);\n          animation-timing-function: cubic-bezier(0.3, 0, 0.1, 1);\n        }\n        15% {\n          transform: scalex(0.75) scaley(1.25);\n          animation-timing-function: cubic-bezier(0, 0, 0.7, 0.75);\n        }\n        55% {\n          transform: scalex(1.05) scaley(0.95);\n          animation-timing-function: cubic-bezier(0.9, 0, 1, 1);\n        }\n        95% {\n          transform: scalex(0.75) scaley(1.25);\n          animation-timing-function: cubic-bezier(0, 0, 0, 1);\n        }\n        100% {\n          transform: scalex(1.3) scaley(0.8);\n          animation-timing-function: cubic-bezier(0, 0, 0.7, 1);\n        }\n      }\n\n       \n      .preloader__text--fail {\n        display: none;\n      }\n\n       \n      .preloader--done .preloader__bounce,\n      .preloader--done .preloader__logo {\n        animation-name: none;\n        display: none;\n      }\n\n      .preloader--done .preloader__logo,\n      .preloader--done .preloader__text {\n        display: none;\n   ",
+      "location": "",
+      "reason": ""
+    },
+    "/backup.zip": {
+      "status": 302,
+      "url": "http://localhost:3104/backup.zip",
+      "content_type": "text/html; charset=utf-8",
+      "server": "",
+      "title": "",
+      "body": "<a href=\"/login\">found</a>.\n\n",
+      "location": "/login",
+      "reason": ""
+    },
+    "/backup.tar.gz": {
+      "status": 302,
+      "url": "http://localhost:3104/backup.tar.gz",
+      "content_type": "text/html; charset=utf-8",
+      "server": "",
+      "title": "",
+      "body": "<a href=\"/login\">found</a>.\n\n",
+      "location": "/login",
+      "reason": ""
+    },
+    "/.aws/credentials": {
+      "status": 302,
+      "url": "http://localhost:3104/.aws/credentials",
+      "content_type": "text/html; charset=utf-8",
+      "server": "",
+      "title": "",
+      "body": "<a href=\"/login\">found</a>.\n\n",
+      "location": "/login",
+      "reason": ""
+    },
+    "/wp-login.php": {
+      "status": 302,
+      "url": "http://localhost:3104/wp-login.php",
+      "content_type": "text/html; charset=utf-8",
+      "server": "",
+      "title": "",
+      "body": "<a href=\"/login\">found</a>.\n\n",
+      "location": "/login",
+      "reason": ""
+    },
+    "/.npmrc": {
+      "status": 302,
+      "url": "http://localhost:3104/.npmrc",
+      "content_type": "text/html; charset=utf-8",
+      "server": "",
+      "title": "",
+      "body": "<a href=\"/login\">found</a>.\n\n",
+      "location": "/login",
+      "reason": ""
+    },
+    "/.git-credentials": {
+      "status": 302,
+      "url": "http://localhost:3104/.git-credentials",
+      "content_type": "text/html; charset=utf-8",
+      "server": "",
+      "title": "",
+      "body": "<a href=\"/login\">found</a>.\n\n",
+      "location": "/login",
+      "reason": ""
+    },
+    "/.ssh/id_rsa": {
+      "status": 302,
+      "url": "http://localhost:3104/.ssh/id_rsa",
+      "content_type": "text/html; charset=utf-8",
+      "server": "",
+      "title": "",
+      "body": "<a href=\"/login\">found</a>.\n\n",
+      "location": "/login",
+      "reason": ""
+    },
+    "/.htpasswd": {
+      "status": 302,
+      "url": "http://localhost:3104/.htpasswd",
+      "content_type": "text/html; charset=utf-8",
+      "server": "",
+      "title": "",
+      "body": "<a href=\"/login\">found</a>.\n\n",
+      "location": "/login",
+      "reason": ""
+    },
+    "/wp-config.php.bak": {
+      "status": 302,
+      "url": "http://localhost:3104/wp-config.php.bak",
+      "content_type": "text/html; charset=utf-8",
+      "server": "",
+      "title": "",
+      "body": "<a href=\"/login\">found</a>.\n\n",
+      "location": "/login",
+      "reason": ""
+    },
+    "/appsettings.json": {
+      "status": 302,
+      "url": "http://localhost:3104/appsettings.json",
+      "content_type": "text/html; charset=utf-8",
+      "server": "",
+      "title": "",
+      "body": "<a href=\"/login\">found</a>.\n\n",
+      "location": "/login",
+      "reason": ""
+    },
+    "/web.config": {
+      "status": 302,
+      "url": "http://localhost:3104/web.config",
+      "content_type": "text/html; charset=utf-8",
+      "server": "",
+      "title": "",
+      "body": "<a href=\"/login\">found</a>.\n\n",
+      "location": "/login",
+      "reason": ""
+    },
+    "/application.properties": {
+      "status": 302,
+      "url": "http://localhost:3104/application.properties",
+      "content_type": "text/html; charset=utf-8",
+      "server": "",
+      "title": "",
+      "body": "<a href=\"/login\">found</a>.\n\n",
+      "location": "/login",
+      "reason": ""
+    },
+    "/credentials.json": {
+      "status": 302,
+      "url": "http://localhost:3104/credentials.json",
+      "content_type": "text/html; charset=utf-8",
+      "server": "",
+      "title": "",
+      "body": "<a href=\"/login\">found</a>.\n\n",
+      "location": "/login",
+      "reason": ""
+    },
+    "/config.yaml": {
+      "status": 302,
+      "url": "http://localhost:3104/config.yaml",
+      "content_type": "text/html; charset=utf-8",
+      "server": "",
+      "title": "",
+      "body": "<a href=\"/login\">found</a>.\n\n",
+      "location": "/login",
+      "reason": ""
+    },
+    "/.git/index": {
+      "status": 302,
+      "url": "http://localhost:3104/.git/index",
+      "content_type": "text/html; charset=utf-8",
+      "server": "",
+      "title": "",
+      "body": "<a href=\"/login\">found</a>.\n\n",
+      "location": "/login",
+      "reason": ""
+    },
+    "/.git/logs/HEAD": {
+      "status": 302,
+      "url": "http://localhost:3104/.git/logs/HEAD",
+      "content_type": "text/html; charset=utf-8",
+      "server": "",
+      "title": "",
+      "body": "<a href=\"/login\">found</a>.\n\n",
+      "location": "/login",
+      "reason": ""
+    },
+    "/.hg/requires": {
+      "status": 302,
+      "url": "http://localhost:3104/.hg/requires",
+      "content_type": "text/html; charset=utf-8",
+      "server": "",
+      "title": "",
+      "body": "<a href=\"/login\">found</a>.\n\n",
+      "location": "/login",
+      "reason": ""
+    },
+    "/actuator/mappings": {
+      "status": 302,
+      "url": "http://localhost:3104/actuator/mappings",
+      "content_type": "text/html; charset=utf-8",
+      "server": "",
+      "title": "",
+      "body": "<a href=\"/login\">found</a>.\n\n",
+      "location": "/login",
+      "reason": ""
+    },
+    "/console": {
+      "status": 302,
+      "url": "http://localhost:3104/console",
+      "content_type": "text/html; charset=utf-8",
+      "server": "",
+      "title": "",
+      "body": "<a href=\"/login\">found</a>.\n\n",
+      "location": "/login",
+      "reason": ""
+    },
+    "/rails/info/routes": {
+      "status": 302,
+      "url": "http://localhost:3104/rails/info/routes",
+      "content_type": "text/html; charset=utf-8",
+      "server": "",
+      "title": "",
+      "body": "<a href=\"/login\">found</a>.\n\n",
+      "location": "/login",
+      "reason": ""
+    },
+    "/backup.sql": {
+      "status": 302,
+      "url": "http://localhost:3104/backup.sql",
+      "content_type": "text/html; charset=utf-8",
+      "server": "",
+      "title": "",
+      "body": "<a href=\"/login\">found</a>.\n\n",
+      "location": "/login",
+      "reason": ""
+    },
+    "/dump.sql": {
+      "status": 302,
+      "url": "http://localhost:3104/dump.sql",
+      "content_type": "text/html; charset=utf-8",
+      "server": "",
+      "title": "",
+      "body": "<a href=\"/login\">found</a>.\n\n",
+      "location": "/login",
+      "reason": ""
+    },
+    "/database.sql": {
+      "status": 302,
+      "url": "http://localhost:3104/database.sql",
+      "content_type": "text/html; charset=utf-8",
+      "server": "",
+      "title": "",
+      "body": "<a href=\"/login\">found</a>.\n\n",
+      "location": "/login",
+      "reason": ""
+    },
+    "/db.sql": {
+      "status": 302,
+      "url": "http://localhost:3104/db.sql",
+      "content_type": "text/html; charset=utf-8",
+      "server": "",
+      "title": "",
+      "body": "<a href=\"/login\">found</a>.\n\n",
+      "location": "/login",
+      "reason": ""
+    },
+    "/www.zip": {
+      "status": 302,
+      "url": "http://localhost:3104/www.zip",
+      "content_type": "text/html; charset=utf-8",
+      "server": "",
+      "title": "",
+      "body": "<a href=\"/login\">found</a>.\n\n",
+      "location": "/login",
+      "reason": ""
+    },
+    "/v3/api-docs": {
+      "status": 302,
+      "url": "http://localhost:3104/v3/api-docs",
+      "content_type": "text/html; charset=utf-8",
+      "server": "",
+      "title": "",
+      "body": "<a href=\"/login\">found</a>.\n\n",
+      "location": "/login",
+      "reason": ""
+    },
+    "/swagger/v1/swagger.json": {
+      "status": 302,
+      "url": "http://localhost:3104/swagger/v1/swagger.json",
+      "content_type": "text/html; charset=utf-8",
+      "server": "",
+      "title": "",
+      "body": "<a href=\"/login\">found</a>.\n\n",
+      "location": "/login",
+      "reason": ""
+    }
+  },
+  "docs": {}
+}

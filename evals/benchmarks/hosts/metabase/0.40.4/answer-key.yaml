@@ -1,0 +1,9 @@
+target: metabase-0.40.4
+kind: host
+identity:
+  product: Metabase
+  version: 0.40.4
+cves: []
+expect:
+  positive: []
+  negative: []

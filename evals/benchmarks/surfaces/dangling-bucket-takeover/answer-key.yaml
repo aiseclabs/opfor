@@ -1,0 +1,7 @@
+target: dangling-bucket-takeover
+kind: surface
+expect:
+  positive:
+  - class:subdomain-takeover
+  negative:
+  - protocol:graphql

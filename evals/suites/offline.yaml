@@ -1,0 +1,8 @@
+name: offline
+description: >
+  The deterministic offline gate, every host, negative, and surface benchmark the engine can replay
+  with no model and no network. This is the CI tier, graded at hard floors.
+tags:
+  - host
+  - negative
+  - surface

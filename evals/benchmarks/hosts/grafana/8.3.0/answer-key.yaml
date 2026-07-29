@@ -1,0 +1,13 @@
+target: grafana-8.3.0
+kind: host
+identity:
+  product: Grafana
+  version: 8.3.0
+cves:
+- id: CVE-2021-43798
+  match: version
+  severity: HIGH
+expect:
+  positive:
+  - product:grafana
+  negative: []

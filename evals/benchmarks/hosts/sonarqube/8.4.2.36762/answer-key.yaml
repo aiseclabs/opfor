@@ -1,0 +1,9 @@
+target: sonarqube-8.4.2.36762
+kind: host
+identity:
+  product: SonarQube
+  version: 8.4.2.36762
+cves: []
+expect:
+  positive: []
+  negative: []

@@ -1,0 +1,10 @@
+target: grafana-10.4.0
+kind: host
+identity:
+  product: Grafana
+  version: 10.4.0
+cves: []
+expect:
+  positive:
+  - product:grafana
+  negative: []

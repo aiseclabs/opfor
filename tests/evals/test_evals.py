@@ -33,7 +33,7 @@ def test_knowledge_inventory_enumerates_every_claim_by_ref_and_kind():
     # every knowledge namespace is enumerated, so a new detection or judgment unit that ships
     # without a backtest shows up as an uncovered ref rather than being invisible
     assert by_ns["product"] == 14
-    assert by_ns["framework"] == 2
+    assert by_ns["framework"] == 4
     # a newly added product is enumerated as a detection unit, so its unbacked fingerprint reads as
     # a coverage gap rather than shipping invisibly
     assert items["product:couchdb"].kind == DETECTION

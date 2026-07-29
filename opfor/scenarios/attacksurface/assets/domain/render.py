@@ -109,6 +109,16 @@ class SurfaceRenderer:
         if profile_data is not None and profile_data.product:
             version = f" {profile_data.version}" if profile_data.version else ""
             line += f"\n  product: {profile_data.product}{version}"
+        # The reachable source maps this host serves, a raw observation for the judge. A source map
+        # served publicly leaks the app's original file layout, and one carrying its contents leaks
+        # the source itself. Whether that rises to a finding is triage's call.
+        source_maps = world.latest("source_map", node.id)
+        if source_maps is not None:
+            for m in source_maps.payload.maps:
+                detail = f"{m.sources} original source files named"
+                if m.embeds_source:
+                    detail += ", original source embedded, sourcesContent present"
+                line += f"\n  source map reachable: {m.path}, {detail}"
         # The CVE scan is not rendered here. A known vulnerability is minted deterministically from
         # the version match rather than judged by the model, see `cve`, so the model surface carries
         # the exposed shape and the identity, not the catalogued CVE list.

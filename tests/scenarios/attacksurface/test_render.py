@@ -50,6 +50,29 @@ def test_render_lists_present_security_headers_as_set_and_omits_them_from_missin
     assert "not set: content-security-policy, x-content-type-options, referrer-policy, permissions-policy" in text
 
 
+def test_render_puts_a_reachable_source_map_in_front_of_the_judge():
+    from opfor.core import Fact
+    from opfor.scenarios.attacksurface.assets.domain.types import (
+        DomainData, HTTPProbe as HTTPData, SourceMap, SourceMaps)
+    from opfor.scenarios.attacksurface.assets.domain.render import SurfaceRenderer
+
+    world = World()
+    world.add(Node(id="domain:h.example.com", type="domain",
+                   payload=DomainData(name="h.example.com", root="example.com", source="hint")))
+    world.absorb((
+        Fact(kind="http", about="domain:h.example.com",
+             payload=HTTPData(alive=True, status=200, url="https://h.example.com/")),
+        Fact(kind="source_map", about="domain:h.example.com",
+             payload=SourceMaps(maps=(
+                 SourceMap(path="/static/js/main.js.map", sources=42, embeds_source=True),))),
+    ))
+    text = "\n".join(SurfaceRenderer([], []).units(world))
+    assert "source map reachable: /static/js/main.js.map, 42 original source files named" in text
+    # the strong form, embedded original source, is flagged so the judge can grade it above a
+    # map that only names paths
+    assert "original source embedded, sourcesContent present" in text
+
+
 def test_directory_listing_body_raises_the_exposure_clue():
     from opfor.scenarios.attacksurface.assets.domain import KNOWLEDGE
     from opfor.scenarios.attacksurface.assets.domain.types import Endpoint

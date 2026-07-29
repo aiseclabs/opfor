@@ -62,8 +62,9 @@ def versions_in_script(body: str, patterns: dict) -> dict:
 def sourcemap_targets(body: str, host: str, base_path: str = "") -> list[str]:
     """The same-host source map paths a script points to, deduped in order and capped.
 
-    Read only when a bundle prints no version literal, and only for a same-host map, so a
-    cross-origin map is never chased and a data-uri inline map is skipped. A bare relative
+    Read to confirm whether the map is reachable, both a source exposure to judge and a place a
+    version may sit, and only for a same-host map, so a cross-origin map is never chased and a
+    data-uri inline map is skipped. A bare relative
     reference, the common form a bundler emits, is resolved against the script's own directory in
     `base_path`, an absolute path is kept, and a full url is taken only when it names the host.
     Fetching a public static asset a page already links stays the recon tier of reading the bundle.
@@ -111,6 +112,41 @@ def versions_in_sourcemap(text: str, npm_by_name: dict) -> dict:
         if match:
             out[name] = match.group(1)
     return out
+
+
+def sourcemap_exposure(text: str):
+    """How much a reachable source map leaks, or None when the body is not a source map.
+
+    A source map is the JSON a bundler emits to map a minified bundle back to its original files.
+    Served to anyone it hands an attacker the app's original file layout, and where it carries a
+    `sourcesContent` array, the original source itself, comments and internal paths and sometimes a
+    committed secret. Returns None when the fetched body is not a source map, so a `404` page, a
+    single-page-app catch-all, or an unrelated document is never read as an exposure. Otherwise it
+    returns the count of original files the map names and whether it embeds their contents, the raw
+    evidence triage grades, never a verdict. It reads what is served, it guesses nothing.
+    """
+    import json
+
+    try:
+        doc = json.loads(text or "")
+    except ValueError:
+        return None
+    if not isinstance(doc, dict):
+        return None
+    # The response body arrives lowercased from the document fetch, so a real map's `sourcesContent`
+    # key reads as `sourcescontent`. Read the keys through a lowercased view so the detector works on
+    # the lowercased body and on an original-case one a test may pass.
+    keys = {str(k).lower(): v for k, v in doc.items()}
+    sources = keys.get("sources")
+    if not isinstance(sources, list) or not sources:
+        return None
+    # A source map carries a mappings string or a version field, so an unrelated JSON document that
+    # merely happens to have a sources key is not mistaken for one.
+    if "mappings" not in keys and "version" not in keys:
+        return None
+    contents = keys.get("sourcescontent")
+    embeds = isinstance(contents, list) and any(isinstance(c, str) and c.strip() for c in contents)
+    return (len(sources), embeds)
 
 
 def paths_in_javascript(text: str) -> list[str]:

@@ -20,6 +20,7 @@ from opfor.scenarios.attacksurface.assets.domain.classifiers import (
     load_frameworks,
 )
 from opfor.scenarios.attacksurface.assets.domain.sources.javascript import (
+    sourcemap_exposure,
     sourcemap_targets,
     versions_in_script,
     versions_in_sourcemap,
@@ -69,6 +70,55 @@ def test_b_reads_a_version_only_from_a_pnpm_source_path():
     assert versions_in_sourcemap(flat, _NPM) == {}
     # a body that is not a source map yields nothing rather than raising
     assert versions_in_sourcemap("<html>not json</html>", _NPM) == {}
+
+
+def test_sourcemap_exposure_reads_only_a_real_source_map_and_grades_by_what_it_leaks():
+    # a real source map carrying original source, the strong form, reports the count and the embed
+    embedded = ('{"version":3,"sources":["src/a.js","src/b.js"],'
+                '"sourcesContent":["const a=1","const b=2"],"mappings":"AAAA"}')
+    assert sourcemap_exposure(embedded) == (2, True)
+    # a map that names files but embeds no contents leaks the layout, not the source
+    names_only = '{"version":3,"sources":["src/a.js"],"mappings":"AAAA"}'
+    assert sourcemap_exposure(names_only) == (1, False)
+    # an empty sourcesContent is not an embed, so it is not read as the strong form
+    empty_content = '{"version":3,"sources":["src/a.js"],"sourcesContent":[""],"mappings":""}'
+    assert sourcemap_exposure(empty_content) == (1, False)
+    # a body that is not a source map is None, so a 404 page or an app shell is never an exposure
+    assert sourcemap_exposure("<html>not found</html>") is None
+    assert sourcemap_exposure("") is None
+    # JSON that is not an object, or an object with no sources, is not a source map
+    assert sourcemap_exposure('["a","b"]') is None
+    assert sourcemap_exposure('{"foo":"bar"}') is None
+    # an object with a sources array but no version or mappings is not mistaken for a map
+    assert sourcemap_exposure('{"sources":["x"]}') is None
+
+
+def test_harvest_records_a_reachable_source_map_it_confirmed():
+    world = _seed_live_host()
+    pages = {
+        "/": '<html><script src="/static/app.js"></script></html>',
+        "/static/app.js": 'boot();\n//# sourceMappingURL=app.js.map',
+        "/static/app.js.map": ('{"version":3,"sources":["src/a.js","src/b.js"],'
+                               '"sourcesContent":["x","y"],"mappings":"AAAA"}'),
+    }
+    out = _harvester(pages).run(Task(capability="domain_harvest", node="domain:h"), world)
+    assert isinstance(out, Done)
+    maps = next(f.payload for f in out.facts if f.kind == "source_map").maps
+    assert len(maps) == 1
+    assert maps[0].path == "/static/app.js.map"
+    assert maps[0].sources == 2 and maps[0].embeds_source is True
+
+
+def test_harvest_records_no_source_map_fact_when_the_map_is_not_served():
+    world = _seed_live_host()
+    pages = {
+        "/": '<html><script src="/static/app.js"></script></html>',
+        # the bundle advertises a map, but the path answers a catch-all shell, not a source map
+        "/static/app.js": 'boot();\n//# sourceMappingURL=app.js.map',
+        "/static/app.js.map": '<html>single page app shell</html>',
+    }
+    out = _harvester(pages).run(Task(capability="domain_harvest", node="domain:h"), world)
+    assert not any(f.kind == "source_map" for f in out.facts)
 
 
 def _seed_live_host() -> World:

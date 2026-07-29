@@ -183,6 +183,30 @@ class ScriptVersions:
 
 
 @dataclass(frozen=True, kw_only=True)
+class SourceMap:
+    """One reachable JavaScript source map a host's bundle pointed to and a fetch confirmed. A
+    source map served publicly maps the minified bundle back to its original files, so `sources` is
+    how many original files it names, the app's internal layout, and `embeds_source` is True when it
+    also carries their contents, the original source itself. `path` is where it was reached, the
+    exact request that confirmed it. Whether this rises to a finding and how severe is triage's
+    judgment, this is the raw observation."""
+
+    path: str
+    sources: int = 0
+    embeds_source: bool = False
+
+
+@dataclass(frozen=True, kw_only=True)
+class SourceMaps:
+    """The reachable source maps a host's bundles pointed to, gathered by the harvester and
+    rendered for triage. A map is recorded only after a fetch confirmed it answers with a real
+    source map body, so a bundle that advertises a map the server does not serve yields nothing,
+    an advertised map is never read as an exposure without confirming it, invariant 5."""
+
+    maps: tuple[SourceMap, ...] = ()
+
+
+@dataclass(frozen=True, kw_only=True)
 class HostProfile:
     """What a live host is, the single record answering the host's role: the open-source product
     and version behind it and the front-end frameworks it reveals. Each field is a raw

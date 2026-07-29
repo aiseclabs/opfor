@@ -21,6 +21,7 @@ from opfor.scenarios.attacksurface.assets.domain.sources.http import _BODY_VERSI
 from opfor.scenarios.attacksurface.assets.domain.sources.javascript import (
     paths_in_javascript,
     script_sources,
+    sourcemap_exposure,
     sourcemap_targets,
     urls_in_javascript,
     versions_in_script,
@@ -36,6 +37,8 @@ from opfor.scenarios.attacksurface.assets.domain.types import (
     Endpoint,
     HTTPProbe,
     ScriptVersions,
+    SourceMap,
+    SourceMaps,
 )
 
 
@@ -106,8 +109,8 @@ class HarvestPaths(Capability):
 
     _MAX_SCRIPTS = 12
 
-    # A ceiling on source maps fetched per host, so technique B stays a bounded fallback that fires
-    # only when a bundle prints no version literal, never a map fetch per script.
+    # A ceiling on source maps fetched per host, so confirming a map is reachable stays bounded, a
+    # couple of reads per host rather than one per script.
     _MAX_SOURCEMAP_FETCHES = 2
 
     def __init__(self, fetch_fn, fetch_doc_fn, wayback_fn, frameworks=None) -> None:
@@ -116,8 +119,8 @@ class HarvestPaths(Capability):
         self._wayback = wayback_fn
         # The framework table's bundle-version anchors and npm names, so the harvester reads a
         # version out of a bundle's own content while it already holds the bytes, and reads a
-        # source map only to fill a package the content did not name. Empty when unwired, so the
-        # scan is off and a test that omits it drives the plain harvest unchanged.
+        # source map both to confirm it is reachable and to fill a package the content did not name.
+        # Empty when unwired, so the scan is off and a test that omits it drives plain harvest.
         table = frameworks or {}
         self._bundle_patterns = {name: sig.get("bundle") for name, sig in table.items()
                                  if sig.get("bundle")}
@@ -130,7 +133,9 @@ class HarvestPaths(Capability):
         addresses = resolved.payload.addresses if resolved else ()
         by_host: dict[str, set[str]] = {}
         versions: dict[str, str] = {}
+        exposed_maps: list[SourceMap] = []
         maps_fetched = 0
+        maps_seen: set[str] = set()
 
         def add(host: str, path: str) -> None:
             if host and path and path.startswith("/"):
@@ -155,16 +160,24 @@ class HarvestPaths(Capability):
                 # The version a bundle's own content declares, read from the bytes already fetched.
                 for fw, ver in versions_in_script(body, self._bundle_patterns).items():
                     versions.setdefault(fw, ver)
-                # Technique B, a bounded fallback: a bundle that named no version may point at a
-                # source map whose paths embed one. Read it only while a tracked package is still
-                # unversioned and only for a same-host map, so it fires rarely and adds no guesses.
-                if (maps_fetched < self._MAX_SOURCEMAP_FETCHES
-                        and any(fw not in versions for fw in self._npm_by_name)):
+                # A bundle points a debugger at its source map. Fetching that same-host map confirms
+                # whether it is reachable, both a source-code exposure for triage to judge and a
+                # second place a version may sit. Bounded per host, and each distinct map is fetched
+                # once, so a shared reference costs one read. A body that is not a real source map
+                # yields no exposure, so a catch-all or a 404 page is not mistaken for one.
+                if maps_fetched < self._MAX_SOURCEMAP_FETCHES:
                     for target in sourcemap_targets(body, name, script):
+                        if target in maps_seen:
+                            continue
+                        maps_seen.add(target)
                         maps_fetched += 1
                         map_body = _safe(lambda t=target: self._fetch_doc(name, t).body) or ""
                         for fw, ver in versions_in_sourcemap(map_body, self._npm_by_name).items():
                             versions.setdefault(fw, ver)
+                        leak = sourcemap_exposure(map_body)
+                        if leak is not None:
+                            exposed_maps.append(SourceMap(
+                                path=target, sources=leak[0], embeds_source=leak[1]))
                         if maps_fetched >= self._MAX_SOURCEMAP_FETCHES:
                             break
             for path in sorted(_safe(lambda: self._wayback(name)) or set()):
@@ -206,6 +219,12 @@ class HarvestPaths(Capability):
         if versions:
             facts.append(Fact(kind="script_version", about=task.node,
                               payload=ScriptVersions(versions=tuple(sorted(versions.items())))))
+        # The reachable source maps this host serves, one fact triage renders and judges as a source
+        # exposure. Only maps a fetch confirmed are carried, so an advertised but unserved map is
+        # absent rather than reported, invariant 5.
+        if exposed_maps:
+            facts.append(Fact(kind="source_map", about=task.node,
+                              payload=SourceMaps(maps=tuple(exposed_maps))))
         return Done(facts=tuple(facts))
 
     def _robots(self, name, addresses) -> list[str]:

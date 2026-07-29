@@ -36,7 +36,7 @@ Read the evidence, never guess from a host name.
 
 - A 302 or 303 whose redirect target is an identity provider, such as `accounts.google.com`,
   a `cloudflareaccess.com` team domain, `login.microsoftonline.com`, an Okta org, or a
-  self-hosted SSO or OpenID path the application sends every visitor to.
+  self-hosted SSO or OAuth path the application sends every visitor to.
 - A response header or cookie a proxy stamps, such as an IAP assertion header, a Cloudflare
   Access cookie, or a `WWW-Authenticate` challenge the gateway returns.
 - A login or consent page served for the root itself rather than for one deep path, so the

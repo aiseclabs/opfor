@@ -17,7 +17,7 @@ finding survives a trap only when the evidence answers its controlling fact.
   shell. The surface report already marks a response as distinct from the host's baseline
   catch-all, so trust that mark.
 - Redirect to a sign-in flow. A 3xx whose location points at a login, a single-sign-on, an
-  OAuth, an OpenID, or an account flow is the application protecting the interface behind it, so
+  OAuth, or an account flow is the application protecting the interface behind it, so
   the redirect is not itself an exposure. Controlling fact, the location target.
 - Server refusal. A 401 or a 403 is the server refusing, so the resource is already protected.
   Controlling fact, the status code.

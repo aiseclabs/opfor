@@ -8,7 +8,7 @@ detect:
 # SAML Single Sign-On
 
 An enterprise single sign-on protocol that gates an application behind a separate identity provider,
-the same delegated-authentication role OAuth and OIDC play for consumer sign-in. A host wired to SAML
+the same delegated-authentication role OAuth plays for consumer sign-in. A host wired to SAML
 bounces an unauthenticated request to its identity provider carrying a `SAMLRequest`, and the
 provider posts a signed assertion back. On recon the question is the one every gate poses, whether it
 truly covers the whole host or only the routes the application chooses to send through it.

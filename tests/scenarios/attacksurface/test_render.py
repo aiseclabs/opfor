@@ -14,7 +14,7 @@ def test_takeover_catalogue_is_expanded_and_a_new_signature_raises_its_clue():
     from opfor.scenarios.attacksurface.assets.domain.render import SurfaceRenderer
     from opfor.scenarios.attacksurface.assets.domain.triage import _load_takeover
 
-    takeover = _load_takeover(KNOWLEDGE / "findings")
+    takeover = _load_takeover(KNOWLEDGE / "vulnerabilities")
     services = {service for service, _ in takeover}
     assert {"Zendesk", "Kinsta", "UserVoice"} <= services
     # every signature is non-empty and lowercased, so the lowercased-body match is reliable
@@ -56,7 +56,7 @@ def test_directory_listing_body_raises_the_exposure_clue():
     from opfor.scenarios.attacksurface.assets.domain.render import SurfaceRenderer
     from opfor.scenarios.attacksurface.assets.domain.triage import _load_clues
 
-    clues = _load_clues(KNOWLEDGE / "findings")
+    clues = _load_clues(KNOWLEDGE / "vulnerabilities")
     renderer = SurfaceRenderer(clues, [])
     # a parent directory the permutation probed that answers with an autoindex listing
     endpoint = Endpoint(url="https://h.example.com/uploads/", path="/uploads/", status=200,

@@ -24,6 +24,18 @@ clues:
 - id: directory-listing
   note: an autoindex directory listing is exposed, files under the path are enumerable
   body_regex: index of /|directory listing
+- id: exposed-git-dir
+  note: a web-served .git directory leaks the source tree and its history
+  path: /.git/config
+  body_contains: repositoryformatversion
+- id: open-search-cluster
+  note: an Elasticsearch or OpenSearch data node answers unauthenticated, its indices are readable
+  body_contains: lucene_version
+  content_type: json
+- id: go-pprof
+  note: a Go pprof debug handler is exposed, it leaks runtime profiles and the command line
+  path: /debug/pprof
+  body_contains: types of profiles available
 ---
 
 # Missing Authentication On An Exposed Interface
@@ -41,8 +53,9 @@ be public, so this class is minted only when the exposed function is one a stran
   challenge. The capability marks a resource that already refused with a `401` or a `403` or an
   auth challenge, so what reaches this class is a resource that answered.
 - A clue hit from the frontmatter, an Actuator index or env dump, a Prometheus metrics page, an
-  Apache server-status page, or an autoindex directory listing, each a management or operational
-  surface that should not face the internet unauthenticated.
+  Apache server-status page, an autoindex directory listing, a web-served `.git` directory, an
+  Elasticsearch or OpenSearch node answering unauthenticated, or a Go pprof debug handler, each a
+  management, data, or operational surface that should not face the internet unauthenticated.
 - A host whose name or page identifies it as an administrative, non-production, or internal surface,
   admin, dashboard, portainer, phpmyadmin, adminer, gateway, staging, dev, test, or a named internal
   tool such as jenkins, gitlab, grafana, kibana. Read these as the idea of the shape, a host whose
@@ -50,8 +63,8 @@ be public, so this class is minted only when the exposed function is one a stran
   language or a novel tool name is the same signal.
 - A host identified as a known open-source product's management or operational console, GitLab,
   Jenkins, Grafana, Kibana, Nacos, Consul, Harbor, a message-broker console, a database admin panel,
-  reachable without authentication. The product identity comes from the `technologies/` fingerprints
-  and the `guides/surfaces/` reasoning, this class judges only that the console answered unguarded.
+  reachable without authentication. The product identity comes from the `products/` fingerprints,
+  this class judges only that the console answered unguarded.
 
 ## Severity Levers
 

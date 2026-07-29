@@ -1,8 +1,12 @@
 {
-  "note": "an unauthenticated search cluster and its console returning documents to a bare query, a bulk information-exposure surface, selecting the search-analytics guide",
+  "note": "an unauthenticated search cluster and its console returning documents to a bare query, a bulk information-exposure surface",
   "surface": "## host search.example.com\n\nhttps://search.example.com/  200  content-type: application/json\n  body: {\"name\":\"node-1\",\"cluster_name\":\"prod-logs\",\"version\":{\"number\":\"8.15.0\"},\"tagline\":\"You Know, for Search\"}\n\nhttps://search.example.com/_cat/indices  200  content-type: text/plain\n  body: green open orders-2026 5 1 120394 0 84.2mb   (an Elasticsearch cluster answering unauthenticated)\n\nhttps://search.example.com/_search  200\n  body: {\"hits\":{\"total\":{\"value\":120394},\"hits\":[{\"_source\":{\"email\":\"user@example.com\"}}]}}\n\nhttps://kibana.example.com/  200  title: Kibana\n  the console loads with no credential, number_of_shards is visible in the index settings\n",
   "expect": {
-    "positive": ["class:information-exposure", "guide:surfaces/search-analytics"],
-    "negative": ["guide:protocols/oauth-oidc", "guide:surfaces/git-forge"]
+    "positive": [
+      "class:information-exposure"
+    ],
+    "negative": [
+      "protocol:oauth-oidc"
+    ]
   }
 }

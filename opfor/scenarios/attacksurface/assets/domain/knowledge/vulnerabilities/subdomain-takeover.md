@@ -142,6 +142,11 @@ application rather than a hosting provider's unclaimed-resource page. A CNAME to
 operator controls, a Cloudflare target or the operator's own domain, even when the name reads
 oddly, since the resource is not one a stranger can claim.
 
+A provider page that refuses access rather than reporting the resource gone, an S3 "access denied"
+or a 403 from the provider, means the resource exists and is already claimed, the opposite of a
+released one. Only a provider's own "this resource does not exist" wording, an S3 "nosuchbucket" not
+an "access denied", is the takeover shape. A claimed-but-guarded resource is not takeable.
+
 ## Evidence And PoC
 
 Quote the provider phrase that shows the resource is unclaimed, and name the service. When

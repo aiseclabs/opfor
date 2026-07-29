@@ -11,12 +11,51 @@ scored unit, told apart by who decides and so by how a backtest exercises them:
   is or surfaces a raw signal, no model in the loop. Scored by an exact backtest, a recorded case
   either matches or it does not.
 
-The cross-cutting judgment method every finding class shares lives beside this tree in `playbook/`,
-factored out so it is written once rather than restated per class. The playbook is not itself a
-scored claim, it is the severity rubric, the false-positive traps, and the run methodology the
-classes are judged with, read into the model at run time. It is a sibling of `knowledge/`, not a
-child, since it is the shared method rather than a backtested claim, mirroring the codejury domain
-layout where `playbook/` sits beside `knowledge/` under the class content root.
+## Two Branches Of Judgment
+
+A host is judged down one of two branches, chosen by whether the enrich step could name what it
+runs.
+
+- The product branch. The host is identified as a known open-source product at a version. Its
+  `cpe` drives a CVE lookup, and a version-matched hit is judged against the `known-vulnerability`
+  class, with the exposure as the reachability lever. This is the fast path, a named product carries
+  a named weakness.
+- The generic branch. The host is not identified, a bespoke or internal service that runs no
+  recognizable product. There is no CVE to match, so the model reasons from the generic weakness
+  classes in `vulnerabilities/` and the generic interface patterns in `protocols/`, judging the
+  shape of the exposed surface rather than a catalogued flaw. This is where the engine earns its
+  keep on the long tail an identifier alone would miss.
+
+The two branches share one triage and one severity method, they differ only in whether a product
+name narrows the judgment to a known CVE.
+
+## The Tree
+
+- `vulnerabilities/` one file per finding class the triage model may mint, the generic-branch
+  weakness classes plus `known-vulnerability` for the product branch. The body is the judgment
+  prose. The frontmatter carries the class mechanics and, for a class that surfaces its own
+  deterministic evidence, that evidence too, the clues or the takeover signatures. So a concept is
+  one file, its judgment and detection read together, though coverage scores them apart by kind.
+- `products/` the open-source products the enrich step identifies by markers, each with a version
+  pattern and a `cpe` that drives the CVE lookup. This is deterministic identification knowledge,
+  read to name what a host runs rather than to mint a finding, and it feeds the product branch.
+- `frameworks/` the front-end frameworks detected as context tags, with no version lookup and no CVE
+  branch, a weaker signal the judge reads as orientation.
+- `protocols/` the orienting interface primers the triage selects and reads into the judge. Each
+  carries a `detect.markers` list, the lowercase substrings that say its protocol is present, and a
+  body of notes, what the interface is, how it reads on recon, which finding classes it feeds, and
+  its own traps. The triage selects the primers whose markers appear, once over the whole surface, so
+  the judge gets surface-specific orientation only when that surface is present and the prompt stays
+  cache-stable. A protocol primer is judgment orientation, not a finding class, it sharpens how the
+  generic classes are judged rather than adding a class.
+- `playbook/` a sibling of this tree, not a child. The cross-cutting judgment method every finding
+  class shares, factored out so it is written once rather than restated per class. It is not itself a
+  scored claim, it is the severity rubric, the false-positive traps, and the run methodology the
+  classes are judged with, read into the model at run time. It sits beside `knowledge/` since it is
+  the shared method rather than a backtested claim, mirroring the codejury domain layout.
+
+This is the only index in the tree. Each subdirectory carries its files directly with no
+per-directory index, matching the codejury convention of a single knowledge index.
 
 ## The Finding Taxonomy
 
@@ -32,7 +71,7 @@ axes, told apart by what mints them.
   at a claimable provider resource, a dangling DNS record, OWASP A05.
 - The product-provenance axis, minted by a named CVE against an identified product.
   `known-vulnerability` is a version-matched CVE that bears on the exposed surface, CWE-1395, OWASP
-  A06.
+  A06. This is the product branch's one class.
 
 The two axes can both fit one surface, an unauthenticated console running a version with a known
 pre-auth flaw is both a shape and a provenance hit. The dedup rule is that a named CVE wins, report
@@ -42,29 +81,7 @@ shape class. A new technique extends an existing class where its weakness type f
 weakness type earns a new file anchored to its own CWE, it is never a loose synonym of an existing
 class.
 
-The tree:
-
-- `findings/` one file per finding class the triage model may mint. The body is the judgment prose.
-  The frontmatter carries the class mechanics and, for a class that surfaces its own deterministic
-  evidence, that evidence too, the clues or the takeover signatures. So a concept is one file, its
-  judgment and detection read together, though coverage scores them apart by kind.
-- `guides/` the orienting primers, one per protocol under `protocols/` and one per surface under
-  `surfaces/`, that the triage selects and reads into the judge. Each carries a `detect.markers`
-  list, the lowercase substrings that say its protocol or surface is present, and a body of notes,
-  what the surface is, how it reads on recon, which finding classes it feeds, and its own traps. The
-  triage selects the guides whose markers appear, once over the whole surface, so the judge gets
-  surface-specific orientation only when that surface is present and the prompt stays cache-stable.
-  A guide is judgment orientation, not a finding class, it sharpens how the broad classes are judged
-  rather than adding a class. This is the recon analog of the codejury guides layer.
-- `technologies/` the deterministic per-product and per-framework knowledge the identify and enrich
-  steps read to name what a host runs rather than to mint a finding. `products/` are the open-source
-  products identified by markers, each with a version pattern and a `cpe` that drives the CVE
-  lookup. `frameworks/` are the front-end frameworks detected as context tags, with no version
-  lookup. How a host is fronted, by a CDN, a cloud, or a vendor, is left to the judge, which reads
-  the raw CNAME and headers on the surface.
-
-This is the only index in the tree. Each subdirectory carries its files directly with no
-per-directory index, matching the codejury convention of a single knowledge index.
+## The File Contract
 
 Every finding file follows one contract, so the classes read uniformly and a reviewer knows where to
 look. The frontmatter fields:
@@ -89,6 +106,8 @@ draws the class-specific false-positive boundary and defers the shared look-alik
 traps. `## Evidence And PoC` says what to cite and the safe read that demonstrates it. A class may
 add a levers or a reachable-versus-declared subsection between Signals and Examples where its
 judgment needs one.
+
+## The PoC
 
 A finding's PoC is grounded after triage, not written into knowledge, strongest first. When a
 finding's proof names a request the surface already observed, a safe read, the grounder rewrites the

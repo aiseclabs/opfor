@@ -40,19 +40,19 @@ def test_knowledge_inventory_enumerates_every_claim_by_ref_and_kind():
     assert "products" in items["product:couchdb"].path.parts
     assert by_ns["class"] == 5
     assert by_ns["clue"] >= 7 and by_ns["signature"] >= 20
-    # the guides are orientation the triage selects and reads, three protocols and six surfaces,
-    # enumerated so a guide with no case is a visible gap rather than a silent one
-    assert by_ns["guide"] == 9
-    assert items["guide:protocols/graphql"].kind == JUDGMENT
-    assert "guides" in items["guide:surfaces/admin-console"].path.parts
+    # the protocols are orientation the triage selects and reads, three interface primers,
+    # enumerated so a protocol with no case is a visible gap rather than a silent one
+    assert by_ns["protocol"] == 3
+    assert items["protocol:graphql"].kind == JUDGMENT
+    assert "protocols" in items["protocol:graphql"].path.parts
     # a finding class is judgment, its embedded detection payloads are detection, so the two
     # regimes are told apart by the ref's kind
     assert items["class:information-exposure"].kind == JUDGMENT
     assert items["clue:swagger-openapi"].kind == DETECTION
     # a concept is one file: the judgment prose and the detection payloads it surfaces share the
-    # finding's own file, told apart by the ref's kind rather than by living in two trees
+    # vulnerability's own file, told apart by the ref's kind rather than by living in two trees
     assert items["clue:swagger-openapi"].path == items["class:information-exposure"].path
-    assert "findings" in items["class:information-exposure"].path.parts
+    assert "vulnerabilities" in items["class:information-exposure"].path.parts
 
 
 def test_coverage_matrix_counts_cases_per_claim_and_flags_gaps():
@@ -74,21 +74,21 @@ def test_coverage_matrix_counts_cases_per_claim_and_flags_gaps():
     # detection precision and recall gaps stay visible on the real corpus, the products, clues, and
     # signatures with no cassette yet
     assert "missing-positive" in kinds and "missing-negative" in kinds
-    # Part 4 filled a labeled fixture for every judgment class and guide, so none is a missing-case
+    # Part 4 filled a labeled fixture for every judgment class and protocol, so none is a missing-case
     # gap now, and both judgment namespaces read as covered
     assert not any(p.kind == "missing-case" for p in problems)
     assert cov["class:improper-authentication"].covered
-    assert cov["guide:protocols/graphql"].covered
+    assert cov["protocol:graphql"].covered
 
 
 def test_missing_case_is_flagged_and_gated_for_an_unlabeled_judgment_class(tmp_path):
     from evals.coverage import coverage_problems, gate
 
-    # scored against an isolated empty corpus every judgment class and guide is uncovered, so the
+    # scored against an isolated empty corpus every judgment class and protocol is uncovered, so the
     # missing-case kind is emitted and, since Part 4 made it gate, the gate fails and names one
     problems = coverage_problems(corpus=tmp_path)
     assert any(p.kind == "missing-case" and p.ref == "class:improper-authentication" for p in problems)
-    assert any(p.kind == "missing-case" and p.ref == "guide:surfaces/admin-console" for p in problems)
+    assert any(p.kind == "missing-case" and p.ref == "protocol:graphql" for p in problems)
     fails = gate(corpus=tmp_path)
     assert fails and any("class:improper-authentication" in f for f in fails)
 
@@ -138,15 +138,15 @@ def test_the_seed_corpus_passes_the_gate():
     assert not result["negative_fires"] and not result["misidentified"]
 
 
-def test_judgment_fixtures_select_their_labeled_guides():
+def test_judgment_fixtures_select_their_labeled_protocols():
     from evals import judgment
 
     cases = judgment.run()
     result = judgment.score(cases)
     fails = judgment.gate(result)
     assert fails == [], f"judgment selection gate failed: {fails}"
-    # every guide labeled positive rides its own surface and no guide rides one it must not, the
-    # same recall and precision the fingerprint backtest asserts for product detection
+    # every protocol labeled positive rides its own surface and no protocol rides one it must not,
+    # the same recall and precision the fingerprint backtest asserts for product detection
     assert result["recall"] == 1.0 and not result["wrong_fires"]
     assert result["graded"] >= 5
 
@@ -161,14 +161,14 @@ def test_judgment_gate_blocks_an_empty_corpus(tmp_path):
     assert fails and any("empty" in f for f in fails)
 
 
-def test_a_guide_riding_a_surface_it_must_not_is_a_wrong_fire(tmp_path):
+def test_a_protocol_riding_a_surface_it_must_not_is_a_wrong_fire(tmp_path):
     from evals import judgment
 
-    # a surface carrying a graphql marker while labeling that guide negative is a precision failure,
-    # the mirror of the fingerprint negative, and the gate must catch it
+    # a surface carrying a graphql marker while labeling that protocol negative is a precision
+    # failure, the mirror of the fingerprint negative, and the gate must catch it
     (tmp_path / "bad.json").write_text(
         '{"surface": "POST /graphql returned a populated \\"__schema\\" with a queryType",'
-        ' "expect": {"positive": [], "negative": ["guide:protocols/graphql"]}}', encoding="utf-8")
+        ' "expect": {"positive": [], "negative": ["protocol:graphql"]}}', encoding="utf-8")
     result = judgment.score(judgment.run(root=tmp_path))
     fails = judgment.gate(result)
     assert result["wrong_fires"] and fails

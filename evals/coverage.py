@@ -12,7 +12,7 @@ Each ref is one claim, and its `kind` fixes how it is scored:
 - judgment, a finding class the triage model reads to decide if a signal is real and how severe.
   Scored by a threshold backtest against labeled cases, since a model is not exactly reproducible.
 
-A finding file under findings/ carries both the judgment prose the triage model reads and, in its
+A file under vulnerabilities/ carries both the judgment prose the triage model reads and, in its
 frontmatter, the deterministic payloads that class surfaces, so a concept is one file. Coverage is
 per ref, so the judgment class and each of its detection payloads are scored apart even though they
 share a file.
@@ -56,7 +56,7 @@ def _slug(text: str) -> str:
 class KnowledgeItem:
     """One claim the coverage matrix tracks, addressed by a namespaced ref a case references."""
 
-    ref: str        # product:grafana, framework:nextjs, class:<id>, clue:<id>, signature:<slug>
+    ref: str        # product:grafana, framework:nextjs, class:<id>, clue:<id>, signature:<slug>, protocol:<name>
     kind: str       # detection or judgment
     path: Path      # the knowledge file the claim lives in
 
@@ -79,9 +79,9 @@ def scan_knowledge(root: Path = KNOWLEDGE) -> dict[str, KnowledgeItem]:
         add(f"product:{path.stem}", DETECTION, path)
     for path, _meta, _body in iter_md_docs(paths.frameworks):
         add(f"framework:{path.stem}", DETECTION, path)
-    # A finding file carries the class judgment ref plus the deterministic payload refs its
+    # A vulnerability file carries the class judgment ref plus the deterministic payload refs its
     # frontmatter surfaces, so both regimes are enumerated from the one file and scored apart.
-    for path, meta, _body in iter_md_docs(paths.findings):
+    for path, meta, _body in iter_md_docs(paths.vulnerabilities):
         add(f"class:{path.stem}", JUDGMENT, path)
         for clue in meta.get("clues") or []:
             if clue.get("id"):
@@ -89,13 +89,12 @@ def scan_knowledge(root: Path = KNOWLEDGE) -> dict[str, KnowledgeItem]:
         for sig in meta.get("signatures") or []:
             if sig.get("service"):
                 add(f"signature:{_slug(sig['service'])}", DETECTION, path)
-    # A guide is judgment orientation the triage selects and reads, so it needs a labeled case to be
-    # covered, the same bar as a finding class. The ref mirrors its path under guides/, so
-    # protocols/graphql and surfaces/admin-console stay distinct.
-    if paths.guides.is_dir():
-        for path, _meta, _body in iter_md_docs(paths.guides):
-            rel = path.relative_to(paths.guides).with_suffix("").as_posix()
-            add(f"guide:{rel}", JUDGMENT, path)
+    # A protocol primer is judgment orientation the triage selects and reads, so it needs a labeled
+    # case to be covered, the same bar as a finding class. Its ref is its file stem, a sibling
+    # namespace to product and framework.
+    if paths.protocols.is_dir():
+        for path, _meta, _body in iter_md_docs(paths.protocols):
+            add(f"protocol:{path.stem}", JUDGMENT, path)
 
     return items
 
@@ -196,9 +195,10 @@ _GATING = frozenset({"unresolved-reference", "missing-case"})
 def gate(items: dict[str, KnowledgeItem] | None = None, corpus: Path | None = None) -> list[str]:
     """The coverage failures that block a run. Two kinds gate. An unresolved reference, a case that
     labels a knowledge ref no file defines, for example one orphaned by a renamed knowledge file, is
-    always a real defect, invariant 5. A missing case, a judgment class or guide no case labels, now
-    gates too, since the judgment fixtures under `judgment/` were filled to cover every judgment ref,
-    so a new class or guide that ships without a case fails the run rather than reading as covered.
+    always a real defect, invariant 5. A missing case, a judgment class or protocol no case labels,
+    now gates too, since the judgment fixtures under `judgment/` were filled to cover every judgment
+    ref, so a new class or protocol that ships without a case fails the run rather than reading as
+    covered.
     The missing-positive and missing-negative detection gaps stay reported, not gated, until a real
     cassette exists for the product, since those cannot be authored without a recorded capture."""
     return [f"{p.ref}: {p.detail}" for p in coverage_problems(items, corpus)

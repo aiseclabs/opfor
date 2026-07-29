@@ -2,7 +2,7 @@
 
     python -m evals fingerprint            # replay every cassette, print the table
     python -m evals fingerprint --recall-floor 1.0 --version-floor 1.0   # exit nonzero on a regression
-    python -m evals judgment               # replay every surface fixture, score guide selection
+    python -m evals judgment               # replay every surface fixture, score protocol selection
     python -m evals coverage               # which knowledge claims a case exercises
     python -m evals coverage --strict      # and exit nonzero while any claim is uncovered
 
@@ -10,7 +10,7 @@ All are offline and deterministic, they replay recorded cassettes and surface fi
 opfor's real detection and selection seams, no network, no model, no Docker. Populate the detection
 corpus with `evals/capture/record.py`. The fingerprint and judgment backtests are the CI gates.
 Coverage is a report, and it fails loud on a label that names a knowledge ref no longer defined and
-on a judgment class or guide no case labels, since both are real defects, not a thin corpus.
+on a judgment class or protocol no case labels, since both are real defects, not a thin corpus.
 """
 
 from __future__ import annotations
@@ -52,7 +52,7 @@ def _coverage(args) -> int:
     print(coverage.format_matrix())
     gate_fails = coverage.gate()
     if gate_fails:
-        print("\nFAIL: a judgment class or guide has no case, or a label names a ref that no longer exists:")
+        print("\nFAIL: a judgment class or protocol has no case, or a label names a ref that no longer exists:")
         for f in gate_fails:
             print(f"  - {f}")
         return 1
@@ -72,7 +72,7 @@ def main(argv: list[str] | None = None) -> int:
     f = sub.add_parser("fingerprint", aliases=["run"], help="replay the corpus and score the fingerprints")
     f.add_argument("--recall-floor", type=float, default=1.0, help="fail below this recall, default 1.0")
     f.add_argument("--version-floor", type=float, default=1.0, help="fail below this version accuracy, default 1.0")
-    sub.add_parser("judgment", help="replay the surface fixtures and score guide selection")
+    sub.add_parser("judgment", help="replay the surface fixtures and score protocol selection")
     c = sub.add_parser("coverage", help="report which knowledge claims a case exercises")
     c.add_argument("--strict", action="store_true", help="exit nonzero while any claim is uncovered")
     args = parser.parse_args(argv)

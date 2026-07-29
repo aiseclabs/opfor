@@ -62,14 +62,17 @@ KNOWLEDGE = Path(__file__).resolve().parent / "knowledge"
 @dataclass(frozen=True, kw_only=True)
 class KnowledgePaths:
     """The fixed layout of the domain class's knowledge tree, resolved to absolute paths, so the
-    tree's shape lives in one contract rather than scattered `root / "technologies" / "products"`
-    conventions that drift as the tree grows. A finding file under `findings` carries both the
-    model-read judgment prose and, in its frontmatter, the deterministic payloads that class
-    surfaces, so a concept is one file. `technologies` holds the technology identification data,
-    the same directory name the chain class uses for its role fingerprints. `guides` holds the
-    orienting protocol and surface primers triage selects by their detection markers and reads into
-    the judge, so the model gets the right surface-specific knowledge when that surface is present,
-    the recon analog of the codejury guides layer. `playbook` holds the
+    tree's shape lives in one contract rather than scattered `root / "vulnerabilities"` conventions
+    that drift as the tree grows. The tree follows two branches of judgment. When a host is
+    identified as a product, `products` carries its markers, version endpoints, and CPE, and a named
+    CVE hit is judged against `vulnerabilities` as a known-vulnerability finding. When a host is not
+    identified, a bespoke or internal service, the model reasons from the generic weakness classes in
+    `vulnerabilities` and the generic interface patterns in `protocols` instead. `frameworks` holds
+    the front-end framework tags a host may also carry. A file under `vulnerabilities` carries both
+    the model-read judgment prose and, in its frontmatter, the deterministic payloads that class
+    surfaces, so a concept is one file. `protocols` holds the orienting interface primers triage
+    selects by their detection markers and reads into the judge, so the model gets the right
+    surface-specific orientation only when that surface is present. `playbook` holds the
     cross-cutting judgment method every finding class shares, the severity rubric and the
     false-positive traps triage reads into the judge. It is a sibling of `knowledge`, not a child,
     since it is the shared method rather than a backtested claim, mirroring the codejury domain
@@ -78,16 +81,15 @@ class KnowledgePaths:
     root: Path
     products: Path
     frameworks: Path
-    findings: Path
-    guides: Path
+    vulnerabilities: Path
+    protocols: Path
     playbook: Path
 
     @classmethod
     def under(cls, root: Path) -> "KnowledgePaths":
-        technologies = root / "technologies"
-        return cls(root=root, products=technologies / "products",
-                   frameworks=technologies / "frameworks", findings=root / "findings",
-                   guides=root / "guides", playbook=root.parent / "playbook")
+        return cls(root=root, products=root / "products",
+                   frameworks=root / "frameworks", vulnerabilities=root / "vulnerabilities",
+                   protocols=root / "protocols", playbook=root.parent / "playbook")
 
 
 PATHS = KnowledgePaths.under(KNOWLEDGE)
@@ -251,7 +253,7 @@ def build(
         capabilities=bundle.capabilities,
         planner=RuleSet(rules),
         triage=SurfaceTriage(knowledge_dirs, playbook_dirs=[PATHS.playbook],
-                             guide_dirs=[PATHS.guides], provider=provider,
+                             protocol_dirs=[PATHS.protocols], provider=provider,
                              model=model, challenger=challenger, challenger_model=challenger_model,
                              judge=judge, judge_model=judge_model),
         grounding=FindingGrounder(),

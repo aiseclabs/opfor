@@ -43,3 +43,8 @@ finding survives a trap only when the evidence answers its controlling fact.
   the evidence does not show, is a text match, not proof the instance is affected. Controlling
   fact, a read version in the affected range and a CVE whose preconditions the exposed surface
   meets.
+- Liveness probe. A health or readiness endpoint that answers only a bare status, a
+  `{"status":"UP"}` or an `ok`, is meant to be reachable and leaks no internal detail, so it is
+  not an information exposure. Controlling fact, the body carries only liveness, not versions,
+  configuration, dependency names, or internal hostnames. A health endpoint that dumps build
+  detail or component internals is judged on what it serves, not on its name.

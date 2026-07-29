@@ -1,8 +1,12 @@
 {
-  "note": "a served OpenAPI description and an enabled GraphQL introspection, a map of the surface rather than a breach, the canonical information-exposure surface, selecting the openapi and graphql guides",
+  "note": "a served OpenAPI description and an enabled GraphQL introspection, a map of the surface rather than a breach, the canonical information-exposure surface, selecting the openapi and graphql protocol primers",
   "surface": "## host api.example.com\n\nhttps://api.example.com/swagger-ui.html  200\n  the Swagger UI renders the service OpenAPI description\n\nhttps://api.example.com/v3/api-docs  200  content-type: application/json\n  body: {\"openapi\":\"3.0.1\",\"info\":{\"title\":\"Orders API\"},\"paths\":{\"/users\":{\"get\":{}},\"/orders\":{\"post\":{}}}}\n\nhttps://api.example.com/graphql  200  content-type: application/json\n  body: {\"data\":{\"__schema\":{\"queryType\":{\"name\":\"Query\"},\"mutationType\":{\"name\":\"Mutation\"}}}}\n",
   "expect": {
-    "positive": ["class:information-exposure", "guide:protocols/openapi", "guide:protocols/graphql"],
-    "negative": ["guide:surfaces/search-analytics", "guide:surfaces/object-store"]
+    "positive": [
+      "class:information-exposure",
+      "protocol:openapi",
+      "protocol:graphql"
+    ],
+    "negative": []
   }
 }

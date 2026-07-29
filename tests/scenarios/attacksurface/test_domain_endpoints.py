@@ -29,9 +29,9 @@ def test_exposure_clues_and_judgment_classes_are_loaded():
     from opfor.scenarios.attacksurface.assets.domain.triage import _load_classes, _load_clues
 
     knowledge = domain_class.KNOWLEDGE
-    clue_ids = {c["id"] for c in _load_clues(knowledge / "findings")}
+    clue_ids = {c["id"] for c in _load_clues(knowledge / "vulnerabilities")}
     assert {"prometheus-metrics", "apache-server-status", "exposed-actuator-env"} <= clue_ids
-    class_ids = {c["id"] for c in _load_classes(knowledge / "findings")}
+    class_ids = {c["id"] for c in _load_classes(knowledge / "vulnerabilities")}
     assert {"information-exposure"} <= class_ids
 
 def test_static_assets_are_never_probed_into_endpoints():

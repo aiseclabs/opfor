@@ -15,13 +15,13 @@ from tests.scenarios.attacksurface.fixtures import (
     _knowledge,
 )
 
-def test_a_guide_rides_the_prompt_only_when_its_surface_is_present():
+def test_a_protocol_primer_rides_the_prompt_only_when_its_surface_is_present():
     sc = _make()
-    # a surface showing a graphql introspection endpoint selects the graphql protocol guide, so its
+    # a surface showing a graphql introspection endpoint selects the graphql protocol primer, so its
     # orientation rides the judge prompt under a distinctive header
     with_graphql = sc.triage._system("POST /graphql returned a populated __schema with a queryType")
     assert "## GraphQL (protocol)" in with_graphql
-    # a surface with no matching marker selects no guide, so an irrelevant primer never bloats the
+    # a surface with no matching marker selects no primer, so an irrelevant primer never bloats the
     # prompt, while the finding classes still ride regardless
     plain = sc.triage._system("a static brochure of company history")
     assert "## GraphQL (protocol)" not in plain

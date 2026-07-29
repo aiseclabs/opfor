@@ -1,0 +1,11 @@
+target: passive-example.com
+kind: discovery
+root: example.com
+# The exact subdomain set the passive union must discover from the recorded certspotter and
+# wayback bytes. The certspotter records name example.edu, example.net, and example.org, sibling
+# registrable domains that must be dropped, the apex example.com that must be dropped as the root,
+# and *.example.com, a wildcard whose base collapses to the root and so yields no node. Only
+# www.example.com survives, so a regression that leaks a sibling TLD or the apex, or that loses
+# www, is a visible miss.
+subdomains:
+- www.example.com

@@ -16,15 +16,15 @@ from evals.suites import load_suite, select
 
 def test_every_benchmark_loads_and_pairs_with_its_evidence():
     benches = all_benchmarks()
-    # the tree carries the nine identified hosts, the two negatives, and the seven surface fixtures,
-    # each an answer key beside a cassette or a surface the engine replays
-    assert len(benches) == 18
+    # the tree carries the nine identified hosts, the two negatives, the seven surface fixtures, and
+    # the one discovery fixture, each an answer key beside the evidence its kind names
+    assert len(benches) == 19
     kinds = {b.kind for b in benches.values()}
-    assert kinds == {"host", "negative", "surface"}
+    assert kinds == {"host", "negative", "surface", "discovery"}
+    evidence = {"surface": "surface.json", "discovery": "sources.json"}
     for b in benches.values():
         assert b.evidence.is_file() and b.answer_key.is_file()
-        name = "surface.json" if b.kind == "surface" else "cassette.json"
-        assert b.evidence.name == name
+        assert b.evidence.name == evidence.get(b.kind, "cassette.json")
 
 
 def test_answer_key_carries_identity_and_selection_labels():
@@ -53,9 +53,9 @@ def test_find_benchmark_fails_loud_with_the_known_names():
 def test_offline_suite_selects_the_deterministic_benchmarks_and_not_the_live_tier():
     suite = load_suite("offline")
     chosen = select(suite, all_benchmarks().values())
-    # the offline tier is every host, negative, and surface, the whole migrated tree today since no
-    # live unknown benchmark ships yet
-    assert len(chosen) == 18
+    # the offline tier is every host, negative, surface, and discovery benchmark, the whole
+    # deterministic tree today since no live unknown benchmark ships yet
+    assert len(chosen) == 19
     live = load_suite("identify-live")
     assert select(live, all_benchmarks().values()) == []
 

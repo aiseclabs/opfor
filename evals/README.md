@@ -19,6 +19,9 @@ benchmarks/
   surfaces/<name>/               # one rendered surface, for protocol selection and class coverage
     surface.json
     answer-key.yaml
+  discovery/<root>/              # a root domain, the passive union must recover its subdomains
+    sources.json                 #   recorded certspotter and wayback bytes the parsers replay
+    answer-key.yaml              #   root and the exact subdomain set, the golden
   unknown/<name>/                # an off-table host, the model must identify it, see BACKTEST.md
 ```
 
@@ -31,13 +34,17 @@ read. It never reaches the engine.
 
     python -m evals offline
 
-Drives opfor's real engine over every recorded cassette with no model and no network, and grades
-four capabilities at a hard 100% floor: identify what a host runs, extract its version, mint the
-known vulnerabilities that version carries, and select the protocols a surface makes ride. The
-identify seam is forced to the deterministic fingerprint table and triage is a stub, so a result is
-what a real scan concludes deterministically. A regression on any axis exits nonzero, and an empty
-suite fails loud rather than scoring a vacuous 100%, invariant 5. This is the CI gate. `fingerprint`,
-`judgment`, and `run` are aliases for it.
+Drives opfor's real engine over every recorded benchmark with no model and no network, and grades
+five capabilities at a hard 100% floor: identify what a host runs, extract its version, mint the
+known vulnerabilities that version carries, select the protocols a surface makes ride, and recover
+a root's subdomains from the recorded passive sources. The identify seam is forced to the
+deterministic fingerprint table and triage is a stub, so a result is what a real scan concludes
+deterministically. The discovery axis replays the recorded certspotter and wayback bytes through the
+real parsers and the real union, so a fold that leaks a sibling domain or loses a host is a visible
+miss, while the paging walk and the all-sources-dead fail-loud path stay in the enumeration unit
+tests. A regression on any axis exits nonzero, and an empty suite fails loud rather than scoring a
+vacuous 100%, invariant 5. This is the CI gate. `fingerprint`, `judgment`, and `run` are aliases for
+it.
 
 ## Tier B, the Live Backtest
 

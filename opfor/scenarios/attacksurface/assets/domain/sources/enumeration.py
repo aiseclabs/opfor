@@ -101,18 +101,24 @@ def certspotter_subdomains(domain: str) -> Enumeration:
     still yielding leaves certificates unread, so the result is flagged truncated rather than
     passing as complete, invariant 5.
     """
-    names: set[str] = set()
     issuances, truncated = _certspotter_paged(domain)
+    result = Enumeration(subdomains_from_certspotter(issuances, domain))
+    result.truncated = truncated
+    return result
+
+
+def subdomains_from_certspotter(issuances, domain: str) -> set[str]:
+    """Subdomains under `domain` named in certspotter issuance records, parsed apart from the
+    fetch so a test drives it without a network call. A wildcard such as *.dev.example.com is
+    kept with its star, not collapsed to the base, so the enumeration can flag it as a blind spot
+    rather than lose it."""
+    names: set[str] = set()
     for issuance in issuances:
         for raw in issuance.get("dns_names", []):
-            # a wildcard such as *.dev.example.com is kept with its star, not silently
-            # collapsed to the base, so the enumeration can flag it as a blind spot
             name = str(raw).strip().lower()
             if name and name.endswith("." + domain) and looks_like_host(name):
                 names.add(name)
-    result = Enumeration(names)
-    result.truncated = truncated
-    return result
+    return names
 
 
 def _certspotter_paged(domain: str) -> tuple[list, bool]:
@@ -272,16 +278,27 @@ def wayback_subdomains(domain: str) -> Enumeration:
     request = urllib.request.Request(url, headers={"User-Agent": _UA, "Accept": "application/json"})
     with urllib.request.urlopen(request, timeout=_TIMEOUT) as resp:
         rows = json.loads(resp.read(_JSON_LIMIT).decode("utf-8", "replace"))
-    data = rows[1:] if rows and isinstance(rows[0], list) else []
+    result = Enumeration(subdomains_from_wayback(rows, domain))
+    result.truncated = len(_cdx_data(rows)) >= limit
+    return result
+
+
+def _cdx_data(rows):
+    """The data rows of a Wayback CDX json reply, dropping the header row, so the parser and the
+    truncation check read the one shape."""
+    return rows[1:] if rows and isinstance(rows[0], list) else []
+
+
+def subdomains_from_wayback(rows, domain: str) -> set[str]:
+    """Subdomains under `domain` named in a Wayback CDX reply, parsed apart from the fetch so a
+    test drives it without a network call."""
     suffix = "." + domain
     names: set[str] = set()
-    for row in data:
+    for row in _cdx_data(rows):
         host = (urllib.parse.urlsplit(str(row[0])).hostname or "").lower()
         if host.endswith(suffix) and looks_like_host(host):
             names.add(host)
-    result = Enumeration(names)
-    result.truncated = len(data) >= limit
-    return result
+    return names
 
 
 def wayback_paths(host: str) -> set[str]:

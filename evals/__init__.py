@@ -3,9 +3,10 @@ triage prompts is judged by what a real engine run concludes over recorded bench
 the gate turning green. Every benchmark keeps its ground truth out of band in an `answer-key.yaml`
 the engine never reads, invariant 4, so a high score cannot come from the tool grading itself.
 
-Two tiers drive the same engine. The offline tier replays each `cassette.json` with no model and no
-network, forces the identify seam to the deterministic fingerprint table, and grades what a scan
-concludes at a hard floor, the CI gate, see `runners/offline.py`. The live tier calls a model over
+Two tiers drive the same engine. The offline tier replays each recorded benchmark with no model and
+no network, forces the identify seam to the deterministic fingerprint table, and grades what a scan
+concludes at a hard floor, the CI gate, including the passive subdomain recall a `sources.json`
+replays through the real parsers and union, see `runners/offline.py`. The live tier calls a model over
 the off-table `unknown/` hosts and folds repeated runs by strict majority, a runbook rather than a
 gate, see `runners/backtest.py` and `BACKTEST.md`. The `coverage.py` report crosses every knowledge
 claim against the labels each answer key declares. The corpus is the domain asset class only, the

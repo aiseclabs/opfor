@@ -48,9 +48,12 @@ class CVEExpectation:
 
 @dataclass(frozen=True, kw_only=True)
 class AnswerKey:
-    """The golden for one benchmark. `kind` is host, negative, or surface, the three evidence
-    shapes. `positive` and `negative` are the knowledge refs the case must exercise or must not, the
-    single source the coverage matrix and the protocol scorer both read, invariant 1."""
+    """The golden for one benchmark. `kind` is host, negative, surface, or discovery, the four
+    evidence shapes. `positive` and `negative` are the knowledge refs the case must exercise or must
+    not, the single source the coverage matrix and the protocol scorer both read, invariant 1. A
+    discovery case adds `root`, the domain enumerated, and `subdomains`, the exact set the passive
+    union must discover, its own golden apart from the knowledge refs so the coverage matrix is not
+    fed hostnames it would read as unresolved refs."""
 
     target: str
     kind: str
@@ -58,9 +61,11 @@ class AnswerKey:
     cves: tuple[CVEExpectation, ...] = ()
     positive: tuple[str, ...] = ()
     negative: tuple[str, ...] = ()
+    root: str = ""
+    subdomains: tuple[str, ...] = ()
 
 
-_KINDS = frozenset({"host", "negative", "surface"})
+_KINDS = frozenset({"host", "negative", "surface", "discovery"})
 
 
 def _identity(block) -> Identity:
@@ -106,6 +111,8 @@ def load_answer_key(path: str | Path) -> AnswerKey:
     expect = data.get("expect") or {}
     if not isinstance(expect, dict):
         raise ValueError(f"answer key {path} expect is not a mapping")
+    if kind == "discovery" and not str(data.get("root", "")).strip():
+        raise ValueError(f"answer key {path} has kind discovery but names no root to enumerate")
     return AnswerKey(
         target=str(data.get("target", Path(path).parent.name)),
         kind=kind,
@@ -113,4 +120,6 @@ def load_answer_key(path: str | Path) -> AnswerKey:
         cves=_cves(data.get("cves"), where=f"{path}:cves"),
         positive=_refs(expect.get("positive"), where=f"{path}:expect.positive"),
         negative=_refs(expect.get("negative"), where=f"{path}:expect.negative"),
+        root=str(data.get("root", "")).strip().lower(),
+        subdomains=_refs(data.get("subdomains"), where=f"{path}:subdomains"),
     )

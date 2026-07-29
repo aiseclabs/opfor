@@ -15,6 +15,7 @@ from evals.registry import find_benchmark
 from evals.runners.offline import gate, run, run_benchmark, run_suite, score
 from evals.schema import AnswerKey, CVEExpectation, Identity
 from evals.scorers.cve import grade_cves
+from evals.scorers.discovery import grade_discovery
 from evals.scorers.identify import grade_identity
 
 
@@ -24,8 +25,46 @@ def test_offline_suite_runs_the_engine_and_gates_green():
     assert result["hosts"] >= 1
     assert result["negatives"] >= 1
     assert result["surfaces"] >= 1
+    assert result["discoveries"] >= 1
     assert result["identify_recall"] == 1.0
     assert result["version_accuracy"] == 1.0
+    assert result["discovery_recall"] == 1.0
+
+
+def test_passive_discovery_recovers_exactly_the_expected_subdomains_off_the_real_union():
+    # The whole point of the discovery tier: the recorded certspotter and wayback bytes flow through
+    # the real parsers and the real union, which must drop the sibling TLDs and the apex and collapse
+    # the wildcard, leaving exactly www.example.com. A fold regression shows here, not in a live run.
+    run = run_benchmark(find_benchmark("passive-example.com"))
+    assert run.discovery is not None
+    assert run.discovery.discovered == {"www.example.com"}
+    assert run.discovery.ok
+    assert not run.discovery.missing and not run.discovery.extra
+
+
+def test_a_leaked_sibling_domain_trips_the_discovery_axis():
+    # A fold that stops dropping a sibling registrable domain surfaces a name the key does not
+    # expect, an extra that must trip the gate rather than pass as recall.
+    from opfor.core import Done, Fact, Node
+    from opfor.scenarios.attacksurface.assets.domain.types import DomainData
+
+    leaked = Node(id="domain:www.example.net", type="domain",
+                  payload=DomainData(name="www.example.net", root="example.com", source="passive"))
+    outcome = Done(facts=(Fact(kind="enumerated", about="domain:example.com", yields=(leaked,)),))
+    key = AnswerKey(target="t", kind="discovery", root="example.com", subdomains=("www.example.com",))
+    grade = grade_discovery(outcome, key)
+    assert not grade.ok
+    assert grade.missing and grade.extra
+
+
+def test_a_failed_enumeration_is_caught_not_scored_as_a_clean_empty_set():
+    # The recorded sources answer, so a Failed outcome is a real regression, not a zero-recall pass.
+    from opfor.core import Failed
+
+    key = AnswerKey(target="t", kind="discovery", root="example.com", subdomains=("www.example.com",))
+    grade = grade_discovery(Failed(reason="all passive subdomain sources failed"), key)
+    assert not grade.ok
+    assert grade.failed and "did not complete" in grade.failed
 
 
 def test_a_known_host_is_identified_and_versioned_off_the_real_run():

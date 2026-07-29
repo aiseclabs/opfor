@@ -215,6 +215,31 @@ def test_subdomains_from_vt_reads_relationship_ids():
     # a wildcard keeps its star, so the enumeration can flag it rather than lose it
     assert subdomains_from_vt(page, "example.com") == {"api.example.com", "*.mail.example.com"}
 
+
+def test_subdomains_from_certspotter_reads_issuance_dns_names():
+    from opfor.scenarios.attacksurface.assets.domain.sources import subdomains_from_certspotter
+
+    issuances = [
+        {"dns_names": ["example.com", "example.net", "www.example.com"]},  # apex and sibling TLD
+        {"dns_names": ["*.example.com", "API.Example.com"]},               # wildcard kept, cased
+    ]
+    # the apex and the sibling registrable domain are not subdomains, the wildcard keeps its star,
+    # and a mixed-case name is lowered, so the fold sees one canonical shape
+    assert subdomains_from_certspotter(issuances, "example.com") == {
+        "www.example.com", "*.example.com", "api.example.com"}
+
+
+def test_subdomains_from_wayback_reads_cdx_rows():
+    from opfor.scenarios.attacksurface.assets.domain.sources import subdomains_from_wayback
+
+    rows = [["original"],                          # the header row, dropped
+            ["https://api.example.com/v1"],
+            ["http://blog.example.com/post?a=1"],
+            ["https://example.com/"],              # the apex, not a subdomain
+            ["https://cdn.other.com/x"]]           # a foreign host linked from an archived page
+    assert subdomains_from_wayback(rows, "example.com") == {"api.example.com", "blog.example.com"}
+
+
 def test_virustotal_is_skipped_without_a_key(monkeypatch):
     from opfor.scenarios.attacksurface.assets.domain import sources as d
 

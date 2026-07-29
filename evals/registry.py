@@ -34,11 +34,15 @@ class Benchmark:
         return load_answer_key(self.answer_key)
 
 
+_EVIDENCE = {"surface": "surface.json", "discovery": "sources.json"}
+
+
 def _evidence_for(directory: Path, kind: str) -> Path:
     """The evidence file beside an answer key, named by kind. A surface fixture carries a
-    `surface.json`, a host or negative a `cassette.json`, so a missing one fails loud rather than
-    reading as an empty run, invariant 5."""
-    name = "surface.json" if kind == "surface" else "cassette.json"
+    `surface.json`, a discovery fixture the recorded passive-source `sources.json`, a host or
+    negative a `cassette.json`, so a missing one fails loud rather than reading as an empty run,
+    invariant 5."""
+    name = _EVIDENCE.get(kind, "cassette.json")
     evidence = directory / name
     if not evidence.is_file():
         raise ValueError(f"benchmark {directory} declares kind {kind!r} but has no {name}")

@@ -46,7 +46,12 @@ class ProfileHost(Capability):
             version = str(found.get("version", "")).strip()
             cpe = str(found.get("cpe", "")).strip()
             conclusive = bool(found.get("conclusive", True))
-        frameworks = tuple(self._frameworks(http_payload))
+        # The versions the harvester read from this host's own bundles, joined to the frameworks
+        # classified below, so a framework the home page did not version is still versioned when
+        # its shipped code named a version. Absent when the harvester found none, a clean empty.
+        script_fact = world.latest("script_version", task.node)
+        script_versions = dict(script_fact.payload.versions) if script_fact is not None else {}
+        frameworks = tuple(self._frameworks(http_payload, script_versions))
         payload = HostProfile(
             product=product, version=version, cpe=cpe, frameworks=frameworks)
         facts = [Fact(kind="host_profile", about=task.node, payload=payload)]

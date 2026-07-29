@@ -173,6 +173,16 @@ class Framework:
 
 
 @dataclass(frozen=True, kw_only=True)
+class ScriptVersions:
+    """The framework versions a host's fetched bundles declared in their own content, gathered by
+    the harvester and read by the profiler. `versions` is a tuple of `(framework name, version)`
+    pairs rather than a mapping so the payload stays a frozen value the checkpoint can rebuild. It
+    carries only the extracted version strings, never the bundle bodies, so the world stays small."""
+
+    versions: tuple[tuple[str, str], ...] = ()
+
+
+@dataclass(frozen=True, kw_only=True)
 class HostProfile:
     """What a live host is, the single record answering the host's role: the open-source product
     and version behind it and the front-end frameworks it reveals. Each field is a raw

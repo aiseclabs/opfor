@@ -49,7 +49,7 @@ def test_profile_host_records_product_and_frameworks_in_one_fact():
     world.absorb([Fact(kind="http", about="domain:h", payload=_http(server="grafana"))])
 
     identify = lambda evidence: {"product": "Grafana", "version": "9.3.2", "cpe": "grafana:grafana"}
-    out = ProfileHost(identify, lambda http: [Framework(name="Next.js", npm="next")]).run(
+    out = ProfileHost(identify, lambda http, sv=None: [Framework(name="Next.js", npm="next")]).run(
         Task(capability="domain_profile", node="domain:h"), world)
     profile = out.facts[0].payload
     assert out.facts[0].kind == "host_profile"
@@ -70,7 +70,7 @@ def test_profile_host_records_a_coverage_gap_when_the_seam_finds_the_evidence_to
     world.absorb([Fact(kind="http", about="domain:h", payload=_http(body="hi"))])
 
     identify = lambda evidence: {"product": "", "version": "", "cpe": "", "conclusive": False}
-    out = ProfileHost(identify, lambda http: []).run(
+    out = ProfileHost(identify, lambda http, sv=None: []).run(
         Task(capability="domain_profile", node="domain:h"), world)
     kinds = [f.kind for f in out.facts]
     assert "host_profile" in kinds and "coverage_gap" in kinds
@@ -91,7 +91,7 @@ def test_profile_host_records_no_gap_when_an_empty_product_is_a_conclusive_negat
     world.absorb([Fact(kind="http", about="domain:h", payload=_http(body="a bespoke app"))])
 
     identify = lambda evidence: {"product": "", "version": "", "cpe": "", "conclusive": True}
-    out = ProfileHost(identify, lambda http: []).run(
+    out = ProfileHost(identify, lambda http, sv=None: []).run(
         Task(capability="domain_profile", node="domain:h"), world)
     assert [f.kind for f in out.facts] == ["host_profile"]
 

@@ -21,7 +21,10 @@ from opfor.scenarios.attacksurface.assets.domain.sources.http import _BODY_VERSI
 from opfor.scenarios.attacksurface.assets.domain.sources.javascript import (
     paths_in_javascript,
     script_sources,
+    sourcemap_targets,
     urls_in_javascript,
+    versions_in_script,
+    versions_in_sourcemap,
 )
 from opfor.scenarios.attacksurface.assets.domain.sources.parsers import (
     robots_entries,
@@ -32,6 +35,7 @@ from opfor.scenarios.attacksurface.assets.domain.types import (
     Candidates,
     Endpoint,
     HTTPProbe,
+    ScriptVersions,
 )
 
 
@@ -102,16 +106,31 @@ class HarvestPaths(Capability):
 
     _MAX_SCRIPTS = 12
 
-    def __init__(self, fetch_fn, fetch_doc_fn, wayback_fn) -> None:
+    # A ceiling on source maps fetched per host, so technique B stays a bounded fallback that fires
+    # only when a bundle prints no version literal, never a map fetch per script.
+    _MAX_SOURCEMAP_FETCHES = 2
+
+    def __init__(self, fetch_fn, fetch_doc_fn, wayback_fn, frameworks=None) -> None:
         self._fetch = fetch_fn
         self._fetch_doc = fetch_doc_fn
         self._wayback = wayback_fn
+        # The framework table's bundle-version anchors and npm names, so the harvester reads a
+        # version out of a bundle's own content while it already holds the bytes, and reads a
+        # source map only to fill a package the content did not name. Empty when unwired, so the
+        # scan is off and a test that omits it drives the plain harvest unchanged.
+        table = frameworks or {}
+        self._bundle_patterns = {name: sig.get("bundle") for name, sig in table.items()
+                                 if sig.get("bundle")}
+        self._npm_by_name = {name: sig.get("npm", "") for name, sig in table.items()
+                             if sig.get("npm")}
 
     def run(self, task: Task, world: World) -> Outcome:
         name = world.node(task.node).payload.name
         resolved = world.latest("resolved", task.node)
         addresses = resolved.payload.addresses if resolved else ()
         by_host: dict[str, set[str]] = {}
+        versions: dict[str, str] = {}
+        maps_fetched = 0
 
         def add(host: str, path: str) -> None:
             if host and path and path.startswith("/"):
@@ -133,6 +152,21 @@ class HarvestPaths(Capability):
                 for url in urls_in_javascript(body):
                     parsed = urlparse(url)
                     add(parsed.hostname or "", parsed.path or "/")
+                # The version a bundle's own content declares, read from the bytes already fetched.
+                for fw, ver in versions_in_script(body, self._bundle_patterns).items():
+                    versions.setdefault(fw, ver)
+                # Technique B, a bounded fallback: a bundle that named no version may point at a
+                # source map whose paths embed one. Read it only while a tracked package is still
+                # unversioned and only for a same-host map, so it fires rarely and adds no guesses.
+                if (maps_fetched < self._MAX_SOURCEMAP_FETCHES
+                        and any(fw not in versions for fw in self._npm_by_name)):
+                    for target in sourcemap_targets(body, name, script):
+                        maps_fetched += 1
+                        map_body = _safe(lambda t=target: self._fetch_doc(name, t).body) or ""
+                        for fw, ver in versions_in_sourcemap(map_body, self._npm_by_name).items():
+                            versions.setdefault(fw, ver)
+                        if maps_fetched >= self._MAX_SOURCEMAP_FETCHES:
+                            break
             for path in sorted(_safe(lambda: self._wayback(name)) or set()):
                 add(name, path)
         except Exception as exc:
@@ -167,6 +201,11 @@ class HarvestPaths(Capability):
                 continue
             facts.append(Fact(kind="candidates", about=node_id,
                               payload=Candidates(source="harvest", paths=tuple(sorted(paths)))))
+        # The versions read from this host's own bundles, one fact the profiler joins to the
+        # frameworks it classifies, carrying only the extracted strings, never the bundle bodies.
+        if versions:
+            facts.append(Fact(kind="script_version", about=task.node,
+                              payload=ScriptVersions(versions=tuple(sorted(versions.items())))))
         return Done(facts=tuple(facts))
 
     def _robots(self, name, addresses) -> list[str]:

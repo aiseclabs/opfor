@@ -4,6 +4,7 @@ body:
   - "_nghost-"
   - "_ngcontent-"
 version: 'ng-version="([0-9]+\.[0-9]+\.[0-9]+)"'
+bundle_version: 'angular v([0-9]+\.[0-9]+\.[0-9]+)'
 npm: "@angular/core"
 ---
 

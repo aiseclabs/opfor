@@ -37,6 +37,82 @@ def script_sources(body: str, host: str) -> list[str]:
     return out
 
 
+# The source map a bundle points a debugger to, at most a couple per script since only the
+# first that names a tracked package is read. A map is JSON, and its `sources` array carries
+# the on-disk path of each original file, which under a pnpm layout embeds the package version.
+_SOURCEMAP_URL = re.compile(r"//[#@]\s*sourceMappingURL\s*=\s*([^\s'\"]+)", re.IGNORECASE)
+_MAX_SOURCEMAPS = 2
+
+
+def versions_in_script(body: str, patterns: dict) -> dict:
+    """The framework versions a bundle's own content declares, one per framework whose anchored
+    pattern hits. Each pattern is library-specific, a version literal glued to a token only that
+    library emits such as React's `reconcilerVersion` or Vue's banner, so a match is a ground
+    truth the code shipped, not a bare number guessed from anywhere in the file."""
+    out: dict = {}
+    for name, pattern in patterns.items():
+        if pattern is None:
+            continue
+        match = pattern.search(body or "")
+        if match:
+            out[name] = match.group(1)
+    return out
+
+
+def sourcemap_targets(body: str, host: str, base_path: str = "") -> list[str]:
+    """The same-host source map paths a script points to, deduped in order and capped.
+
+    Read only when a bundle prints no version literal, and only for a same-host map, so a
+    cross-origin map is never chased and a data-uri inline map is skipped. A bare relative
+    reference, the common form a bundler emits, is resolved against the script's own directory in
+    `base_path`, an absolute path is kept, and a full url is taken only when it names the host.
+    Fetching a public static asset a page already links stays the recon tier of reading the bundle.
+    """
+    from posixpath import dirname, join, normpath
+
+    out: list[str] = []
+    seen: set[str] = set()
+    for m in _SOURCEMAP_URL.finditer(body or ""):
+        ref = m.group(1).strip().split("#")[0].split("?")[0]
+        if not ref or ref.startswith("data:"):
+            continue
+        if ref.startswith(("http://", "https://")) or ref.startswith("/"):
+            path = same_host_path(ref, host)
+        else:
+            path = normpath(join(dirname(base_path or "/"), ref))
+        if path and path not in seen:
+            seen.add(path)
+            out.append(path)
+            if len(out) >= _MAX_SOURCEMAPS:
+                break
+    return out
+
+
+def versions_in_sourcemap(text: str, npm_by_name: dict) -> dict:
+    """The framework versions a source map's `sources` paths embed, one per tracked package found.
+
+    A pnpm layout writes each dependency under `.../<package>@<version>/...`, so the version rides
+    in the original-file path the map records. This reads it only where a semver is glued to a
+    tracked package name, so a flat npm layout, which carries no version in the path, yields
+    nothing rather than a wrong number. The map body is bounded by the document fetch cap.
+    """
+    import json
+
+    out: dict = {}
+    try:
+        sources = json.loads(text or "").get("sources") or []
+    except (ValueError, AttributeError):
+        return out
+    joined = "\n".join(str(s) for s in sources)
+    for name, package in npm_by_name.items():
+        if not package:
+            continue
+        match = re.search(re.escape(package.lower()) + r"@([0-9]+\.[0-9]+\.[0-9]+)", joined.lower())
+        if match:
+            out[name] = match.group(1)
+    return out
+
+
 def paths_in_javascript(text: str) -> list[str]:
     """Path-like strings from a JavaScript body, deduped in appearance order.
 

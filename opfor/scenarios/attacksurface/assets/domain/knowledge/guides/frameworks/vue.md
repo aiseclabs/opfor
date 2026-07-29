@@ -2,6 +2,7 @@
 body:
   - "data-v-"
   - "data-server-rendered"
+bundle_version: 'vue v([0-9]+\.[0-9]+\.[0-9]+)'
 npm: "vue"
 ---
 

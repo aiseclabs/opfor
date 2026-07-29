@@ -106,15 +106,18 @@ def assemble(*, enumerate_fn, resolve_fn, probe_fn, fetch_fn, fetch_doc_fn,
     expands each to its subdomains, no root discovery beyond the seed. The CVE lookup rides only
     when its NVD lookup seam is wired, and routes a framework to the OSV seam beside it."""
     # The per-product knowledge units are loaded once here, so their own paths are read both as the
-    # probe's version endpoints and as the identify seam's markers below.
+    # probe's version endpoints and as the identify seam's markers below. The framework table is
+    # loaded here too, so the harvester reads a bundle's version anchors and the classifier reads
+    # its markers from one loaded set.
     fingerprints = load_products(PATHS.products)
+    frameworks_table = load_frameworks(PATHS.frameworks)
     capabilities = [
         DiscoverDomains(),
         EnumerateSubdomains(enumerate_fn),
         PermuteSubdomains(resolve_fn),
         ResolveDomain(resolve_fn),
         ProbeDomainHTTP(probe_fn),
-        HarvestPaths(fetch_fn, fetch_doc_fn, wayback_fn),
+        HarvestPaths(fetch_fn, fetch_doc_fn, wayback_fn, frameworks=frameworks_table),
         PermutePaths(),
         ProbeEndpoints(fetch_fn, version_paths=product_probe_paths(fingerprints)),
         ExpandSpec(fetch_doc_fn),
@@ -136,10 +139,10 @@ def assemble(*, enumerate_fn, resolve_fn, probe_fn, fetch_fn, fetch_doc_fn,
     # capability reads no knowledge. It emits one host_profile fact the CVE lookup and the report
     # both read, so identity survives a CVE-lookup failure and exists even with no CVE seam wired.
     # Framework classification is deterministic, so it runs with or without a model identify seam.
-    frameworks_table = load_frameworks(PATHS.frameworks)
-
-    def framework_fn(http):
-        return classify_frameworks(http, frameworks_table)
+    # It takes the versions the harvester read from this host's bundles, so a self-hosted build
+    # that prints no version in its home page still carries the version its code declared.
+    def framework_fn(http, script_versions=None):
+        return classify_frameworks(http, frameworks_table, script_versions)
 
     capabilities.append(ProfileHost(identify_fn, framework_fn,
                                     version_paths=product_probe_paths(fingerprints)))

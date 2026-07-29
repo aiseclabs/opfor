@@ -29,22 +29,31 @@ _BODY_EVIDENCE = 2048
 def load_frameworks(directory: Path) -> dict:
     """The front-end framework signatures, one `guides/frameworks/<name>.md` unit each. The
     unit's title is the framework name, and its frontmatter carries the lowercased body and header
-    markers, an optional compiled version pattern, and an optional npm package name the CVE lookup
-    queries the ecosystem advisory database with. A malformed version regex fails the run loudly
-    here, invariant 5."""
+    markers, an optional `version` pattern read from the host's own response, an optional
+    `bundle_version` pattern read from a fetched bundle's content, and an optional npm package name
+    the CVE lookup queries the ecosystem advisory database with. A malformed regex of either kind
+    fails the run loudly here, invariant 5."""
     out: dict = {}
+
+    def _compile_pattern(name, field, raw):
+        pattern = str(raw or "").strip()
+        if not pattern:
+            return None
+        try:
+            return re.compile(pattern, re.IGNORECASE)
+        except re.error as exc:
+            raise RuntimeError(f"invalid framework {field} regex for {name!r}: {exc}") from exc
+
     for path, meta, body in iter_md_docs(Path(directory)):
         title = _TITLE.search(body)
         name = title.group(1).strip() if title else path.stem
-        pattern = str(meta.get("version") or "").strip()
-        try:
-            version = re.compile(pattern, re.IGNORECASE) if pattern else None
-        except re.error as exc:
-            raise RuntimeError(f"invalid framework version regex for {name!r}: {exc}") from exc
+        version = _compile_pattern(name, "version", meta.get("version"))
+        bundle = _compile_pattern(name, "bundle_version", meta.get("bundle_version"))
         out[name] = {
             "body": [str(m).lower() for m in (meta.get("body") or [])],
             "headers": [str(m).lower() for m in (meta.get("headers") or [])],
             "version": version,
+            "bundle": bundle,
             "npm": str(meta.get("npm") or "").strip(),
         }
     return out
@@ -113,13 +122,16 @@ def _spec_info(world, node, endpoint) -> tuple[str, str]:
         return "", ""
 
 
-def classify_frameworks(http, table) -> list[Framework]:
+def classify_frameworks(http, table, script_versions=None) -> list[Framework]:
     """The front-end frameworks a live host's response reveals, each with a version when the
     framework publishes one plainly and the npm package name its signature carries. Deterministic
     from the body and headers already gathered, a host may reveal more than one, and one that
-    matches nothing is simply untagged."""
+    matches nothing is simply untagged. `script_versions` maps a framework name to the version a
+    fetched bundle's own content declared, gathered by the harvester, so a self-hosted build that
+    prints no version in the home page still carries a version from the code it ships."""
     if http is None:
         return []
+    script_versions = script_versions or {}
     body = http.body or ""
     # Markers are lowercased at load, so a body marker is matched against a lowercased body, else a
     # marker such as the Next.js `__next_data__` never matches the real uppercase `__NEXT_DATA__`.
@@ -137,6 +149,11 @@ def classify_frameworks(http, table) -> list[Framework]:
             if match:
                 version = match.group(1)
         npm = sig.get("npm", "")
+        # A version the host publishes in its own response wins. Failing that, the version a
+        # fetched bundle's content declared, then a versioned CDN asset url in the page, each a
+        # ground-truth literal rather than a guess, so a self-hosted build is still versioned.
+        if not version:
+            version = script_versions.get(name, "")
         if not version and npm:
             version = _script_version(body_markers, npm)
         found.append(Framework(name=name, version=version, npm=npm))

@@ -216,7 +216,7 @@ def test_profile_evidence_surfaces_the_spec_version_from_the_endpoint_body():
                                     status=200, auth_required=False,
                                     content_type="application/json", body=body)))
 
-    out = ProfileHost(identify, lambda http: []).run(
+    out = ProfileHost(identify, lambda http, sv=None: []).run(
         Task(capability="domain_profile", node="domain:api.example.com"), world)
     assert out.facts
     assert "1.90.0" in captured["evidence"]

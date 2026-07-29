@@ -2,6 +2,7 @@
 body:
   - "data-reactroot"
   - "<!--$-->"
+bundle_version: 'reconcilerVersion["\s:]{1,4}([0-9]+\.[0-9]+\.[0-9]+)'
 npm: "react"
 ---
 

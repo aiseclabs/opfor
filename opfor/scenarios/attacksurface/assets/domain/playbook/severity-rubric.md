@@ -12,9 +12,10 @@ class adds only the nuance its own surface needs.
 
 - CRITICAL. An unauthenticated path to code execution, a full authentication bypass, or a read
   of secrets or bulk sensitive data, reachable now without a credential.
-- HIGH. An unauthenticated management, write, or administrative surface, a known vulnerability
-  that fits the exposed surface and needs no credential, or a takeover of a live name, which
-  hands an attacker a trusted subdomain.
+- HIGH. An unauthenticated management, write, or administrative surface, or a takeover of a live
+  name, which hands an attacker a trusted subdomain. A known vulnerability is not graded here, it
+  is reported deterministically from its version match at the CVE's own base severity, see the
+  domain `cve` module, so this scale judges the exposed shape alone.
 - MEDIUM. A surface whose nature warrants review before a specific flaw is proven, such as an
   administrative or non-production interface, an API specification or an introspection schema
   that maps the surface, or an identified open-source console whose exposure is not yet shown to

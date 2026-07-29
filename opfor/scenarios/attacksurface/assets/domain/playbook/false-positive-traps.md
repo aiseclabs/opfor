@@ -39,10 +39,6 @@ finding survives a trap only when the evidence answers its controlling fact.
   path may still answer directly. A per-request proxy such as Google IAP, Cloudflare Access, or
   Azure AD Application Proxy does cover every path, named by its assertion header or team cookie.
   Controlling fact, which kind of gate the evidence names.
-- CVE not established on this instance. A CVE matched by product name only, or against a version
-  the evidence does not show, is a text match, not proof the instance is affected. Controlling
-  fact, a read version in the affected range and a CVE whose preconditions the exposed surface
-  meets.
 - Liveness probe. A health or readiness endpoint that answers only a bare status, a
   `{"status":"UP"}` or an `ok`, is meant to be reachable and leaks no internal detail, so it is
   not an information exposure. Controlling fact, the body carries only liveness, not versions,

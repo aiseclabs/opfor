@@ -38,7 +38,9 @@ def test_knowledge_inventory_enumerates_every_claim_by_ref_and_kind():
     # a coverage gap rather than shipping invisibly
     assert items["product:couchdb"].kind == DETECTION
     assert "products" in items["product:couchdb"].path.parts
-    assert by_ns["class"] == 5
+    # four model-judged surface-shape classes. The known vulnerability is not among them, it is
+    # reported deterministically from a version match rather than judged, see the domain `cve` module.
+    assert by_ns["class"] == 4
     assert by_ns["clue"] >= 7 and by_ns["signature"] >= 20
     # the protocols are orientation the triage selects and reads, three interface primers,
     # enumerated so a protocol with no case is a visible gap rather than a silent one

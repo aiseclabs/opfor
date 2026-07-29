@@ -222,41 +222,86 @@ def test_profile_evidence_surfaces_the_spec_version_from_the_endpoint_body():
     assert "1.90.0" in captured["evidence"]
     assert "litellm api" in captured["evidence"]
 
-def test_cve_render_ranks_by_cvss_and_notes_truncation():
+def _world_with_scan(match, cves, *, product="acme", version="1.0", identified=True):
+    # A live host, optionally identified as a product, carrying one cve_scan fact, the fixture the
+    # deterministic minting reads. When identified is false, no host_profile is added.
     from opfor.core import Fact
-    from opfor.scenarios.attacksurface.assets.domain.types import CVE, CVEScan, DomainData, HTTPProbe, Resolved
-    from opfor.scenarios.attacksurface.assets.domain.render import SurfaceRenderer
+    from opfor.scenarios.attacksurface.assets.domain.types import (
+        CVEScan, DomainData, HostProfile, HTTPProbe, Resolved)
 
     world = World()
     world.add(Node(id="domain:h", type="domain", payload=DomainData(name="h", root="h", source="s")))
-    world.absorb([
+    facts = [
         Fact(kind="resolved", about="domain:h", payload=Resolved(resolvable=True, addresses=("1.2.3.4",))),
         Fact(kind="http", about="domain:h", payload=HTTPProbe(alive=True, status=200, url="https://h/")),
-    ])
-    # eleven CVEs, the critical one last in database order so a blind head slice would drop it
-    cves = tuple(CVE(id=f"CVE-{i}", cvss=1.0, severity="LOW", summary="low") for i in range(10))
-    cves += (CVE(id="CVE-CRIT", cvss=9.8, severity="CRITICAL", summary="rce"),)
-    world.absorb([Fact(kind="cve_scan", about="domain:h",
-                       payload=CVEScan(product="acme", version="1.0", cves=cves))])
-    report = "\n".join(SurfaceRenderer(clues=[], takeover=[]).units(world))
-    # the highest-scored CVE reaches the report despite being last in database order
-    assert "CVE-CRIT" in report
-    # the truncation is stated rather than silent
-    assert "more CVE(s) not shown" in report
+    ]
+    if identified:
+        facts.append(Fact(kind="host_profile", about="domain:h",
+                          payload=HostProfile(product=product, version=version)))
+    if match is not None:
+        facts.append(Fact(kind="cve_scan", about="domain:h",
+                          payload=CVEScan(product=product, version=version, match=match, cves=cves)))
+    world.absorb(facts)
+    return world
 
-def test_cve_render_states_a_weak_match_basis_so_the_judge_weighs_it():
-    from opfor.core import Fact
-    from opfor.scenarios.attacksurface.assets.domain.types import CVE, CVEScan, DomainData, HTTPProbe, Resolved
-    from opfor.scenarios.attacksurface.assets.domain.render import SurfaceRenderer
+def test_a_version_match_mints_one_finding_per_cve_at_its_base_severity():
+    # a version match is a database fact, so each cve is a distinct finding minted at its own base
+    # severity, highest cvss first, carrying the deterministic reference note, invariant 2 carve-out
+    from opfor.scenarios.attacksurface.assets.domain import cve as cve_mod
+    from opfor.scenarios.attacksurface.assets.domain.types import CVE
 
-    world = World()
-    world.add(Node(id="domain:h", type="domain", payload=DomainData(name="h", root="h", source="s")))
-    world.absorb([
-        Fact(kind="resolved", about="domain:h", payload=Resolved(resolvable=True, addresses=("1.2.3.4",))),
-        Fact(kind="http", about="domain:h", payload=HTTPProbe(alive=True, status=200, url="https://h/")),
-    ])
-    cves = (CVE(id="CVE-1", cvss=7.0, severity="HIGH", summary="x"),)
-    world.absorb([Fact(kind="cve_scan", about="domain:h",
-                       payload=CVEScan(product="acme", version="", match="keyword", cves=cves))])
-    report = "\n".join(SurfaceRenderer(clues=[], takeover=[]).units(world))
-    assert "cve match: matched by product name only" in report
+    cves = (CVE(id="CVE-LOW", cvss=3.1, severity="LOW", summary="minor"),
+            CVE(id="CVE-CRIT", cvss=9.8, severity="CRITICAL", summary="rce",
+                references=("https://advisory.example/x",)))
+    findings = cve_mod.cve_findings(_world_with_scan("version", cves))
+    known = [f for f in findings if f.data.get("kind") == "known-vulnerability"]
+    assert len(known) == 2
+    # ranked by cvss, the critical one first, and each id carries the cve so a host keeps both
+    assert known[0].data["cve"] == "CVE-CRIT" and known[0].severity == "CRITICAL"
+    assert known[1].data["cve"] == "CVE-LOW" and known[1].severity == "LOW"
+    assert len({f.id for f in known}) == 2
+    # the deterministic proof note is anchored to the published reference, labeled unverified
+    assert "advisory.example" in known[0].poc and "UNVERIFIED" in known[0].poc
+
+def test_a_missing_base_severity_is_derived_from_the_cvss_score():
+    from opfor.scenarios.attacksurface.assets.domain import cve as cve_mod
+    from opfor.scenarios.attacksurface.assets.domain.types import CVE
+
+    cves = (CVE(id="CVE-1", cvss=7.5, severity="", summary="high by score"),)
+    findings = cve_mod.cve_findings(_world_with_scan("version", cves))
+    assert findings[0].severity == "HIGH"
+
+def test_a_product_or_keyword_match_mints_one_low_unconfirmed_note():
+    # a weaker match is not tied to the running version, so its cves are reported once as a single
+    # low unconfirmed note rather than dropped or elevated, invariant 5
+    from opfor.scenarios.attacksurface.assets.domain import cve as cve_mod
+    from opfor.scenarios.attacksurface.assets.domain.types import CVE
+
+    cves = (CVE(id="CVE-1", cvss=9.8, severity="CRITICAL", summary="x"),
+            CVE(id="CVE-2", cvss=7.0, severity="HIGH", summary="y"))
+    findings = cve_mod.cve_findings(_world_with_scan("keyword", cves))
+    known = [f for f in findings if f.data.get("kind") == "known-vulnerability"]
+    assert len(known) == 1
+    assert known[0].severity == "LOW" and known[0].data["match"] == "keyword"
+    assert "CVE-1" in known[0].evidence and "CVE-2" in known[0].evidence
+
+def test_an_identified_host_never_scanned_is_a_named_blind_spot():
+    # a host identified as a product but with no cve_scan is a named blind spot, so a lookup that
+    # never ran does not read as a clean no-known-vulnerabilities result, invariant 5
+    from opfor.scenarios.attacksurface.assets.domain import cve as cve_mod
+
+    findings = cve_mod.cve_findings(_world_with_scan(None, ()))
+    assert [f.data.get("kind") for f in findings] == ["blindspot"]
+    assert findings[0].severity == "INFO"
+
+def test_a_scan_that_found_nothing_mints_no_finding():
+    # an empty cve list is an honest negative, the host was scanned and found clean, so no finding
+    from opfor.scenarios.attacksurface.assets.domain import cve as cve_mod
+
+    assert cve_mod.cve_findings(_world_with_scan("version", ())) == []
+
+def test_an_unidentified_host_with_no_scan_is_not_a_blind_spot():
+    # only an identified host earns a blind spot, an unidentified one had nothing to look up
+    from opfor.scenarios.attacksurface.assets.domain import cve as cve_mod
+
+    assert cve_mod.cve_findings(_world_with_scan(None, (), identified=False)) == []

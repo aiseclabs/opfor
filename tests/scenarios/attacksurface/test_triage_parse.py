@@ -30,10 +30,10 @@ def test_model_findings_are_mapped_to_typed_findings():
 
 
 def test_unknown_severity_falls_back_to_class_impact_then_medium():
-    ids = frozenset({"known-vulnerability"})
-    impacts = {"known-vulnerability": "HIGH"}
+    ids = frozenset({"information-exposure"})
+    impacts = {"information-exposure": "HIGH"}
     # a known class with a bad severity anchors on the class impact
-    f = _finding_from_dict({"where": "u", "category": "Known-Vulnerability", "severity": "WOBBLY"},
+    f = _finding_from_dict({"where": "u", "category": "Information-Exposure", "severity": "WOBBLY"},
                            known_ids=ids, impacts=impacts)
     assert f.severity == "HIGH"
     # an unknown class with a bad severity falls back to MEDIUM
@@ -55,11 +55,11 @@ def test_a_finding_host_that_is_only_a_substring_of_a_report_host_is_dropped():
 
 
 def test_category_is_normalized_onto_the_known_class_ids():
-    ids = frozenset({"known-vulnerability"})
-    f = _finding_from_dict({"where": "u", "category": "Known-Vulnerability", "severity": "medium"},
+    ids = frozenset({"information-exposure"})
+    f = _finding_from_dict({"where": "u", "category": "Information-Exposure", "severity": "medium"},
                            known_ids=ids)
-    assert f.data["kind"] == "known-vulnerability"
-    assert f.id == "finding:known-vulnerability:u"
+    assert f.data["kind"] == "information-exposure"
+    assert f.id == "finding:information-exposure:u"
     # an unrecognized class collapses to other, so the id stays stable for dedup
     other = _finding_from_dict({"where": "u", "category": "made-up-thing"}, known_ids=ids)
     assert other.data["kind"] == "other"
@@ -121,15 +121,15 @@ def test_confidence_is_coerced_to_a_float_or_none():
 def test_dedup_merges_same_class_and_location_taking_max_severity_and_union_evidence():
     from opfor.core.result import Finding
     from opfor.scenarios.attacksurface.assets.domain.triage import SurfaceTriage
-    a = Finding(id="finding:known-vulnerability:h", title="known vulns", severity="MEDIUM",
-                where="h", evidence="CVE-1 affects the running version")
-    b = Finding(id="finding:known-vulnerability:h", title="known vulns", severity="HIGH",
-                where="h", evidence="CVE-2 affects the running version")
+    a = Finding(id="finding:information-exposure:h", title="exposed spec", severity="MEDIUM",
+                where="h", evidence="an openapi map answered at /openapi.json")
+    b = Finding(id="finding:information-exposure:h", title="exposed spec", severity="HIGH",
+                where="h", evidence="a graphql introspection answered at /graphql")
     out = SurfaceTriage._dedup([a, b])
     # one finding at this class and location, at the higher severity, carrying both evidences
     assert len(out) == 1
     assert out[0].severity == "HIGH"
-    assert "CVE-1" in out[0].evidence and "CVE-2" in out[0].evidence
+    assert "openapi" in out[0].evidence and "graphql" in out[0].evidence
 
 
 def test_dedup_collapses_title_and_scheme_variance_but_keeps_distinct_paths():

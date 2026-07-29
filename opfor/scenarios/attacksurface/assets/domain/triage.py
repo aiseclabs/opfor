@@ -30,6 +30,7 @@ from urllib.parse import urlparse
 from opfor.core import (Finding, Message, Provider, SEVERITIES, Triage, World, iter_md_docs,
                         require_json_object)
 from opfor.scenarios.attacksurface.assets.domain import completeness
+from opfor.scenarios.attacksurface.assets.domain import cve
 from opfor.scenarios.attacksurface.assets.domain.render import SurfaceRenderer
 
 SYSTEM = (
@@ -55,16 +56,13 @@ SYSTEM = (
     '  "severity"  one of INFO, LOW, MEDIUM, HIGH, CRITICAL.\n'
     '  "where"     the URL or host the finding is about, copied from the report.\n'
     '  "evidence"  what in the report shows this is real.\n'
-    '  "poc"       how to demonstrate this specific finding, not a generic request. When '
-    'the finding is a known vulnerability, give the reproduction for that vulnerability by '
-    'its CVE id, not merely a read that proves the version. Mark the poc by what it needs. '
-    'Prefix "safe read: " and give the exact command, such as `curl -s <the exact url>`, '
-    'when a read alone demonstrates it, for an unauthenticated endpoint, an information '
-    'disclosure, or an open introspection. Prefix "requires authorized exploitation: " and '
-    'describe the steps when demonstrating it would take an attack, such as code execution, '
-    'an authentication bypass, or an injection, which this reconnaissance run does not '
-    'perform, and cite the CVE reference links shown for it so the steps are anchored to a '
-    'published source rather than invented. A safe-read poc must be the exact request that '
+    '  "poc"       how to demonstrate this specific finding, not a generic request. Mark the '
+    'poc by what it needs. Prefix "safe read: " and give the exact command, such as '
+    '`curl -s <the exact url>`, when a read alone demonstrates it, for an unauthenticated '
+    'endpoint, an information disclosure, or an open introspection. Prefix "requires '
+    'authorized exploitation: " and describe the steps when demonstrating it would take an '
+    'attack, such as code execution, an authentication bypass, or an injection, which this '
+    'reconnaissance run does not perform. A safe-read poc must be the exact request that '
     'produced the evidence in the report, one already made, so it is known to work. Empty '
     'when no command is needed.\n'
     '  "confidence" a number from 0 to 1.\n'
@@ -260,6 +258,11 @@ class SurfaceTriage(Triage):
         # short-circuits the model pass when the resolver is down.
         for rule in completeness.COMPLETENESS:
             findings.extend(rule(world))
+        # A version-matched CVE is a database fact, not a semantic verdict, so its finding is minted
+        # deterministically here beside the completeness rules, not judged by the model. This is the
+        # carve-out from invariant 2 for known vulnerabilities, the surface-shape classes below stay
+        # model-judged.
+        findings.extend(cve.cve_findings(world))
 
         caveat = completeness.resolution_caveat(world)
         if caveat is not None:

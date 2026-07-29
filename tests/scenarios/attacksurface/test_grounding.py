@@ -88,48 +88,31 @@ def test_grounding_attaches_a_poc_request_only_for_an_observed_safe_read():
     assert by_id["f1"] is not grounded
 
 
-def test_a_version_matched_cve_keeps_the_model_poc_a_weaker_match_does_not():
-    """Tier 2 grounding: a known vulnerability matched on the running version keeps the model's own
-    written PoC, labelled unverified and not confirmed against this instance, even when no safe read
-    was observed. A CVE matched only on the product name, not the version, does not, since the
-    instance is not established as affected, invariant 5."""
-    from opfor.core import Fact
+def test_a_known_vulnerability_finding_passes_through_the_grounder_untouched():
+    """A known vulnerability is minted deterministically with its proof note already set, anchored to
+    the matched CVE's published references rather than an observed request. The grounder recognizes it
+    by its data kind and passes it through unchanged, so the reference note is never clobbered by an
+    ungrounded no-PoC message and never dressed as an observed safe read, see the `cve` module."""
     from opfor.core.result import Finding
-    from opfor.scenarios.attacksurface.assets.domain.types import CVE, CVEScan, DomainData
+    from opfor.scenarios.attacksurface.assets.domain.types import DomainData
     from opfor.scenarios.attacksurface.assets.domain.grounding import FindingGrounder
 
     world = World()
     world.add(Node(id="domain:vers.example.com", type="domain",
                    payload=DomainData(name="vers.example.com", root="example.com", source="crt")))
-    world.add(Node(id="domain:prod.example.com", type="domain",
-                   payload=DomainData(name="prod.example.com", root="example.com", source="crt")))
-    cve = CVE(id="CVE-2021-43798", cvss=7.5, severity="HIGH", summary="path traversal")
-    world.absorb([Fact(kind="cve_scan", about="domain:vers.example.com",
-                       payload=CVEScan(product="grafana", version="8.3.0", match="version",
-                                       cves=(cve,)))])
-    world.absorb([Fact(kind="cve_scan", about="domain:prod.example.com",
-                       payload=CVEScan(product="grafana", version="", match="product",
-                                       cves=(cve,)))])
+    # a finding shaped as cve.py mints it, carrying a reference-anchored note and the known kind
+    note = ("UNVERIFIED, not confirmed against this instance. the host runs grafana 8.3.0, consult "
+            "the published references for CVE-2021-43798: https://advisory.example/x")
+    known = Finding(id="finding:known-vulnerability-cve-2021-43798:vers.example.com",
+                    title="grafana 8.3.0 affected by CVE-2021-43798", severity="HIGH",
+                    where="https://vers.example.com/", poc=note,
+                    data={"kind": "known-vulnerability", "cve": "CVE-2021-43798"})
 
-    # a version-matched CVE whose safe-read poc names a url the surface never observed
-    versioned = Finding(id="v1", title="CVE-2021-43798 in Grafana", severity="HIGH",
-                        where="https://vers.example.com/",
-                        poc="safe read: curl -s https://vers.example.com/public/plugins/x/../../etc/passwd")
-    # the same CVE, but matched only on the product name, not the running version
-    unversioned = Finding(id="p1", title="CVE-2021-43798 in Grafana", severity="HIGH",
-                          where="https://prod.example.com/",
-                          poc="safe read: curl -s https://prod.example.com/public/plugins/x/../../etc/passwd")
-
-    by_id = {f.id: f for f in FindingGrounder().run(world, (versioned, unversioned))}
-    # the version match keeps the model's writeup, labelled unverified and unconfirmed, but does not
-    # dress it as an opfor-generated script since no observed request grounds it
-    assert by_id["v1"].poc.startswith("UNVERIFIED")
-    assert "not confirmed against this instance" in by_id["v1"].poc
-    assert "curl -s https://vers.example.com/public/plugins" in by_id["v1"].poc
-    assert "poc_request" not in by_id["v1"].data and "poc_script" not in by_id["v1"].data
-    # a product-only match is not enough to assert a version-specific PoC, so it stays ungrounded
-    assert "no reproducible" in by_id["p1"].poc.lower()
-    assert "poc_script" not in by_id["p1"].data
+    out = FindingGrounder().run(world, (known,))
+    assert len(out) == 1
+    # the deterministic note survives verbatim, and the grounder mints no observed-request artifacts
+    assert out[0].poc == note
+    assert "poc_request" not in out[0].data and "poc_script" not in out[0].data
 
 
 def test_triage_judge_mints_findings_and_mutates_no_world_node():

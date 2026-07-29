@@ -30,6 +30,11 @@ sequenced along a fixed lifecycle spine so a run either closes or says why it di
 2. **Success is judged by triage, never hardcoded.** A capability returns raw facts, it
    never interprets them as success. The engine holds no `if response contains X then win`.
    The next move is the planner's, the real or false verdict and the severity are triage's.
+   The one carve-out is the known vulnerability. When enrich names a product at a version,
+   a version-matched CVE is a database fact, not a semantic call, so triage mints it
+   deterministically at the CVE's own base severity rather than judging it, see the domain
+   class's `cve` module. The exposed shape of that same host is still judged, so the carve-out
+   narrows to the catalogued version match alone.
 3. **A run closes or says why.** The engine advances a fixed phase spine, SEED, MAP,
    ENRICH, TRIAGE, then the intrusive EXPLOIT and CONFIRM, and stops at the terminal phase
    the scenario declares. A run that reaches its terminal is closed. A run stopped by an

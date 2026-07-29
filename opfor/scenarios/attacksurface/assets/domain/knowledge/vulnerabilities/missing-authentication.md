@@ -95,8 +95,9 @@ interface grants sets the class-specific lever.
   baseline shell.
 - A host correctly fronted by a per-request zero-trust proxy is gated, not exposed, judge it under
   improper-authentication.
-- When a named CVE bears on the exposed surface, report known-vulnerability and let this exposure be
-  the reachability context that class weighs, so one exposure is not reported twice.
+- A named CVE on the running version is reported separately and deterministically, see the tree
+  index, so it is not this class's concern. Judge the exposure here on its own, the version-matched
+  CVE is a distinct finding on the same host, not a substitute for grading the exposed shape.
 
 ## Evidence And PoC
 

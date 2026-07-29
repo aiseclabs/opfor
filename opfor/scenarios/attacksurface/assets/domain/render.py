@@ -16,16 +16,6 @@ from opfor.scenarios.attacksurface.assets.domain.sources.http import SECURITY_HE
 
 _MAX_BODY = 600
 _MAX_LIST = 40
-# CVEs shown per host, most the lookup returns, so a noisy product does not flood the prompt.
-_MAX_CVES = 10
-
-# How the CVE lookup matched its list, phrased so the judge weighs a name match apart from a
-# version match. Strongest to weakest, see the known-vulnerability class.
-_CVE_MATCH = {
-    "version": "matched to this version's affected range",
-    "product": "matched to the product across all versions, not filtered to the running version",
-    "keyword": "matched by product name only, not the version",
-}
 
 
 class SurfaceRenderer:
@@ -118,30 +108,9 @@ class SurfaceRenderer:
         if profile_data is not None and profile_data.product:
             version = f" {profile_data.version}" if profile_data.version else ""
             line += f"\n  product: {profile_data.product}{version}"
-        scan = world.latest("cve_scan", node.id)
-        if scan is not None and scan.payload.cves:
-            basis = _CVE_MATCH.get(scan.payload.match)
-            if basis:
-                line += f"\n  cve match: {basis}"
-            # Rank by CVSS descending so the highest-scored vulnerabilities reach the model
-            # first. The public database returns them in its own order, not by score, so a
-            # blind head slice could drop a critical and show only low ones, and the model
-            # would never see the one worth minting.
-            ranked = sorted(scan.payload.cves,
-                            key=lambda c: c.cvss if c.cvss is not None else -1.0, reverse=True)
-            for cve in ranked[:_MAX_CVES]:
-                line += f"\n  CVE {cve.id} CVSS {cve.cvss} {cve.severity}: {cve.summary}"
-                if cve.references:
-                    line += f"\n    refs: {', '.join(cve.references)}"
-            if len(ranked) > _MAX_CVES:
-                # say how many were held back rather than let the top slice read as the whole
-                # vulnerability set, invariant 5
-                line += (f"\n  {len(ranked) - _MAX_CVES} more CVE(s) not shown, ranked below "
-                         f"the {_MAX_CVES} highest-scored")
-        elif scan is None and profile_data is not None:
-            # The host was identified but its CVE lookup never completed, so tell the model the
-            # status is unknown rather than let a missing line read as a clean negative, invariant 5.
-            line += "\n  cve lookup did not complete, this host's known-vulnerability status is unknown"
+        # The CVE scan is not rendered here. A known vulnerability is minted deterministically from
+        # the version match rather than judged by the model, see `cve`, so the model surface carries
+        # the exposed shape and the identity, not the catalogued CVE list.
         return line
 
     def _endpoint_line(self, ep) -> str:

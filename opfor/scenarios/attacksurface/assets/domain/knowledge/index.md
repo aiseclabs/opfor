@@ -11,23 +11,24 @@ scored unit, told apart by who decides and so by how a backtest exercises them:
   is or surfaces a raw signal, no model in the loop. Scored by an exact backtest, a recorded case
   either matches or it does not.
 
-## Two Branches Of Judgment
+## What Is Judged And What Is Reported
 
-A host is judged down one of two branches, chosen by whether the enrich step could name what it
-runs.
+A host yields two kinds of finding, reached two different ways.
 
-- The product branch. The host is identified as a known open-source product at a version. Its
-  `cpe` drives a CVE lookup, and a version-matched hit is judged against the `known-vulnerability`
-  class, with the exposure as the reachability lever. This is the fast path, a named product carries
-  a named weakness.
-- The generic branch. The host is not identified, a bespoke or internal service that runs no
-  recognizable product. There is no CVE to match, so the model reasons from the generic weakness
-  classes in `vulnerabilities/` and the generic interface patterns in `protocols/`, judging the
-  shape of the exposed surface rather than a catalogued flaw. This is where the engine earns its
-  keep on the long tail an identifier alone would miss.
+- The known vulnerability, reported deterministically. When the enrich step names a known
+  open-source product at a version, its `cpe` drives a CVE lookup, and a version-matched hit is
+  reported in code, not judged. A version in the affected range is a database fact, so the finding is
+  minted at the CVE's own base severity, see `cve`, the one carve-out from invariant 2. Reachability
+  is left as context an operator reads beside the severity, not weighed into it, since this
+  deterministic pass makes no semantic call.
+- The exposed shape, judged for every host. Identified or not, the model reasons over the weakness
+  classes in `vulnerabilities/` and the interface patterns in `protocols/`, judging the shape of the
+  exposed surface, an unauthenticated console, a served map, a gate that does not hold. This is where
+  the engine earns its keep on the long tail a catalogued CVE alone would miss.
 
-The two branches share one triage and one severity method, they differ only in whether a product
-name narrows the judgment to a known CVE.
+The two are independent, an identified host gets both a version-matched CVE report and a shape
+judgment, an unidentified one only the shape judgment. They share one severity scale, they differ in
+that a version match is a fact reported in code while a shape is a verdict the model reaches.
 
 ## The Tree
 
@@ -38,8 +39,8 @@ Two buckets sit under `knowledge/`, mirroring the codejury layout: `guides/` is 
 - `guides/` orientation, the knowledge that names what a host runs. It is deterministic detection,
   read to recognize a host rather than to judge it, and it never mints a finding on its own.
   - `guides/products/` the open-source products the enrich step identifies by markers, each with a
-    version pattern and a `cpe` that drives the CVE lookup. This feeds the product branch, a named
-    product carries a named CVE the `known-vulnerability` class then judges.
+    version pattern and a `cpe` that drives the CVE lookup. A version match is then reported
+    deterministically, see `cve`, not judged by a `vulnerabilities/` class.
   - `guides/frameworks/` the front-end frameworks detected as context tags, with no version lookup
     and no CVE branch, a weaker signal the judge reads as orientation.
   - `guides/protocols/` the orienting interface primers the triage selects and reads into the judge.
@@ -49,8 +50,9 @@ Two buckets sit under `knowledge/`, mirroring the codejury layout: `guides/` is 
     whole surface, so the judge gets surface-specific orientation only when that surface is present
     and the prompt stays cache-stable. A protocol primer sharpens how the generic classes are judged
     rather than adding a class.
-- `vulnerabilities/` one file per finding class the triage model may mint, the generic-branch
-  weakness classes plus `known-vulnerability` for the product branch. The body is the judgment
+- `vulnerabilities/` one file per finding class the triage model may mint, the surface-shape
+  weakness classes. A known vulnerability is not here, it is reported deterministically from a
+  version match, see `cve`, rather than judged. The body is the judgment
   prose. The frontmatter carries the class mechanics and, for a class that surfaces its own
   deterministic evidence, that evidence too, the clues or the takeover signatures. So a concept is
   one file, its judgment and detection read together, though coverage scores them apart by kind.
@@ -66,26 +68,21 @@ per-directory index, matching the codejury convention of a single knowledge inde
 ## The Finding Taxonomy
 
 A finding class is anchored to a recognized weakness type, not invented ad hoc, so the tree stays
-systematic and a run's output maps onto categories an operator already knows. The classes sit on two
-axes, told apart by what mints them.
+systematic and a run's output maps onto categories an operator already knows. The model-judged
+classes sit on one axis, the surface-shape axis, minted by the shape of the exposed surface and
+anchored to a CWE. These are mutually exclusive, one surface is one shape. `missing-authentication`
+is a sensitive interface reachable with no credential, CWE-306, OWASP A01. `improper-authentication`
+is a gate that appears present but does not hold, CWE-287, OWASP A07. `information-exposure` is a
+served map of the surface, a spec or a schema, CWE-200, OWASP A05. `subdomain-takeover` is a dangling
+name pointing at a claimable provider resource, a dangling DNS record, OWASP A05.
 
-- The surface-shape axis, minted by the shape of the exposed surface and anchored to a CWE. These
-  are mutually exclusive, one surface is one shape. `missing-authentication` is a sensitive interface
-  reachable with no credential, CWE-306, OWASP A01. `improper-authentication` is a gate that appears
-  present but does not hold, CWE-287, OWASP A07. `information-exposure` is a served map of the
-  surface, a spec or a schema, CWE-200, OWASP A05. `subdomain-takeover` is a dangling name pointing
-  at a claimable provider resource, a dangling DNS record, OWASP A05.
-- The product-provenance axis, minted by a named CVE against an identified product.
-  `known-vulnerability` is a version-matched CVE that bears on the exposed surface, CWE-1395, OWASP
-  A06. This is the product branch's one class.
-
-The two axes can both fit one surface, an unauthenticated console running a version with a known
-pre-auth flaw is both a shape and a provenance hit. The dedup rule is that a named CVE wins, report
-`known-vulnerability` and let the exposure be the reachability lever that class weighs, so one
-weakness is graded once by the axis carrying the most specific evidence. Absent a CVE, report the
-shape class. A new technique extends an existing class where its weakness type fits, a genuinely new
-weakness type earns a new file anchored to its own CWE, it is never a loose synonym of an existing
-class.
+A known vulnerability, CWE-1395, OWASP A06, is not one of these classes. It is reported
+deterministically from a version match, see `cve`, not judged as a shape. An identified host can
+carry both, an unauthenticated console running a version with a known pre-auth flaw is reported as a
+known vulnerability from its version and separately judged for its exposed shape, two independent
+findings on one host. A new technique extends an existing shape class where its weakness type fits,
+a genuinely new weakness type earns a new file anchored to its own CWE, it is never a loose synonym
+of an existing class.
 
 ## The File Contract
 
@@ -115,15 +112,13 @@ judgment needs one.
 
 ## The PoC
 
-A finding's PoC is grounded after triage, not written into knowledge, strongest first. When a
-finding's proof names a request the surface already observed, a safe read, the grounder rewrites the
-PoC to that recorded request. Failing that, a known vulnerability whose CVE was matched on the
-running version keeps the model's own written PoC, since the version establishes the instance is
-affected even when no safe read was observed. Either way the PoC is labeled unverified and not
-confirmed against this instance, since this reconnaissance run writes it for an operator to run and
-never sends it to the target. A finding that grounds on neither, such as a CVE matched only on the
-product name or one whose demonstration would take an authorized exploitation this run does not
-perform, carries an honest no-PoC note.
+A model-judged finding's PoC is grounded after triage, not written into knowledge. When its proof
+names a request the surface already observed, a safe read, the grounder rewrites the PoC to that
+recorded request, otherwise it carries an honest no-PoC note rather than a fabricated command. A
+known vulnerability is different, it is minted with its PoC already set, a note anchored to the
+matched CVE's published references, since this run neither observed a safe read nor exploits. Every
+PoC is labeled unverified and not confirmed against this instance, since this reconnaissance run
+writes it for an operator to run and never sends it to the target.
 
 Every scored unit is meant to be backtested, so a detection marker that stops matching or a judgment
 class that no case exercises is a visible gap the coverage report names, not a silent one. Adding

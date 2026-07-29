@@ -71,10 +71,11 @@ class KnowledgePaths:
     under `guides` mints a finding, it only names what the host runs. `vulnerabilities` is the finding
     classes the triage model judges, one file per class, carrying both the model-read judgment prose
     and, in its frontmatter, the deterministic payloads that class surfaces, so a concept is one file.
-    The two buckets meet as a flow, `guides/products` identifies a host and a named CVE hit is then
-    judged against the `vulnerabilities` known-vulnerability class, while an unidentified host is
-    judged from the generic weakness classes there instead. `playbook` holds the cross-cutting
-    judgment method every finding class shares, the severity rubric and the false-positive traps
+    The two buckets meet as a flow, `guides/products` identifies a host and its version drives a CVE
+    lookup that is reported deterministically in code, see `cve`, not judged by a class, while every
+    host, identified or not, is judged from the generic weakness classes in `vulnerabilities`.
+    `playbook` holds the cross-cutting judgment method every finding class shares, the severity
+    rubric and the false-positive traps
     triage reads into the judge. It is a sibling of `knowledge`, not a child, since it is the shared
     method rather than a backtested claim, mirroring the codejury domain layout where `playbook/` sits
     beside `knowledge/` under the class content root."""

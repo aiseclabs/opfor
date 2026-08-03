@@ -9,7 +9,7 @@ license-files = ["LICENSE"]
 authors = [{ name = "AISecLabs" }]
 keywords = ["security", "offensive security", "reconnaissance", "attack surface", "llm", "red team"]
 classifiers = [
-    "Development Status :: 3 - Alpha",
+    "Development Status :: 7 - Inactive",
     "Intended Audience :: Developers",
     "Intended Audience :: Information Technology",
     "Topic :: Security",

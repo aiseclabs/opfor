@@ -11,6 +11,10 @@
 
 AI-assisted external attack-surface reconnaissance, from a root domain to an accurate PoC.
 
+> [!IMPORTANT]
+> This project is no longer maintained.
+> It has been replaced by a new project.
+
 From a root domain it discovers the subdomains, identifies what each one is, analyzes the state
 of the service it runs, the interfaces it exposes, its known CVEs, its unauthorized-access holes,
 and writes an accurate PoC for what it finds, then reports it.

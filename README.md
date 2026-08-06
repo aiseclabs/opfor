@@ -9,11 +9,11 @@
  ╚═════╝ ╚═╝     ╚═╝      ╚═════╝ ╚═╝  ╚═╝
 ```
 
-AI-assisted external attack-surface reconnaissance, from a root domain to an accurate PoC.
-
 > [!IMPORTANT]
 > This project is no longer maintained.
 > It has been replaced by a new project.
+
+AI-assisted external attack-surface reconnaissance, from a root domain to an accurate PoC.
 
 From a root domain it discovers the subdomains, identifies what each one is, analyzes the state
 of the service it runs, the interfaces it exposes, its known CVEs, its unauthorized-access holes,
